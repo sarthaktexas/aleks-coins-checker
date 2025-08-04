@@ -2,10 +2,10 @@
   "mlv259": {
     "name": "Alt, Taylor Evangeline",
     "email": "taylor.alt@my.utsa.edu",
-    "coins": 3,
+    "coins": 4,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 12,
+    "percentComplete": 16,
     "dailyLog": [
       {
         "day": 1,
@@ -202,20 +202,20 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 0,
-        "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 130,
+        "topics": 7,
+        "reason": "✅ Met requirement: 130 mins + 7 topics"
       }
     ]
   },
   "oaf091": {
     "name": "Cardenas Alejandro, Danna Sofia S.",
     "email": "danna.cardenasalejandro@my.utsa.edu",
-    "coins": 9,
+    "coins": 10,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 36,
+    "percentComplete": 40,
     "dailyLog": [
       {
         "day": 1,
@@ -412,10 +412,10 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 0,
-        "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 87,
+        "topics": 5,
+        "reason": "✅ Met requirement: 87 mins + 5 topics"
       }
     ]
   },
@@ -2102,10 +2102,10 @@
   "woz839": {
     "name": "Geter, Hunter",
     "email": "hunter.geter@my.utsa.edu",
-    "coins": 3,
+    "coins": 4,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 12,
+    "percentComplete": 16,
     "dailyLog": [
       {
         "day": 1,
@@ -2302,10 +2302,10 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 9,
-        "topics": 0,
-        "reason": "❌ Not enough: 9 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 203,
+        "topics": 14,
+        "reason": "✅ Met requirement: 203 mins + 14 topics"
       }
     ]
   },
@@ -2933,9 +2933,9 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 60,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 0 topics (needs 1 topic)"
       }
     ]
   },
@@ -3563,9 +3563,9 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 127,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 0 topics (needs 1 topic)"
       }
     ]
   },
@@ -4193,19 +4193,19 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 20,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 20 mins (needs 31 mins) and 0 topics (needs 1 topic)"
       }
     ]
   },
   "kft120": {
     "name": "Momin, Izna A.",
     "email": "iznaali.momin@my.utsa.edu",
-    "coins": 10,
+    "coins": 11,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 40,
+    "percentComplete": 44,
     "dailyLog": [
       {
         "day": 1,
@@ -4402,10 +4402,10 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 0,
-        "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 33,
+        "topics": 1,
+        "reason": "✅ Met requirement: 33 mins + 1 topics"
       }
     ]
   },
@@ -4613,9 +4613,9 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 9,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 9 mins (needs 31 mins) and 0 topics (needs 1 topic)"
       }
     ]
   },
@@ -5873,9 +5873,9 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 44,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 0 topics (needs 1 topic)"
       }
     ]
   },
@@ -6083,9 +6083,9 @@
         "day": 25,
         "date": "2025-08-04",
         "qualified": false,
-        "minutes": 0,
+        "minutes": 11,
         "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "reason": "❌ Not enough: 11 mins (needs 31 mins) and 0 topics (needs 1 topic)"
       }
     ]
   },
@@ -6512,10 +6512,10 @@
   "rlj277": {
     "name": "Villagran, Roberto",
     "email": "roberto.villagran@my.utsa.edu",
-    "coins": 2,
+    "coins": 3,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 8,
+    "percentComplete": 12,
     "dailyLog": [
       {
         "day": 1,
@@ -6712,10 +6712,10 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 1,
-        "topics": 0,
-        "reason": "❌ Not enough: 1 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 69,
+        "topics": 4,
+        "reason": "✅ Met requirement: 69 mins + 4 topics"
       }
     ]
   },
@@ -6932,10 +6932,10 @@
   "dip857": {
     "name": "Young, Brandon Thomas",
     "email": "brandon.young5@my.utsa.edu",
-    "coins": 5,
+    "coins": 6,
     "totalDays": 25,
     "periodDays": 25,
-    "percentComplete": 20,
+    "percentComplete": 24,
     "dailyLog": [
       {
         "day": 1,
@@ -7132,10 +7132,10 @@
       {
         "day": 25,
         "date": "2025-08-04",
-        "qualified": false,
-        "minutes": 0,
-        "topics": 0,
-        "reason": "❌ Not enough: 0 mins (needs 31 mins) and 0 topics (needs 1 topic)"
+        "qualified": true,
+        "minutes": 114,
+        "topics": 5,
+        "reason": "✅ Met requirement: 114 mins + 5 topics"
       }
     ]
   }
