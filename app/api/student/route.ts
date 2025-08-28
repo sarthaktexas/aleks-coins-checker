@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { readFileSync } from "fs"
-import { join } from "path"
+import { sql } from "@vercel/postgres"
 
 type DailyLog = {
   day: number
@@ -89,23 +88,41 @@ function generateDemoData(): any {
   }
 }
 
-function loadStudentData(): StudentData {
+async function loadStudentDataFromDB(): Promise<StudentData> {
   try {
-    const filePath = join(process.cwd(), "data", "students.json")
-    const fileContent = readFileSync(filePath, "utf8")
+    // Try to get data from database first
+    const result = await sql`
+      SELECT data FROM student_data 
+      ORDER BY uploaded_at DESC 
+      LIMIT 1
+    `
 
-    // Handle empty file
-    if (!fileContent.trim()) {
-      console.log("Students.json file is empty")
-      return {}
+    if (result.rows.length > 0) {
+      console.log("Successfully loaded student data from database")
+      return result.rows[0].data as StudentData
     }
 
-    const data = JSON.parse(fileContent)
-    console.log("Successfully loaded student data, found", Object.keys(data).length, "students")
-    return data
+    console.log("No data found in database, falling back to JSON file")
+
+    // Fallback to JSON file if database is empty
+    try {
+      const studentsModule = await import("../../../data/students.json")
+      return studentsModule.default
+    } catch (fileError) {
+      console.warn("Error reading students.json file:", fileError)
+      return {}
+    }
   } catch (error) {
-    console.error("Error loading student data:", error)
-    return {}
+    console.error("Error loading student data from database:", error)
+
+    // Fallback to JSON file
+    try {
+      const studentsModule = await import("../../../data/students.json")
+      return studentsModule.default
+    } catch (fileError) {
+      console.warn("Error reading students.json file:", fileError)
+      return {}
+    }
   }
 }
 
@@ -130,8 +147,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Load student data
-    const studentData = loadStudentData()
+    // Load student data from database or fallback to JSON
+    const studentData = await loadStudentDataFromDB()
 
     if (Object.keys(studentData).length === 0) {
       return NextResponse.json(

@@ -8,7 +8,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, User, Mail, Coins, Calendar, AlertTriangle, CheckCircle, Clock, Gift, Target } from "lucide-react"
+import {
+  Search,
+  User,
+  Mail,
+  Coins,
+  Calendar,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Gift,
+  Target,
+  Lock,
+} from "lucide-react"
 import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
 
@@ -559,7 +571,7 @@ export default function StudentLookup() {
         )}
 
         {/* Footer */}
-        <div className="mt-8 sm:mt-12 text-center space-y-2">
+        <div className="mt-8 sm:mt-12 text-center space-y-4">
           <p className="text-sm sm:text-base text-slate-600">
             Questions? Contact Sarthak at{" "}
             <a
@@ -572,6 +584,16 @@ export default function StudentLookup() {
           <p className="text-xs sm:text-sm text-slate-500">
             🔒 Your data is secure and only accessible with your student ID
           </p>
+
+          {/* Admin Access */}
+          <div className="pt-2 border-t border-slate-200">
+            <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-slate-600 text-xs">
+              <a href="/admin" className="flex items-center gap-1">
+                <Lock className="h-3 w-3" />
+                Admin Upload
+              </a>
+            </Button>
+          </div>
         </div>
 
         {/* Redemption Modal */}

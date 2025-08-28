@@ -12,7 +12,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "ALEKS Points Portal",
   description: "Check your ALEKS coins and completion progress",
-    generator: 'v0.dev'
+    generator: 'v0.app'
 }
 
 export default function RootLayout({
