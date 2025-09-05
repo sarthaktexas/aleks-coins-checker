@@ -8,6 +8,7 @@ type DailyLog = {
   minutes: number
   topics: number
   reason: string
+  isExcluded?: boolean
 }
 
 type StudentData = {
@@ -29,29 +30,41 @@ function generateDemoData(): any {
   const periodDays = 24
 
   // Generate demo data for 17 days with recovery scenario (3 missed days)
-  for (let i = 0; i < totalDays; i++) {
+  for (let i = 0; i < totalDays + 7; i++) {
+    // Show some future days too
     const dayNumber = i + 1
-    let isQualified = true
+    let isQualified = false
+    let isExcluded = false
 
-    // Make specific days missed to create recovery scenario
-    if (dayNumber === 3 || dayNumber === 8 || dayNumber === 17) {
-      isQualified = false
-    } else {
-      // 85% chance of being qualified for other days
-      isQualified = Math.random() > 0.15
+    // Make some days exempt (like weekends or holidays)
+    if (dayNumber === 7 || dayNumber === 14 || dayNumber === 21) {
+      isExcluded = true
+    } else if (dayNumber <= totalDays) {
+      // Make specific days missed to create recovery scenario
+      if (dayNumber === 3 || dayNumber === 8 || dayNumber === 17) {
+        isQualified = false
+      } else {
+        // 85% chance of being qualified for other days
+        isQualified = Math.random() > 0.15
+      }
     }
 
     const minutes = isQualified ? Math.floor(Math.random() * 40) + 31 : Math.floor(Math.random() * 30)
     const topics = isQualified ? Math.floor(Math.random() * 3) + 1 : Math.floor(Math.random() * 2)
 
-    // Generate dates starting from May 31, 2025
-    const startDate = new Date(2025, 4, 31) // May 31, 2025 (month is 0-indexed)
+    // Generate dates starting from current year
+    const currentYear = new Date().getFullYear()
+    const startDate = new Date(currentYear, 4, 31) // May 31 of current year
     const currentDate = new Date(startDate)
     currentDate.setDate(startDate.getDate() + (dayNumber - 1))
     const dateString = currentDate.toISOString().split("T")[0]
 
     let reason = ""
-    if (isQualified) {
+    if (isExcluded) {
+      reason = "📅 Exempt day - does not count toward progress"
+    } else if (dayNumber > totalDays) {
+      reason = "⏳ Future day"
+    } else if (isQualified) {
       reason = `✅ Met requirement: ${minutes} mins + ${topics} topic${topics !== 1 ? "s" : ""}`
       demoCoins++
     } else {
@@ -71,17 +84,21 @@ function generateDemoData(): any {
       minutes,
       topics,
       reason,
+      isExcluded,
     })
   }
 
-  const qualifiedDays = demoDailyLog.filter((d) => d.qualified).length
-  const percentComplete = Math.round((qualifiedDays / totalDays) * 100 * 10) / 10
+  // Calculate percentage based only on working days
+  const workingDayLogs = demoDailyLog.filter((d) => !d.isExcluded && d.day <= totalDays)
+  const qualifiedDays = workingDayLogs.filter((d) => d.qualified).length
+  const percentComplete =
+    workingDayLogs.length > 0 ? Math.round((qualifiedDays / workingDayLogs.length) * 100 * 10) / 10 : 0
 
   return {
     name: "Demo Student",
     email: "demo@example.com",
     coins: demoCoins,
-    totalDays,
+    totalDays: workingDayLogs.length,
     periodDays,
     percentComplete,
     dailyLog: demoDailyLog,
@@ -90,45 +107,66 @@ function generateDemoData(): any {
 
 async function loadStudentDataFromDB(): Promise<StudentData> {
   try {
-    // Try to get data from database first
+    console.log("Attempting to load student data from database...")
+
+    // First, check if the table exists and has data
+    const tableCheck = await sql`
+      SELECT COUNT(*) as count FROM student_data
+    `
+
+    console.log("Table check result:", tableCheck.rows[0])
+
+    if (tableCheck.rows[0].count === 0) {
+      console.log("No data found in student_data table")
+      return {}
+    }
+
+    // Get the most recent data
     const result = await sql`
-      SELECT data FROM student_data 
+      SELECT data, uploaded_at FROM student_data 
       ORDER BY uploaded_at DESC 
       LIMIT 1
     `
 
-    if (result.rows.length > 0) {
-      console.log("Successfully loaded student data from database")
-      return result.rows[0].data as StudentData
-    }
-
-    console.log("No data found in database, falling back to JSON file")
-
-    // Fallback to JSON file if database is empty
-    try {
-      const studentsModule = await import("../../../data/students.json")
-      return studentsModule.default
-    } catch (fileError) {
-      console.warn("Error reading students.json file:", fileError)
+    if (result.rows.length === 0) {
+      console.log("No rows returned from student_data table")
       return {}
     }
+
+    const row = result.rows[0]
+    console.log("Retrieved row with upload date:", row.uploaded_at)
+
+    // Parse the JSON data
+    let studentData: StudentData
+
+    if (typeof row.data === "string") {
+      studentData = JSON.parse(row.data)
+    } else {
+      // Data is already parsed as JSON
+      studentData = row.data as StudentData
+    }
+
+    console.log("Successfully loaded student data from database")
+    console.log("Number of students:", Object.keys(studentData).length)
+
+    return studentData
   } catch (error) {
     console.error("Error loading student data from database:", error)
 
-    // Fallback to JSON file
-    try {
-      const studentsModule = await import("../../../data/students.json")
-      return studentsModule.default
-    } catch (fileError) {
-      console.warn("Error reading students.json file:", fileError)
+    // If it's a table doesn't exist error, return empty data
+    if (error instanceof Error && error.message.includes('relation "student_data" does not exist')) {
+      console.log("student_data table does not exist yet")
       return {}
     }
+
+    throw error
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { studentId } = await request.json()
+    const body = await request.json()
+    const { studentId } = body
 
     console.log("Received student ID:", studentId)
 
@@ -140,6 +178,7 @@ export async function POST(request: NextRequest) {
     // For demo student, always return demo data
     const normalizedId = studentId.toLowerCase().trim()
     if (normalizedId === "abc123") {
+      console.log("Returning demo student data")
       const demoStudent = generateDemoData()
       return NextResponse.json({
         success: true,
@@ -147,19 +186,32 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Load student data from database or fallback to JSON
-    const studentData = await loadStudentDataFromDB()
+    // Load student data from database
+    let studentData: StudentData
 
-    if (Object.keys(studentData).length === 0) {
+    try {
+      studentData = await loadStudentDataFromDB()
+    } catch (dbError) {
+      console.error("Database error:", dbError)
       return NextResponse.json(
         {
-          error: "No student data available. Please contact your instructor.",
+          error: "Database connection error. Please contact your instructor.",
+          details: process.env.NODE_ENV === "development" ? (dbError as Error).message : undefined,
         },
         { status: 503 },
       )
     }
 
-    console.log("Available student IDs:", Object.keys(studentData).slice(0, 10))
+    if (Object.keys(studentData).length === 0) {
+      return NextResponse.json(
+        {
+          error: "No student data available. Please contact your instructor to upload data.",
+        },
+        { status: 503 },
+      )
+    }
+
+    console.log("Available student IDs (first 10):", Object.keys(studentData).slice(0, 10))
     console.log("Looking for ID:", normalizedId)
 
     // Look up the student (case-insensitive)
@@ -192,15 +244,24 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)
+
+    let errorMessage = "Internal server error. Please try again later."
+    let errorDetails = undefined
+
+    if (error instanceof Error) {
+      if (error.message.includes("JSON")) {
+        errorMessage = "Invalid request format. Please try again."
+      }
+
+      if (process.env.NODE_ENV === "development") {
+        errorDetails = error.message
+      }
+    }
+
     return NextResponse.json(
       {
-        error: "Internal server error. Please try again later.",
-        details:
-          process.env.NODE_ENV === "development"
-            ? error instanceof Error
-              ? error.message
-              : "Unknown error"
-            : undefined,
+        error: errorMessage,
+        details: errorDetails,
       },
       { status: 500 },
     )

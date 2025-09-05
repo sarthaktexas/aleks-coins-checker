@@ -65,6 +65,8 @@ export default function StudentLookup() {
     setStudentInfo(null)
 
     try {
+      console.log("Searching for student ID:", studentId.trim())
+
       const response = await fetch("/api/student", {
         method: "POST",
         headers: {
@@ -73,17 +75,37 @@ export default function StudentLookup() {
         body: JSON.stringify({ studentId: studentId.trim() }),
       })
 
-      const data = await response.json()
+      console.log("Response status:", response.status)
 
-      if (response.ok && data.success) {
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("API Error:", errorData)
+        setError(errorData.error || `Server error (${response.status})`)
+        return
+      }
+
+      const data = await response.json()
+      console.log("Response data:", data)
+
+      if (data.success && data.student) {
         setStudentInfo(data.student)
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
+        console.log("Student data loaded successfully")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
       }
     } catch (err) {
-      setError("Unable to connect to the server. Please try again later.")
       console.error("Search error:", err)
+
+      if (err instanceof Error) {
+        if (err.message.includes("Failed to fetch")) {
+          setError("Unable to connect to the server. Please check your internet connection and try again.")
+        } else {
+          setError(`Connection error: ${err.message}`)
+        }
+      } else {
+        setError("An unexpected error occurred. Please try again later.")
+      }
     } finally {
       setIsSearching(false)
     }

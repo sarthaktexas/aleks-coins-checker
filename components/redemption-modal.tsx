@@ -1,11 +1,22 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Copy, Mail } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
+import { Gift, Mail, User, FileText, HelpCircle } from "lucide-react"
 
 type RedemptionModalProps = {
   isOpen: boolean
@@ -16,91 +27,170 @@ type RedemptionModalProps = {
 }
 
 export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, studentEmail }: RedemptionModalProps) {
-  const [copied, setCopied] = useState(false)
+  const [formData, setFormData] = useState({
+    assignmentName: "",
+    courseSection: "",
+    additionalNotes: "",
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitted, setIsSubmitted] = useState(false)
 
-  const getEmailSubject = () => {
-    return redemptionType === "assignment"
-      ? "ALEKS Coin Redemption - Assignment/Video Replacement"
-      : "ALEKS Coin Redemption - Attendance Quiz Replacement"
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    // Simulate submission delay
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+
+    setIsSubmitted(true)
+    setIsSubmitting(false)
+
+    // Reset form after a delay
+    setTimeout(() => {
+      setIsSubmitted(false)
+      setFormData({
+        assignmentName: "",
+        courseSection: "",
+        additionalNotes: "",
+      })
+      onClose()
+    }, 2000)
   }
 
-  const getEmailBody = () => {
-    const replacementType =
-      redemptionType === "assignment" ? "assignment/video replacement" : "attendance quiz replacement"
-
-    return `Hi Sarthak,
-
-I would like to redeem my ALEKS coins for a ${replacementType}.
-
-Student: ${studentName}
-Email: ${studentEmail}
-
-Please let me know which specific assignment I should complete for this redemption. I understand I need to be specific with assignment names when making this request.
-
-Thank you!
-
-Best regards,
-${studentName}`
+  const redemptionInfo = {
+    assignment: {
+      title: "Assignment/Video Replacement",
+      cost: 10,
+      description: "Replace one missed assignment or video with your ALEKS coins",
+      icon: FileText,
+    },
+    quiz: {
+      title: "Attendance Quiz Replacement",
+      cost: 20,
+      description: "Replace one missed attendance quiz with your ALEKS coins",
+      icon: HelpCircle,
+    },
   }
 
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(getEmailBody())
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error("Failed to copy text: ", err)
-    }
-  }
+  const info = redemptionInfo[redemptionType]
+  const IconComponent = info.icon
 
-  const openEmailClient = () => {
-    const subject = encodeURIComponent(getEmailSubject())
-    const body = encodeURIComponent(getEmailBody())
-    const mailtoLink = `mailto:sarthak.mohanty@utsa.edu?subject=${subject}&body=${body}`
-    window.location.href = mailtoLink
+  if (isSubmitted) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md">
+          <div className="text-center py-6">
+            <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
+              <Gift className="h-6 w-6 text-green-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Redemption Submitted!</h3>
+            <p className="text-sm text-gray-600">
+              Your redemption request has been sent to your instructor. You should receive confirmation via email
+              shortly.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            {redemptionType === "assignment" ? "Assignment/Video" : "Attendance Quiz"} Redemption
+          <DialogTitle className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <IconComponent className="h-5 w-5 text-green-600" />
+            </div>
+            {info.title}
           </DialogTitle>
+          <DialogDescription className="text-base">{info.description}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-blue-800 text-sm">
-              <strong>Cost:</strong> {redemptionType === "assignment" ? "10" : "20"} coins
-            </p>
-            <p className="text-blue-700 text-sm mt-1">This will generate an email to your instructor for approval.</p>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Cost Badge */}
+          <div className="flex justify-center">
+            <Badge className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium">
+              Cost: {info.cost} coins
+            </Badge>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email-preview">Email Preview:</Label>
-            <Textarea id="email-preview" value={getEmailBody()} readOnly className="min-h-[200px] font-mono text-sm" />
+          {/* Student Info */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <User className="h-4 w-4" />
+              <span className="font-medium">Student:</span>
+              <span>{studentName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Mail className="h-4 w-4" />
+              <span className="font-medium">Email:</span>
+              <span>{studentEmail}</span>
+            </div>
           </div>
 
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-amber-800 text-sm">
-              <strong>Important:</strong> Be specific with assignment names when making your request to ensure proper
-              processing.
-            </p>
+          {/* Form Fields */}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="assignmentName" className="text-sm font-medium">
+                {redemptionType === "assignment" ? "Assignment/Video Name" : "Quiz Name"} *
+              </Label>
+              <Input
+                id="assignmentName"
+                placeholder={
+                  redemptionType === "assignment" ? "e.g., Homework 5, Chapter 3 Video" : "e.g., Week 2 Attendance Quiz"
+                }
+                value={formData.assignmentName}
+                onChange={(e) => setFormData({ ...formData, assignmentName: e.target.value })}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="courseSection" className="text-sm font-medium">
+                Course Section *
+              </Label>
+              <Input
+                id="courseSection"
+                placeholder="e.g., MATH 1093.001"
+                value={formData.courseSection}
+                onChange={(e) => setFormData({ ...formData, courseSection: e.target.value })}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="additionalNotes" className="text-sm font-medium">
+                Additional Notes (Optional)
+              </Label>
+              <Textarea
+                id="additionalNotes"
+                placeholder="Any additional information for your instructor..."
+                value={formData.additionalNotes}
+                onChange={(e) => setFormData({ ...formData, additionalNotes: e.target.value })}
+                className="mt-1 min-h-[80px]"
+              />
+            </div>
           </div>
 
-          <div className="flex gap-3">
-            <Button onClick={copyToClipboard} variant="outline" className="flex-1 bg-transparent">
-              <Copy className="h-4 w-4 mr-2" />
-              {copied ? "Copied!" : "Copy Email"}
+          <DialogFooter className="gap-3">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+              Cancel
             </Button>
-            <Button onClick={openEmailClient} className="flex-1">
-              <Mail className="h-4 w-4 mr-2" />
-              Open Email App
+            <Button type="submit" disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+              {isSubmitting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Submitting...
+                </div>
+              ) : (
+                `Redeem for ${info.cost} coins`
+              )}
             </Button>
-          </div>
-        </div>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )
