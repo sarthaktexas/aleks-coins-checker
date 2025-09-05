@@ -2,19 +2,19 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar } from "lucide-react"
+import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet } from "lucide-react"
 
 // Get current year
 const CURRENT_YEAR = new Date().getFullYear()
 
-// Define the same periods as in the script
+// Define the exam periods with test 3 added
 const EXAM_PERIODS = {
   spring2025: {
     name: `Spring ${CURRENT_YEAR} - Exam 1 Period`,
@@ -28,11 +28,17 @@ const EXAM_PERIODS = {
     endDate: `${CURRENT_YEAR}-03-10`,
     excludedDates: [`${CURRENT_YEAR}-02-17`, `${CURRENT_YEAR}-03-03`],
   },
+  spring2025_exam3: {
+    name: `Spring ${CURRENT_YEAR} - Exam 3 Period`,
+    startDate: `${CURRENT_YEAR}-03-11`,
+    endDate: `${CURRENT_YEAR}-04-07`,
+    excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-03-31`],
+  },
   spring2025_final: {
     name: `Spring ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-03-11`,
+    startDate: `${CURRENT_YEAR}-04-08`,
     endDate: `${CURRENT_YEAR}-04-28`,
-    excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-04-21`],
+    excludedDates: [`${CURRENT_YEAR}-04-21`],
   },
   summer2025: {
     name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
@@ -46,11 +52,17 @@ const EXAM_PERIODS = {
     endDate: `${CURRENT_YEAR}-07-17`,
     excludedDates: [`${CURRENT_YEAR}-07-04`, `${CURRENT_YEAR}-07-05`, `${CURRENT_YEAR}-07-06`],
   },
+  summer2025_exam3: {
+    name: `Summer ${CURRENT_YEAR} - Exam 3 Period`,
+    startDate: `${CURRENT_YEAR}-07-18`,
+    endDate: `${CURRENT_YEAR}-08-03`,
+    excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`],
+  },
   summer2025_final: {
     name: `Summer ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-07-18`,
+    startDate: `${CURRENT_YEAR}-08-04`,
     endDate: `${CURRENT_YEAR}-08-10`,
-    excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`],
+    excludedDates: [],
   },
   fall2025: {
     name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
@@ -64,9 +76,15 @@ const EXAM_PERIODS = {
     endDate: `${CURRENT_YEAR}-10-18`,
     excludedDates: [`${CURRENT_YEAR}-10-14`],
   },
+  fall2025_exam3: {
+    name: `Fall ${CURRENT_YEAR} - Exam 3 Period`,
+    startDate: `${CURRENT_YEAR}-10-19`,
+    endDate: `${CURRENT_YEAR}-11-15`,
+    excludedDates: [`${CURRENT_YEAR}-11-11`],
+  },
   fall2025_final: {
     name: `Fall ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-10-19`,
+    startDate: `${CURRENT_YEAR}-11-16`,
     endDate: `${CURRENT_YEAR}-12-13`,
     excludedDates: [
       `${CURRENT_YEAR}-11-25`,
@@ -81,16 +99,59 @@ const EXAM_PERIODS = {
 export default function AdminPage() {
   const [password, setPassword] = useState("")
   const [file, setFile] = useState<File | null>(null)
-  const [selectedPeriod, setSelectedPeriod] = useState("summer2025")
+  const [selectedPeriod, setSelectedPeriod] = useState("summer2025_exam2")
   const [isUploading, setIsUploading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
+  const handleFileChange = (selectedFile: File) => {
+    if (selectedFile && (selectedFile.name.endsWith(".xlsx") || selectedFile.name.endsWith(".xls"))) {
       setFile(selectedFile)
       setMessage(null)
+    } else {
+      setMessage({ type: "error", text: "Please select a valid Excel file (.xlsx or .xls)" })
     }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (selectedFile) {
+      handleFileChange(selectedFile)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+
+    const droppedFiles = Array.from(e.dataTransfer.files)
+    const excelFile = droppedFiles.find((file) => file.name.endsWith(".xlsx") || file.name.endsWith(".xls"))
+
+    if (excelFile) {
+      handleFileChange(excelFile)
+    } else {
+      setMessage({ type: "error", text: "Please drop a valid Excel file (.xlsx or .xls)" })
+    }
+  }
+
+  const handleDropZoneClick = () => {
+    fileInputRef.current?.click()
   }
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -113,6 +174,7 @@ export default function AdminPage() {
       const formData = new FormData()
       formData.append("password", password)
       formData.append("file", file)
+      formData.append("examPeriod", selectedPeriod)
 
       const response = await fetch("/api/admin/upload", {
         method: "POST",
@@ -124,13 +186,12 @@ export default function AdminPage() {
       if (response.ok) {
         setMessage({
           type: "success",
-          text: `Successfully uploaded data for ${result.studentCount} students`,
+          text: `Successfully processed and uploaded data for ${result.studentCount} students`,
         })
         setFile(null)
         setPassword("")
         // Reset file input
-        const fileInput = document.getElementById("file") as HTMLInputElement
-        if (fileInput) fileInput.value = ""
+        if (fileInputRef.current) fileInputRef.current.value = ""
       } else {
         setMessage({ type: "error", text: result.error || "Upload failed" })
       }
@@ -158,7 +219,7 @@ export default function AdminPage() {
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Admin Panel</h1>
           </div>
-          <p className="text-slate-600">Upload student data to the secure database</p>
+          <p className="text-slate-600">Upload Excel files with student ALEKS data</p>
         </div>
 
         {/* Upload Card */}
@@ -168,11 +229,11 @@ export default function AdminPage() {
               <div className="p-2 bg-red-100 rounded-lg">
                 <Database className="h-5 w-5 text-red-600" />
               </div>
-              Student Data Upload
+              Excel File Upload & Processing
             </CardTitle>
             <CardDescription>
-              Upload an Excel file (converted to JSON) containing student progress data. This will be stored securely in
-              the database.
+              Upload an Excel file (.xlsx) containing student ALEKS data. The system will automatically process it and
+              store the data in the database.
             </CardDescription>
           </CardHeader>
 
@@ -235,35 +296,87 @@ export default function AdminPage() {
                     </p>
                     <p>
                       <strong>Exempt Dates:</strong>{" "}
-                      {EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].excludedDates
-                        .map((date) => new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }))
-                        .join(", ")}
+                      {EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].excludedDates.length > 0
+                        ? EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].excludedDates
+                            .map((date) =>
+                              new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                            )
+                            .join(", ")
+                        : "None"}
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* File Upload */}
+              {/* Drag and Drop File Upload */}
               <div className="space-y-2">
-                <Label htmlFor="file" className="text-sm font-medium text-slate-700">
-                  Student Data File (JSON)
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="file"
+                <Label className="text-sm font-medium text-slate-700">Excel File (.xlsx)</Label>
+                <div
+                  className={`relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200 ${
+                    isDragOver
+                      ? "border-red-400 bg-red-50"
+                      : file
+                        ? "border-green-400 bg-green-50"
+                        : "border-slate-300 bg-slate-50 hover:border-red-400 hover:bg-red-50"
+                  } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={!isUploading ? handleDropZoneClick : undefined}
+                >
+                  <input
+                    ref={fileInputRef}
                     type="file"
-                    accept=".json"
-                    onChange={handleFileChange}
-                    className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                    accept=".xlsx,.xls"
+                    onChange={handleInputChange}
+                    className="hidden"
                     disabled={isUploading}
                   />
+
+                  <div className="flex flex-col items-center gap-4">
+                    {file ? (
+                      <>
+                        <div className="p-3 bg-green-100 rounded-full">
+                          <CheckCircle className="h-8 w-8 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="text-lg font-semibold text-green-800">{file.name}</p>
+                          <p className="text-sm text-green-600">{(file.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFile(null)
+                            if (fileInputRef.current) fileInputRef.current.value = ""
+                          }}
+                          disabled={isUploading}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          Remove File
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <div className={`p-3 rounded-full ${isDragOver ? "bg-red-100" : "bg-slate-100"}`}>
+                          <FileSpreadsheet className={`h-8 w-8 ${isDragOver ? "text-red-600" : "text-slate-600"}`} />
+                        </div>
+                        <div>
+                          <p className={`text-lg font-semibold ${isDragOver ? "text-red-800" : "text-slate-700"}`}>
+                            {isDragOver ? "Drop your Excel file here" : "Drag & drop your Excel file here"}
+                          </p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            or <span className="text-red-600 font-medium">click to browse</span>
+                          </p>
+                          <p className="text-xs text-slate-400 mt-2">Supports .xlsx and .xls files</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-                {file && (
-                  <p className="text-sm text-slate-600 flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                  </p>
-                )}
               </div>
 
               {/* Submit Button */}
@@ -275,12 +388,12 @@ export default function AdminPage() {
                 {isUploading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Uploading...
+                    Processing & Uploading...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <Upload className="h-4 w-4" />
-                    Upload to Database
+                    Process Excel & Upload to Database
                   </div>
                 )}
               </Button>
@@ -311,15 +424,12 @@ export default function AdminPage() {
           <CardContent className="p-6">
             <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
               <Upload className="h-4 w-4" />
-              Upload Instructions
+              Excel File Requirements
             </h3>
             <div className="space-y-2 text-sm text-blue-800">
-              <p>• First, process your Excel file using the script:</p>
-              <code className="block bg-blue-100 p-2 rounded text-xs font-mono">
-                node process-excel.js students.xlsx {selectedPeriod}
-              </code>
-              <p>• This creates a JSON file with the correct period dates and exempt days</p>
-              <p>• Upload the generated JSON file using this form</p>
+              <p>• Excel file should contain columns for: Student ID, Name, Email</p>
+              <p>• Daily data columns: "Day 1 Minutes", "Day 1 Topics", "Day 2 Minutes", "Day 2 Topics", etc.</p>
+              <p>• The system will automatically process the file and calculate coins</p>
               <p>• Exempt days are automatically excluded from progress calculations</p>
               <p>• Data is stored securely in the Vercel Postgres database</p>
             </div>
