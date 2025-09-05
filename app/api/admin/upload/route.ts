@@ -202,10 +202,6 @@ function processExcelData(rawData: any[], examPeriod: string) {
         const minutes = timeToMinutes(row[timeCol])
         const topics = Number.parseFloat(row[topicCol]) || 0
 
-        console.log(
-          `Day ${calendarDay}: ${timeCol}="${row[timeCol]}" (${minutes} mins), ${topicCol}="${row[topicCol]}" (${topics} topics)`,
-        )
-
         let qualified = false
         let reason = ""
 
