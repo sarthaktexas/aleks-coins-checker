@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Copy, Mail } from "lucide-react"
 
 type RedemptionModalProps = {
@@ -16,41 +16,48 @@ type RedemptionModalProps = {
 }
 
 export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, studentEmail }: RedemptionModalProps) {
-  const [assignmentName, setAssignmentName] = useState("")
-  const [emailCopied, setEmailCopied] = useState(false)
+  const [copied, setCopied] = useState(false)
 
-  const isAssignment = redemptionType === "assignment"
-  const coinCost = isAssignment ? 10 : 20
-  const replacementType = isAssignment ? "online assignment or PlayPosit video" : "attendance quiz"
-
-  const generateEmailContent = () => {
-    const subject = `Coin Redemption Request - ${isAssignment ? "Assignment" : "Quiz"} Replacement`
-
-    const body = `Hi Sarthak,
-
-I would like to redeem ${coinCost} ALEKS coins to replace ${isAssignment ? "an online assignment/PlayPosit video" : "an attendance quiz"} with a grade of 100.
-
-${isAssignment ? "Assignment/Video" : "Quiz"} to Replace: ${assignmentName || "[Please specify]"}
-
-Thank you!`
-
-    return { subject, body }
+  const getEmailSubject = () => {
+    return redemptionType === "assignment"
+      ? "ALEKS Coin Redemption - Assignment/Video Replacement"
+      : "ALEKS Coin Redemption - Attendance Quiz Replacement"
   }
 
-  const copyEmailToClipboard = () => {
-    const { subject, body } = generateEmailContent()
-    const emailContent = `Subject: ${subject}\n\n${body}`
+  const getEmailBody = () => {
+    const replacementType =
+      redemptionType === "assignment" ? "assignment/video replacement" : "attendance quiz replacement"
 
-    navigator.clipboard.writeText(emailContent).then(() => {
-      setEmailCopied(true)
-      setTimeout(() => setEmailCopied(false), 2000)
-    })
+    return `Hi Sarthak,
+
+I would like to redeem my ALEKS coins for a ${replacementType}.
+
+Student: ${studentName}
+Email: ${studentEmail}
+
+Please let me know which specific assignment I should complete for this redemption. I understand I need to be specific with assignment names when making this request.
+
+Thank you!
+
+Best regards,
+${studentName}`
+  }
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(getEmailBody())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy text: ", err)
+    }
   }
 
   const openEmailClient = () => {
-    const { subject, body } = generateEmailContent()
-    const mailtoLink = `mailto:sarthak.mohanty@utsa.edu?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.open(mailtoLink)
+    const subject = encodeURIComponent(getEmailSubject())
+    const body = encodeURIComponent(getEmailBody())
+    const mailtoLink = `mailto:sarthak.mohanty@utsa.edu?subject=${subject}&body=${body}`
+    window.location.href = mailtoLink
   }
 
   return (
@@ -59,70 +66,39 @@ Thank you!`
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Redeem {coinCost} Coins - {isAssignment ? "Assignment" : "Quiz"} Replacement
+            {redemptionType === "assignment" ? "Assignment/Video" : "Attendance Quiz"} Redemption
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">Redemption Details</h3>
             <p className="text-blue-800 text-sm">
-              You're redeeming <strong>{coinCost} coins</strong> to replace {replacementType} with a grade of{" "}
-              <strong>100</strong>.
+              <strong>Cost:</strong> {redemptionType === "assignment" ? "10" : "20"} coins
+            </p>
+            <p className="text-blue-700 text-sm mt-1">This will generate an email to your instructor for approval.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email-preview">Email Preview:</Label>
+            <Textarea id="email-preview" value={getEmailBody()} readOnly className="min-h-[200px] font-mono text-sm" />
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-amber-800 text-sm">
+              <strong>Important:</strong> Be specific with assignment names when making your request to ensure proper
+              processing.
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="assignmentName" className="text-sm font-medium">
-                {isAssignment ? "Assignment/Video Name" : "Quiz Name"} *
-              </Label>
-              <Input
-                id="assignmentName"
-                placeholder={`Enter the ${isAssignment ? "assignment or PlayPosit video" : "attendance quiz"} name`}
-                value={assignmentName}
-                onChange={(e) => setAssignmentName(e.target.value)}
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1 font-medium">
-                Please be specific about which {isAssignment ? "assignment or video" : "quiz"} you want to replace
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-2">Email Preview</h3>
-            <div className="text-sm text-gray-700 space-y-2">
-              <div>
-                <strong>To:</strong> sarthak.mohanty@utsa.edu
-              </div>
-              <div>
-                <strong>Subject:</strong> {generateEmailContent().subject}
-              </div>
-              <div className="bg-white border rounded p-3 text-xs font-mono whitespace-pre-line max-h-40 overflow-y-auto">
-                {generateEmailContent().body}
-              </div>
-            </div>
-          </div>
-
           <div className="flex gap-3">
-            <Button
-              onClick={copyEmailToClipboard}
-              variant="outline"
-              className="flex-1"
-              disabled={!assignmentName.trim()}
-            >
+            <Button onClick={copyToClipboard} variant="outline" className="flex-1 bg-transparent">
               <Copy className="h-4 w-4 mr-2" />
-              {emailCopied ? "Copied!" : "Copy Email"}
+              {copied ? "Copied!" : "Copy Email"}
             </Button>
-            <Button onClick={openEmailClient} className="flex-1" disabled={!assignmentName.trim()}>
+            <Button onClick={openEmailClient} className="flex-1">
               <Mail className="h-4 w-4 mr-2" />
-              Open Email Client
+              Open Email App
             </Button>
-          </div>
-
-          <div className="text-xs text-gray-500 text-center">
-            After copying or opening your email client, send the email to Sarthak for processing.
           </div>
         </div>
       </DialogContent>

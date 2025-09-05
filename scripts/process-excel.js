@@ -1,103 +1,114 @@
-const xlsx = require("xlsx")
-const { parse, format, addDays, differenceInDays } = require("date-fns")
+import * as XLSX from "xlsx"
 
-function processExcelData(buffer, startDateStr, endDateStr) {
-  const MIN_MINUTES = 31
-  const MIN_TOPICS = 1
+export async function processExcelFile(buffer, period, excludedDates = []) {
+  try {
+    // Parse the Excel file
+    const workbook = XLSX.read(buffer, { type: "buffer" })
+    const sheetName = workbook.SheetNames[0]
+    const worksheet = workbook.Sheets[sheetName]
 
-  const startDate = parse(startDateStr, "yyyy-MM-dd", new Date())
-  const endDate = parse(endDateStr, "yyyy-MM-dd", new Date())
-  const totalDaysInPeriod = differenceInDays(endDate, startDate) + 1
+    // Convert to JSON
+    const rawData = XLSX.utils.sheet_to_json(worksheet)
 
-  // === LOAD WORKBOOK FROM BUFFER ===
-  const wb = xlsx.read(buffer, { type: "buffer" })
-  const sheet = wb.Sheets[wb.SheetNames[0]]
-  const data = xlsx.utils.sheet_to_json(sheet, { range: 3 })
+    console.log(`Processing ${rawData.length} rows from Excel file`)
 
-  // === DETECT MAX DAY INDEX FROM ALL ROWS ===
-  let maxDay = 0
-  data.forEach((row) => {
-    Object.keys(row).forEach((key) => {
-      const match = key.match(/^h:mm_(\d+)$/)
-      if (match) {
-        const dayNum = Number.parseInt(match[1])
-        if (dayNum > maxDay) maxDay = dayNum
-      }
-    })
-  })
+    // Process the data
+    const processedData = {}
 
-  // === DETECT TIME/TOPIC COLUMNS DYNAMICALLY ===
-  const pairs = []
-  for (let i = 1; i <= maxDay; i++) {
-    pairs.push([`h:mm_${i}`, `added to pie_${i}`])
-  }
+    for (const row of rawData) {
+      // Extract student info (adjust column names as needed)
+      const studentId = row["Student ID"] || row["ID"] || row["student_id"]
+      const name = row["Name"] || row["Student Name"] || row["name"]
+      const email = row["Email"] || row["email"]
 
-  // === UTILITY ===
-  function timeToMinutes(time) {
-    if (!time || typeof time !== "string") return 0
-    const parts = time.split(":")
-    return Number.parseInt(parts[0]) * 60 + Number.parseInt(parts[1])
-  }
+      if (!studentId) continue
 
-  // === PROCESS STUDENTS ===
-  const results = data.map((row) => {
-    const name = row[Object.keys(row)[0]]
-    const studentId = row[Object.keys(row)[2]]
-    const email = row[Object.keys(row)[3]]
-    let coins = 0
-    const dailyLog = []
-
-    pairs.forEach(([timeCol, topicCol], index) => {
-      const date = format(addDays(startDate, index), "yyyy-MM-dd")
-      const minutes = timeToMinutes(row[timeCol])
-      const topics = Number.parseFloat(row[topicCol]) || 0
-
-      const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
-      const topicMsg =
-        topics >= MIN_TOPICS ? null : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
-
-      const qualified = !minMsg && !topicMsg
-      if (qualified) coins++
-
-      let reason = ""
-      if (qualified) {
-        reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
-      } else {
-        const parts = []
-        if (minMsg) parts.push(minMsg)
-        if (topicMsg) parts.push(topicMsg)
-        reason = `❌ Not enough: ` + parts.join(" and ")
+      // Initialize student data
+      if (!processedData[studentId.toLowerCase()]) {
+        processedData[studentId.toLowerCase()] = {
+          name: name || "Unknown Student",
+          email: email || `${studentId}@my.utsa.edu`,
+          coins: 0,
+          totalDays: 0,
+          periodDays: 0,
+          percentComplete: 0,
+          dailyLog: [],
+        }
       }
 
-      dailyLog.push({
-        day: index + 1,
-        date,
-        qualified,
-        minutes,
-        topics,
-        reason,
-      })
-    })
+      const student = processedData[studentId.toLowerCase()]
 
-    const percentComplete = ((coins / maxDay) * 100).toFixed(1)
-    return { studentId, name, email, coins, maxDay, totalDaysInPeriod, percentComplete, dailyLog }
-  })
+      // Process daily data (adjust based on your Excel structure)
+      const date = row["Date"] || row["date"]
+      const minutes = Number.parseInt(row["Minutes"] || row["minutes"] || 0)
+      const topics = Number.parseInt(row["Topics"] || row["topics"] || 0)
 
-  // === JSON OUTPUT ===
-  const jsonMap = {}
-  results.forEach((s) => {
-    jsonMap[s.studentId] = {
-      name: s.name,
-      email: s.email,
-      coins: s.coins,
-      totalDays: s.maxDay,
-      periodDays: s.totalDaysInPeriod,
-      percentComplete: Number.parseFloat(s.percentComplete),
-      dailyLog: s.dailyLog,
+      if (date) {
+        const qualified = minutes >= 31 && topics >= 1
+
+        let reason = ""
+        if (qualified) {
+          reason = `✅ Met requirement: ${minutes} mins + ${topics} topic${topics !== 1 ? "s" : ""}`
+          student.coins++
+        } else {
+          if (minutes < 31 && topics < 1) {
+            reason = `❌ Not enough: ${minutes} mins (needs 31 mins) and ${topics} topics (needs 1 topic)`
+          } else if (minutes < 31) {
+            reason = `❌ Not enough: ${minutes} mins (needs 31 mins)`
+          } else {
+            reason = `❌ Not enough: ${topics} topics (needs 1 topic)`
+          }
+        }
+
+        student.dailyLog.push({
+          day: student.dailyLog.length + 1,
+          date: formatDate(date),
+          qualified,
+          minutes,
+          topics,
+          reason,
+        })
+
+        student.totalDays++
+      }
     }
-  })
 
-  return jsonMap
+    // Calculate final statistics for each student
+    for (const studentId in processedData) {
+      const student = processedData[studentId]
+      student.periodDays = student.totalDays // Adjust based on your needs
+
+      const qualifiedDays = student.dailyLog.filter((d) => d.qualified).length
+      student.percentComplete =
+        student.totalDays > 0 ? Math.round((qualifiedDays / student.totalDays) * 100 * 10) / 10 : 0
+    }
+
+    console.log(`Processed ${Object.keys(processedData).length} students`)
+    return processedData
+  } catch (error) {
+    console.error("Error processing Excel file:", error)
+    throw new Error(`Failed to process Excel file: ${error.message}`)
+  }
 }
 
-module.exports = { processExcelData }
+function formatDate(dateValue) {
+  try {
+    // Handle different date formats
+    if (typeof dateValue === "number") {
+      // Excel serial date
+      const date = XLSX.SSF.parse_date_code(dateValue)
+      return `${date.y}-${String(date.m).padStart(2, "0")}-${String(date.d).padStart(2, "0")}`
+    } else if (typeof dateValue === "string") {
+      // String date
+      const date = new Date(dateValue)
+      return date.toISOString().split("T")[0]
+    } else if (dateValue instanceof Date) {
+      // Date object
+      return dateValue.toISOString().split("T")[0]
+    }
+    return dateValue
+  } catch (error) {
+    console.error("Error formatting date:", error)
+    return dateValue
+  }
+}
