@@ -139,34 +139,72 @@ function processExcelData(rawData: any[], examPeriod: string) {
   console.log(`Total days in period: ${totalPeriodDays}`)
   console.log(`Total working days (excluding exemptions): ${totalWorkingDays}`)
 
+  // === DETECT MAX DAY INDEX FROM ALL ROWS (like your code) ===
+  let maxDay = 0
+  rawData.forEach((row) => {
+    Object.keys(row).forEach((key) => {
+      const match = key.match(/^h:mm_(\d+)$/)
+      if (match) {
+        const dayNum = Number.parseInt(match[1])
+        if (dayNum > maxDay) maxDay = dayNum
+      }
+    })
+  })
+
+  console.log(`Detected max day from Excel: ${maxDay}`)
+
+  // === UTILITY FUNCTION (from your code) ===
+  function timeToMinutes(time: any): number {
+    if (!time || typeof time !== "string") return 0
+    const parts = time.split(":")
+    return Number.parseInt(parts[0]) * 60 + Number.parseInt(parts[1])
+  }
+
+  const MIN_MINUTES = 31
+  const MIN_TOPICS = 1
+
   const processedData: any = {}
 
   rawData.forEach((row, index) => {
     try {
-    console.log(row);
-      // Extract student info (adjust column names based on your Excel structure)
-      const studentId = String(row["Student Id"] || "")
+      // Extract student info using your column structure
+      const name = String(row[Object.keys(row)[0]] || "").trim() // First column
+      const studentId = String(row[Object.keys(row)[2]] || "")
         .toLowerCase()
-        .trim()
-      const name = String(row["Student"] || "").trim()
-      const email = String(row["Email"] || "").trim()
+        .trim() // Third column
+      const email = String(row[Object.keys(row)[3]] || "").trim() // Fourth column
+
+      console.log(`Processing row ${index + 1}: Name="${name}", ID="${studentId}", Email="${email}"`)
 
       if (!studentId || !name) {
         console.warn(`Row ${index + 1}: Missing student ID or name, skipping`)
         return
       }
 
-      // Process daily data
-      const dailyLog: any[] = []
+      // Process daily data using your exact logic
       let coins = 0
+      const dailyLog: any[] = []
 
-      // Look for day columns for ALL days (including excluded ones)
-      allDays.forEach(({ day, date, isExcluded }) => {
-        const minutesCol = `Day ${day} Minutes` || `D${day} Minutes` || `Day${day}_Minutes`
-        const topicsCol = `Day ${day} Topics` || `D${day} Topics` || `Day${day}_Topics`
+      // Create pairs for time/topic columns (like your code)
+      const pairs = []
+      for (let i = 1; i <= maxDay; i++) {
+        pairs.push([`h:mm_${i}`, `added to pie_${i}`])
+      }
 
-        const minutes = Number.parseInt(row[minutesCol]) || 0
-        const topics = Number.parseInt(row[topicsCol]) || 0
+      pairs.forEach(([timeCol, topicCol], dayIndex) => {
+        const calendarDay = dayIndex + 1
+
+        // Find the corresponding date from our period days
+        const dayInfo = allDays.find((d) => d.day === calendarDay)
+        const date = dayInfo ? dayInfo.date : `${period.startDate.split("-")[0]}-01-01` // fallback
+        const isExcluded = dayInfo ? dayInfo.isExcluded : false
+
+        const minutes = timeToMinutes(row[timeCol])
+        const topics = Number.parseFloat(row[topicCol]) || 0
+
+        console.log(
+          `Day ${calendarDay}: ${timeCol}="${row[timeCol]}" (${minutes} mins), ${topicCol}="${row[topicCol]}" (${topics} topics)`,
+        )
 
         let qualified = false
         let reason = ""
@@ -176,25 +214,25 @@ function processExcelData(rawData: any[], examPeriod: string) {
           qualified = false
           reason = "📅 Exempt day - does not count toward progress"
         } else {
-          // Regular days: check if qualified (31+ minutes AND 1+ topics)
-          qualified = minutes >= 31 && topics >= 1
+          // Use your exact logic for qualification
+          const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
+          const topicMsg =
+            topics >= MIN_TOPICS ? null : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
 
+          qualified = !minMsg && !topicMsg
           if (qualified) {
             coins++
-            reason = `✅ Met requirement: ${minutes} mins + ${topics} topic${topics !== 1 ? "s" : ""}`
+            reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
           } else {
-            if (minutes < 31 && topics < 1) {
-              reason = `❌ Not enough: ${minutes} mins (needs 31 mins) and ${topics} topics (needs 1 topic)`
-            } else if (minutes < 31) {
-              reason = `❌ Not enough: ${minutes} mins (needs 31 mins)`
-            } else {
-              reason = `❌ Not enough: ${topics} topics (needs 1 topic)`
-            }
+            const parts = []
+            if (minMsg) parts.push(minMsg)
+            if (topicMsg) parts.push(topicMsg)
+            reason = `❌ Not enough: ` + parts.join(" and ")
           }
         }
 
         dailyLog.push({
-          day,
+          day: calendarDay,
           date,
           qualified,
           minutes,
@@ -269,15 +307,15 @@ export async function POST(request: NextRequest) {
       type: file.type,
     })
 
-    // Read Excel file
+    // Read Excel file with range starting from row 4 (like your code)
     const fileBuffer = await file.arrayBuffer()
     const workbook = XLSX.read(fileBuffer, { type: "array" })
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
 
-    // Convert to JSON
-    const rawData = XLSX.utils.sheet_to_json(worksheet)
-    console.log(`Found ${rawData.length} rows in Excel file`)
+    // Convert to JSON starting from row 4 (range: 3 like your code)
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { range: 3 })
+    console.log(`Found ${rawData.length} rows in Excel file (starting from row 4)`)
 
     if (rawData.length === 0) {
       return NextResponse.json({ error: "No data found in Excel file" }, { status: 400 })
