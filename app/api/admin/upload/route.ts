@@ -143,6 +143,7 @@ function processExcelData(rawData: any[], examPeriod: string) {
 
   rawData.forEach((row, index) => {
     try {
+    console.log(row);
       // Extract student info (adjust column names based on your Excel structure)
       const studentId = String(row["Student Id"] || "")
         .toLowerCase()
