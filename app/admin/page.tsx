@@ -299,6 +299,9 @@ export default function AdminPage() {
                 <li>• Set the correct start and end dates for the period</li>
                 <li>• The system will automatically calculate coins and progress for all students</li>
                 <li>• Data will be stored securely and replace the current student database</li>
+                <li>
+                  • <strong>Note:</strong> If database is not configured, data will fall back to JSON file
+                </li>
               </ul>
             </div>
           </CardContent>
