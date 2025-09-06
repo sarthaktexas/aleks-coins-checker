@@ -337,6 +337,7 @@ export async function POST(request: NextRequest) {
         CREATE TABLE IF NOT EXISTS student_data (
           id SERIAL PRIMARY KEY,
           data JSONB NOT NULL,
+          period VARCHAR(50) NOT NULL,
           uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
       `
@@ -349,8 +350,8 @@ export async function POST(request: NextRequest) {
     // Store in database
     try {
       const insertResult = await sql`
-        INSERT INTO student_data (data, uploaded_at)
-        VALUES (${JSON.stringify(studentData)}, NOW())
+        INSERT INTO student_data (data, period, uploaded_at)
+        VALUES (${JSON.stringify(studentData)}, ${examPeriod}, NOW())
         RETURNING id, uploaded_at
       `
 
