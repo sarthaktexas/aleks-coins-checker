@@ -239,7 +239,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 sm:py-12 max-w-2xl">
+      <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-2xl">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -252,7 +252,7 @@ export default function AdminPage() {
         </div>
 
         {/* Upload Card */}
-        <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+        <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm mx-2 sm:mx-0">
           <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100">
             <CardTitle className="flex items-center gap-3 text-xl text-red-900">
               <div className="p-2 bg-red-100 rounded-lg">
@@ -472,7 +472,7 @@ export default function AdminPage() {
         </Card>
 
         {/* Delete All Data Card */}
-        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm border-red-200">
+        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm border-red-200 mx-2 sm:mx-0">
           <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100">
             <CardTitle className="flex items-center gap-3 text-xl text-red-900">
               <div className="p-2 bg-red-100 rounded-lg">
@@ -568,7 +568,7 @@ export default function AdminPage() {
         </Card>
 
         {/* Instructions */}
-        <Card className="mt-6 bg-blue-50 border-blue-200">
+        <Card className="mt-6 bg-blue-50 border-blue-200 mx-2 sm:mx-0">
           <CardContent className="p-6">
             <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
               <Upload className="h-4 w-4" />
