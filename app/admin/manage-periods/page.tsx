@@ -712,6 +712,13 @@ export default function ManagePeriodsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Back to Student Portal */}
+        <div className="text-center mt-8">
+          <Button variant="outline" asChild>
+            <Link href="/">← Back to Student Portal</Link>
+          </Button>
+        </div>
       </div>
     </div>
   )

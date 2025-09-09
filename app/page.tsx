@@ -65,7 +65,6 @@ export default function StudentLookup() {
     setStudentInfo(null)
 
     try {
-      console.log("Searching for student ID:", studentId.trim())
 
       const response = await fetch("/api/student", {
         method: "POST",
@@ -75,7 +74,6 @@ export default function StudentLookup() {
         body: JSON.stringify({ studentId: studentId.trim() }),
       })
 
-      console.log("Response status:", response.status)
 
       if (!response.ok) {
         const errorData = await response.json()
@@ -85,12 +83,10 @@ export default function StudentLookup() {
       }
 
       const data = await response.json()
-      console.log("Response data:", data)
 
       if (data.success && data.student) {
         setStudentInfo(data.student)
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
-        console.log("Student data loaded successfully")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
       }

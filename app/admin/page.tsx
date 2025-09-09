@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [password, setPassword] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState("")
+  const [sectionNumber, setSectionNumber] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -31,6 +32,21 @@ export default function AdminPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Load saved password from localStorage on component mount
+  useEffect(() => {
+    const savedPassword = localStorage.getItem('adminPassword')
+    if (savedPassword) {
+      setPassword(savedPassword)
+    }
+  }, [])
+
+  // Save password to localStorage when it changes
+  useEffect(() => {
+    if (password) {
+      localStorage.setItem('adminPassword', password)
+    }
+  }, [password])
 
   // Load periods from database
   const loadPeriods = async () => {
@@ -130,6 +146,11 @@ export default function AdminPage() {
       return
     }
 
+    if (!sectionNumber.trim()) {
+      setMessage({ type: "error", text: "Please enter a section number" })
+      return
+    }
+
     setIsUploading(true)
     setMessage(null)
 
@@ -138,6 +159,7 @@ export default function AdminPage() {
       formData.append("password", password)
       formData.append("file", file)
       formData.append("examPeriod", selectedPeriod)
+      formData.append("sectionNumber", sectionNumber)
 
       const response = await fetch("/api/admin/upload", {
         method: "POST",
@@ -285,7 +307,28 @@ export default function AdminPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedPeriod && periods[selectedPeriod] && (
+              </div>
+
+              {/* Section Number */}
+              <div className="space-y-2">
+                <Label htmlFor="sectionNumber" className="text-sm font-medium text-slate-700">
+                  Section Number
+                </Label>
+                <Input
+                  id="sectionNumber"
+                  type="text"
+                  placeholder="e.g., 001, 002, A, B"
+                  value={sectionNumber}
+                  onChange={(e) => setSectionNumber(e.target.value)}
+                  disabled={isUploading}
+                  className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500"
+                />
+                <p className="text-xs text-slate-500">
+                  Enter the section number for this upload (e.g., 001, 002, A, B)
+                </p>
+              </div>
+
+              {selectedPeriod && periods[selectedPeriod] && (
                   <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="h-3 w-3" />
@@ -316,7 +359,6 @@ export default function AdminPage() {
                     </p>
                   </div>
                 )}
-              </div>
 
               {/* Drag and Drop File Upload */}
               <div className="space-y-2">

@@ -77,7 +77,6 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
       isExcluded,
     })
 
-    console.log(`Day ${dayNumber}: ${dateString} ${isExcluded ? "(EXCLUDED)" : "(working)"}`)
 
     dayNumber++
     incrementDate()
@@ -89,7 +88,7 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 function generateDemoData(): any {
   // Use the actual summer 2025 exam 2 period for demo
   const period = EXAM_PERIODS.summer2025_exam2
-  const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
+  const allDays = getWorkingDays(period.startDate, period.endDate, [...period.excludedDates])
   const workingDays = allDays.filter((day) => !day.isExcluded)
 
   const totalDays = 20 // Increase to 20 so days 15-16 have data
@@ -104,11 +103,6 @@ function generateDemoData(): any {
   const qualifiedCalendarDays = new Set([1, 2, 4, 5, 7, 8, 9, 14, 15]) // 9 qualified days
   const missedCalendarDays = new Set([3, 6, 10, 16, 17, 18, 19, 20]) // Days with data but not qualified
 
-  console.log("=== DEMO DATA GENERATION ===")
-  console.log("Excluded dates:", period.excludedDates)
-  console.log("Qualified calendar days:", Array.from(qualifiedCalendarDays))
-  console.log("Missed calendar days:", Array.from(missedCalendarDays))
-  console.log("Total days with data:", totalDays)
 
   // Process all days (including excluded ones)
   allDays.forEach(({ day, date, isExcluded }) => {
@@ -124,7 +118,6 @@ function generateDemoData(): any {
       // Give some data for excluded days (but no coins)
       minutes = 45
       topics = 2
-      console.log(`Day ${day} (${date}): EXCLUDED - no coins`)
     } else if (day <= totalDays) {
       // Regular working days with data - only these can earn coins
       if (qualifiedCalendarDays.has(day)) {
@@ -134,9 +127,6 @@ function generateDemoData(): any {
         topics = 1 + (day % 3) // Vary topics 1-3
         reason = `✅ Met requirement: ${minutes} mins + ${topics} topic${topics !== 1 ? "s" : ""}`
         demoCoins++ // Only increment coins for qualified, non-excluded days
-        console.log(
-          `Day ${day} (${date}): QUALIFIED - ${minutes} mins, ${topics} topics - COIN EARNED (total: ${demoCoins})`,
-        )
       } else {
         // Missed working day - has data but not qualified
         isQualified = false
@@ -149,14 +139,12 @@ function generateDemoData(): any {
           topics = 0
           reason = `❌ Not enough: ${topics} topics (needs 1 topic)`
         }
-        console.log(`Day ${day} (${date}): NOT QUALIFIED - ${reason}`)
       }
     } else {
       // Days beyond totalDays are treated the same as days with no data
       reason = "⏳ No data available"
       minutes = 0
       topics = 0
-      console.log(`Day ${day} (${date}): NO DATA / FUTURE DAY`)
     }
 
     demoDailyLog.push({
@@ -176,11 +164,6 @@ function generateDemoData(): any {
   const percentComplete =
     workingDayLogs.length > 0 ? Math.round((qualifiedDays / workingDayLogs.length) * 100 * 10) / 10 : 0
 
-  console.log("=== FINAL DEMO STATS ===")
-  console.log(`Total coins: ${demoCoins}`)
-  console.log(`Qualified days: ${qualifiedDays}`)
-  console.log(`Working days with data: ${workingDayLogs.length}`)
-  console.log(`Excluded days: ${allDays.filter((d) => d.isExcluded).length}`)
 
   return {
     name: "Demo Student",
@@ -202,62 +185,67 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
   try {
     // Check if database URL is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      console.log("No database URL configured - database not available")
       return { studentData: {} }
     }
-
-    console.log("Attempting to load student data from database...")
 
     // First, check if the table exists and has data
     const tableCheck = await sql`
       SELECT COUNT(*) as count FROM student_data
     `
 
-    console.log("Table check result:", tableCheck.rows[0])
-
     if (tableCheck.rows[0].count === 0) {
-      console.log("No data found in student_data table")
       return { studentData: {} }
     }
 
-    // Get the most recent data with period information
+    // Get all data from all sections and merge them
     const result = await sql`
-      SELECT data, period, uploaded_at FROM student_data 
-      ORDER BY uploaded_at DESC 
-      LIMIT 1
+      SELECT data, period, section_number, uploaded_at FROM student_data 
+      ORDER BY uploaded_at DESC
     `
 
     if (result.rows.length === 0) {
-      console.log("No rows returned from student_data table")
       return { studentData: {} }
     }
 
-    const row = result.rows[0]
-    console.log("Retrieved row with upload date:", row.uploaded_at)
+    // Merge all student data from all sections
+    let studentData: StudentData = {}
+    let latestPeriodInfo: any = null
 
-    // Parse the JSON data
-    let studentData: StudentData
+    for (const row of result.rows) {
+      
+      // Parse the JSON data for this row
+      let rowStudentData: StudentData
+      if (typeof row.data === "string") {
+        rowStudentData = JSON.parse(row.data)
+      } else {
+        rowStudentData = row.data as StudentData
+      }
 
-    if (typeof row.data === "string") {
-      studentData = JSON.parse(row.data)
-    } else {
-      // Data is already parsed as JSON
-      studentData = row.data as StudentData
+      // Merge this row's data into the main studentData object
+      // Newer data (from later uploads) will overwrite older data for the same student IDs
+      studentData = { ...studentData, ...rowStudentData }
+
+      // Keep track of the most recent period info
+      if (!latestPeriodInfo || new Date(row.uploaded_at) > new Date(latestPeriodInfo.uploaded_at)) {
+        latestPeriodInfo = {
+          period: row.period,
+          section_number: row.section_number,
+          uploaded_at: row.uploaded_at
+        }
+      }
     }
 
-    console.log("Successfully loaded student data from database")
-    console.log("Number of students:", Object.keys(studentData).length)
 
     // Get period information from the database
     let periodInfo = null
-    if (row.period) {
+    if (latestPeriodInfo && latestPeriodInfo.period) {
       try {
         // Fetch period data from the database
         const periodResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/admin/exam-periods`)
         const periodData = await periodResponse.json()
         
-        if (periodResponse.ok && periodData.periods && periodData.periods[row.period]) {
-          const period = periodData.periods[row.period]
+        if (periodResponse.ok && periodData.periods && periodData.periods[latestPeriodInfo.period]) {
+          const period = periodData.periods[latestPeriodInfo.period]
           periodInfo = {
             startDate: period.startDate,
             endDate: period.endDate,
@@ -271,7 +259,7 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
             const student = correctedStudentData[studentId]
             if (student.dailyLog && student.dailyLog.length > 0) {
               // Regenerate correct dates for the dailyLog
-              const correctedDailyLog = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
+              const correctedDailyLog = getWorkingDays(period.startDate, period.endDate, [...period.excludedDates])
               
               // Map the existing data to the corrected dates
               const logMap = new Map(student.dailyLog.map((log: any) => [log.day, log]))
@@ -307,14 +295,10 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
             }
           })
           
-          console.log("Corrected dailyLog dates to match database period dates")
           return { studentData: correctedStudentData, periodInfo }
-        } else {
-          console.log("Period not found in database, using data as-is")
         }
       } catch (error) {
         console.error("Error fetching period data from database:", error)
-        console.log("Using student data as-is")
       }
     }
 
@@ -329,7 +313,6 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
         error.message.includes('relation "student_data" does not exist') ||
         error.message.includes("POSTGRES_URL")
       ) {
-        console.log("Database not configured or table doesn't exist - returning empty data")
         return { studentData: {} }
       }
     }
@@ -343,7 +326,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { studentId } = body
 
-    console.log("Received student ID:", studentId)
 
     // Validate input
     if (!studentId || typeof studentId !== "string") {
@@ -353,7 +335,6 @@ export async function POST(request: NextRequest) {
     // For demo student, always return demo data
     const normalizedId = studentId.toLowerCase().trim()
     if (normalizedId === "abc123") {
-      console.log("Returning demo student data")
       const demoStudent = generateDemoData()
       return NextResponse.json({
         success: true,
@@ -404,14 +385,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("Available student IDs (first 10):", Object.keys(studentData).slice(0, 10))
-    console.log("Looking for ID:", normalizedId)
 
     // Look up the student (case-insensitive)
     const student = studentData[normalizedId]
 
     if (!student) {
-      console.log("Student not found for ID:", normalizedId)
       return NextResponse.json(
         {
           error: "Student ID not found. Please check your ID and try again.",
@@ -420,7 +398,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("Found student:", student.name)
 
     // Return the student's data including daily log and period info
     return NextResponse.json({

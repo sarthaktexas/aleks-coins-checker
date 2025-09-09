@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   Database, 
   Search, 
@@ -18,7 +19,9 @@ import {
   Filter,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Shield,
+  AlertTriangle
 } from "lucide-react"
 import Link from "next/link"
 
@@ -35,23 +38,74 @@ type StudentData = {
 type UploadRecord = {
   id: number
   period: string
+  section_number: string
   uploaded_at: string
   student_count: number
 }
 
 export default function ViewDataPage() {
+  const [password, setPassword] = useState("")
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authError, setAuthError] = useState("")
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPeriod, setSelectedPeriod] = useState("")
+  const [selectedSection, setSelectedSection] = useState("")
   const [uploadRecords, setUploadRecords] = useState<UploadRecord[]>([])
   const [studentData, setStudentData] = useState<Record<string, StudentData>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [sortField, setSortField] = useState<keyof StudentData | "studentId">("name")
+  const [sortField, setSortField] = useState<keyof StudentData | "studentId" | "status">("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
 
+  // Load saved password from localStorage on component mount
   useEffect(() => {
-    loadUploadRecords()
+    const savedPassword = localStorage.getItem('adminPassword')
+    if (savedPassword) {
+      setPassword(savedPassword)
+    }
   }, [])
+
+  // Save password to localStorage when it changes
+  useEffect(() => {
+    if (password) {
+      localStorage.setItem('adminPassword', password)
+    }
+  }, [password])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadUploadRecords()
+    }
+  }, [isAuthenticated])
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoadingAuth(true)
+    setAuthError("")
+
+    try {
+      const response = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        setIsAuthenticated(true)
+      } else {
+        setAuthError(result.error || "Authentication failed")
+      }
+    } catch (error) {
+      setAuthError("Network error. Please try again.")
+    } finally {
+      setIsLoadingAuth(false)
+    }
+  }
 
   const loadUploadRecords = async () => {
     setIsLoading(true)
@@ -71,11 +125,11 @@ export default function ViewDataPage() {
     }
   }
 
-  const loadStudentData = async (period: string) => {
+  const loadStudentData = async (period: string, sectionNumber: string) => {
     setIsLoading(true)
     setError("")
     try {
-      const response = await fetch(`/api/admin/student-data?period=${encodeURIComponent(period)}`)
+      const response = await fetch(`/api/admin/student-data?period=${encodeURIComponent(period)}&sectionNumber=${encodeURIComponent(sectionNumber)}`)
       const result = await response.json()
 
       if (response.ok) {
@@ -90,7 +144,7 @@ export default function ViewDataPage() {
     }
   }
 
-  const handleSort = (field: keyof StudentData | "studentId") => {
+  const handleSort = (field: keyof StudentData | "studentId" | "status") => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc")
     } else {
@@ -99,7 +153,7 @@ export default function ViewDataPage() {
     }
   }
 
-  const getSortIcon = (field: keyof StudentData | "studentId") => {
+  const getSortIcon = (field: keyof StudentData | "studentId" | "status") => {
     if (sortField !== field) {
       return <ArrowUpDown className="h-4 w-4 text-slate-400" />
     }
@@ -186,6 +240,111 @@ export default function ViewDataPage() {
     return "bg-rose-500"
   }
 
+  const handleExport = () => {
+    if (Object.keys(studentData).length === 0) {
+      setError("No data to export")
+      return
+    }
+
+    // Convert student data to CSV format
+    const headers = ["Student ID", "Name", "Email", "Coins", "Total Days", "Period Days", "Percent Complete", "Status"]
+    const csvData = [
+      headers.join(","),
+      ...Object.entries(studentData).map(([studentId, data]) => [
+        studentId,
+        `"${data.name}"`,
+        `"${data.email}"`,
+        data.coins,
+        data.totalDays,
+        data.periodDays,
+        data.percentComplete,
+        `"${data.percentComplete >= 90 ? "Excellent" : data.percentComplete >= 70 ? "Good" : "Needs Work"}"`
+      ].join(","))
+    ].join("\n")
+
+    // Create and download file
+    const blob = new Blob([csvData], { type: "text/csv" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `student-data-${selectedPeriod}-${selectedSection}-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  }
+
+  // Show authentication form if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="container mx-auto px-4 py-8 max-w-md">
+          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Shield className="h-5 w-5 text-blue-600" />
+                </div>
+                Admin Authentication
+              </CardTitle>
+              <CardDescription>
+                Enter admin password to view student data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">
+                    Admin Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoadingAuth}
+                    className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Enter admin password"
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={isLoadingAuth || !password}
+                  className="w-full h-12 bg-blue-600 hover:bg-blue-700"
+                >
+                  {isLoadingAuth ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Authenticating...
+                    </div>
+                  ) : (
+                    "Authenticate"
+                  )}
+                </Button>
+                {authError && (
+                  <Alert className="border-red-200 bg-red-50">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-800">
+                      {authError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Back to Student Portal */}
+          <div className="text-center mt-8">
+            <Button variant="outline" asChild>
+              <Link href="/">← Back to Student Portal</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -223,9 +382,14 @@ export default function ViewDataPage() {
                   <CardContent className="p-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Badge variant="outline" className="text-xs">
-                          {record.period}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className="text-xs">
+                            {record.period}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            Section {record.section_number || 'default'}
+                          </Badge>
+                        </div>
                         <span className="text-xs text-slate-500">
                           {record.student_count} students
                         </span>
@@ -237,7 +401,8 @@ export default function ViewDataPage() {
                         size="sm"
                         onClick={() => {
                           setSelectedPeriod(record.period)
-                          loadStudentData(record.period)
+                          setSelectedSection(record.section_number || 'default')
+                          loadStudentData(record.period, record.section_number || 'default')
                         }}
                         className="w-full bg-green-600 hover:bg-green-700"
                         disabled={isLoading}
@@ -254,7 +419,7 @@ export default function ViewDataPage() {
         </Card>
 
         {/* Student Data */}
-        {selectedPeriod && (
+        {(selectedPeriod && selectedSection) && (
           <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -263,14 +428,14 @@ export default function ViewDataPage() {
                     <div className="p-2 bg-blue-100 rounded-lg">
                       <Users className="h-5 w-5 text-blue-600" />
                     </div>
-                    Student Data - {selectedPeriod}
+                    Student Data - {selectedPeriod} - Section {selectedSection}
                   </CardTitle>
                   <CardDescription>
                     {Object.keys(studentData).length} students found
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline">
+                  <Button size="sm" variant="outline" onClick={handleExport}>
                     <Download className="h-4 w-4 mr-2" />
                     Export
                   </Button>
@@ -432,6 +597,13 @@ export default function ViewDataPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Back to Student Portal */}
+        <div className="text-center mt-8">
+          <Button variant="outline" asChild>
+            <Link href="/">← Back to Student Portal</Link>
+          </Button>
+        </div>
       </div>
     </div>
   )

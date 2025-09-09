@@ -60,7 +60,6 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 }
 
 async function processExcelData(rawData: any[], examPeriod: string) {
-  console.log(`Processing Excel data for exam period: ${examPeriod}`)
 
   // Get period configuration from database
   let period
@@ -84,9 +83,6 @@ async function processExcelData(rawData: any[], examPeriod: string) {
     throw new Error(`Invalid exam period: ${examPeriod}. Available: ${Object.keys(EXAM_PERIODS).join(", ")}`)
   }
 
-  console.log(`Period: ${period.name}`)
-  console.log(`Date range: ${period.startDate} to ${period.endDate}`)
-  console.log(`Excluded dates: ${period.excludedDates.join(", ")}`)
 
   // Detect the maximum day number from Excel columns
   let maxDayFromExcel = 0
@@ -100,7 +96,6 @@ async function processExcelData(rawData: any[], examPeriod: string) {
     })
   })
 
-  console.log(`Maximum day detected from Excel: ${maxDayFromExcel}`)
 
   // Get all days for the period (including excluded ones)
   const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
@@ -108,8 +103,6 @@ async function processExcelData(rawData: any[], examPeriod: string) {
   const totalPeriodDays = allDays.length
   const totalWorkingDays = workingDays.length
 
-  console.log(`Total days in period: ${totalPeriodDays}`)
-  console.log(`Total working days (excluding exemptions): ${totalWorkingDays}`)
 
       // === UTILITY FUNCTION (from your code) ===
       function timeToMinutes(time: any): number {
@@ -132,7 +125,6 @@ async function processExcelData(rawData: any[], examPeriod: string) {
             .trim() // Third column
           const email = String(row[Object.keys(row)[3]] || "").trim() // Fourth column
 
-          console.log(`Processing row ${index + 1}: Name="${name}", ID="${studentId}", Email="${email}"`)
 
           if (!studentId || !name) {
             console.warn(`Row ${index + 1}: Missing student ID or name, skipping`)
@@ -216,53 +208,42 @@ async function processExcelData(rawData: any[], examPeriod: string) {
         dailyLog, // Include all days (working + excluded)
       }
 
-      console.log(
-        `Processed: ${name} (${studentId}) - ${coins} coins, ${percentComplete}% complete (${qualifiedWorkingDays}/${completedWorkingDays} working days)`,
-      )
     } catch (error) {
       console.error(`Error processing row ${index + 1}:`, error)
     }
   })
 
-  console.log(`\nProcessed ${Object.keys(processedData).length} students successfully`)
 
   return processedData
 }
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("Admin upload request received")
 
     // Check admin password
     const formData = await request.formData()
     const password = formData.get("password") as string
     const file = formData.get("file") as File
     const examPeriod = formData.get("examPeriod") as string
+    const sectionNumber = formData.get("sectionNumber") as string
 
-    console.log("Password provided:", !!password)
-    console.log("File provided:", !!file)
-    console.log("Exam period:", examPeriod)
 
     if (!password || password !== process.env.ADMIN_PASSWORD) {
-      console.log("Invalid password provided")
       return NextResponse.json({ error: "Invalid password" }, { status: 401 })
     }
 
     if (!file) {
-      console.log("No file provided")
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
     }
 
     if (!examPeriod) {
-      console.log("No exam period provided")
       return NextResponse.json({ error: "No exam period selected" }, { status: 400 })
     }
 
-    console.log("File details:", {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })
+    if (!sectionNumber) {
+      return NextResponse.json({ error: "Section number is required" }, { status: 400 })
+    }
+
 
     // Read Excel file with range starting from row 4 (like your code)
     const fileBuffer = await file.arrayBuffer()
@@ -272,7 +253,6 @@ export async function POST(request: NextRequest) {
 
     // Convert to JSON starting from row 4 (range: 3 like your code)
     const rawData = XLSX.utils.sheet_to_json(worksheet, { range: 3 })
-    console.log(`Found ${rawData.length} rows in Excel file (starting from row 4)`)
 
     if (rawData.length === 0) {
       return NextResponse.json({ error: "No data found in Excel file" }, { status: 400 })
@@ -288,12 +268,12 @@ export async function POST(request: NextRequest) {
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      console.log("No database URL configured - cannot store data")
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    // Ensure the table exists
+    // Ensure the table exists and has the section_number column
     try {
+      // First, create the table if it doesn't exist (with old schema)
       await sql`
         CREATE TABLE IF NOT EXISTS student_data (
           id SERIAL PRIMARY KEY,
@@ -302,27 +282,73 @@ export async function POST(request: NextRequest) {
           uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
       `
-      console.log("Table created/verified successfully")
+      
+      // Check if section_number column exists
+      const columnCheck = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'student_data' AND column_name = 'section_number'
+      `
+      
+      if (columnCheck.rows.length === 0) {
+        // Add the section_number column
+        await sql`
+          ALTER TABLE student_data 
+          ADD COLUMN section_number VARCHAR(20) DEFAULT 'default'
+        `
+        
+        // Update existing records to have 'default' as section_number
+        await sql`
+          UPDATE student_data 
+          SET section_number = 'default' 
+          WHERE section_number IS NULL
+        `
+        
+        // Make the column NOT NULL
+        await sql`
+          ALTER TABLE student_data 
+          ALTER COLUMN section_number SET NOT NULL
+        `
+      }
     } catch (tableError) {
-      console.error("Table creation error:", tableError)
+      console.error("Table creation/update error:", tableError)
       return NextResponse.json({ error: "Database table setup failed" }, { status: 500 })
     }
 
-    // Store in database
+    // Store in database with upsert logic
     try {
+      // First, check if we have existing data for this period and section
+      const existingData = await sql`
+        SELECT data FROM student_data 
+        WHERE period = ${examPeriod} AND section_number = ${sectionNumber}
+        ORDER BY uploaded_at DESC 
+        LIMIT 1
+      `
+
+      let finalStudentData = studentData
+
+      // If we have existing data, merge it with new data (new data overwrites existing)
+      if (existingData.rows.length > 0) {
+        const existing = typeof existingData.rows[0].data === "string" 
+          ? JSON.parse(existingData.rows[0].data) 
+          : existingData.rows[0].data
+
+        // Merge: new data overwrites existing data for same student IDs
+        finalStudentData = { ...existing, ...studentData }
+      }
+
+      // Insert new record with merged data
       const insertResult = await sql`
-        INSERT INTO student_data (data, period, uploaded_at)
-        VALUES (${JSON.stringify(studentData)}, ${examPeriod}, NOW())
+        INSERT INTO student_data (data, period, section_number, uploaded_at)
+        VALUES (${JSON.stringify(finalStudentData)}, ${examPeriod}, ${sectionNumber}, NOW())
         RETURNING id, uploaded_at
       `
 
-      console.log("Data inserted successfully:", insertResult.rows[0])
     } catch (insertError) {
       console.error("Insert error:", insertError)
       return NextResponse.json({ error: "Failed to save data to database" }, { status: 500 })
     }
 
-    console.log("Student data processed and uploaded successfully to database")
 
     return NextResponse.json({
       success: true,

@@ -5,6 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get("period")
+    const sectionNumber = searchParams.get("sectionNumber")
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -15,28 +16,99 @@ export async function GET(request: NextRequest) {
       }, { status: 503 })
     }
 
-    // Get upload records
-    const uploadRecords = await sql`
-      SELECT 
-        id,
-        period,
-        uploaded_at,
-        data
-      FROM student_data 
-      ORDER BY uploaded_at DESC
-    `
+    // Get upload records - handle both old and new schema
+    let uploadRecords
+    try {
+      // First, check if the section_number column exists
+      const columnCheck = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'student_data' AND column_name = 'section_number'
+      `
+      
+      if (columnCheck.rows.length > 0) {
+        // Column exists, use it
+        uploadRecords = await sql`
+          SELECT 
+            id,
+            period,
+            COALESCE(section_number, 'default') as section_number,
+            uploaded_at,
+            data
+          FROM student_data 
+          ORDER BY uploaded_at DESC
+        `
+      } else {
+        // Column doesn't exist, use fallback
+        uploadRecords = await sql`
+          SELECT 
+            id,
+            period,
+            'default' as section_number,
+            uploaded_at,
+            data
+          FROM student_data 
+          ORDER BY uploaded_at DESC
+        `
+      }
+    } catch (error) {
+      console.error("Error checking column or querying data:", error)
+      // Final fallback - try the old schema query
+      uploadRecords = await sql`
+        SELECT 
+          id,
+          period,
+          'default' as section_number,
+          uploaded_at,
+          data
+        FROM student_data 
+        ORDER BY uploaded_at DESC
+      `
+    }
 
     let studentData = {}
 
-    // If a specific period is requested, get that data
-    if (period) {
-      const result = await sql`
-        SELECT data, uploaded_at 
-        FROM student_data 
-        WHERE period = ${period}
-        ORDER BY uploaded_at DESC 
-        LIMIT 1
-      `
+    // If a specific period and section are requested, get that data
+    if (period && sectionNumber) {
+      let result
+      try {
+        // Check if section_number column exists first
+        const columnCheck = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'student_data' AND column_name = 'section_number'
+        `
+        
+        if (columnCheck.rows.length > 0) {
+          // Column exists, use it
+          result = await sql`
+            SELECT data, uploaded_at 
+            FROM student_data 
+            WHERE period = ${period} AND COALESCE(section_number, 'default') = ${sectionNumber}
+            ORDER BY uploaded_at DESC 
+            LIMIT 1
+          `
+        } else {
+          // Column doesn't exist, use fallback
+          result = await sql`
+            SELECT data, uploaded_at 
+            FROM student_data 
+            WHERE period = ${period}
+            ORDER BY uploaded_at DESC 
+            LIMIT 1
+          `
+        }
+      } catch (error) {
+        console.error("Error querying student data:", error)
+        // Final fallback
+        result = await sql`
+          SELECT data, uploaded_at 
+          FROM student_data 
+          WHERE period = ${period}
+          ORDER BY uploaded_at DESC 
+          LIMIT 1
+        `
+      }
 
       if (result.rows.length > 0) {
         const row = result.rows[0]
@@ -55,6 +127,7 @@ export async function GET(request: NextRequest) {
         return {
           id: row.id,
           period: row.period,
+          section_number: row.section_number,
           uploaded_at: row.uploaded_at,
           student_count: Object.keys(data).length
         }
@@ -109,7 +182,6 @@ export async function DELETE(request: NextRequest) {
       RETURNING id, period, uploaded_at
     `
 
-    console.log(`Deleted ${result.rows.length} student data records`)
     
     return NextResponse.json({ 
       success: true, 

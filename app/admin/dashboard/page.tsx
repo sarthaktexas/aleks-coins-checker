@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -31,6 +31,21 @@ export default function AdminDashboard() {
   })
   const [statsLoading, setStatsLoading] = useState(false)
 
+  // Load saved password from localStorage on component mount
+  useEffect(() => {
+    const savedPassword = localStorage.getItem('adminPassword')
+    if (savedPassword) {
+      setPassword(savedPassword)
+    }
+  }, [])
+
+  // Save password to localStorage when it changes
+  useEffect(() => {
+    if (password) {
+      localStorage.setItem('adminPassword', password)
+    }
+  }, [password])
+
   const loadStats = async () => {
     setStatsLoading(true)
     try {
@@ -46,10 +61,14 @@ export default function AdminDashboard() {
           totalStudents += record.student_count || 0
         })
 
+        // Count unique periods
+        const uniquePeriods = new Set(uploadRecords.map((record: any) => record.period))
+        const activePeriods = uniquePeriods.size
+
         setStats({
           totalStudents,
           dataUploads: uploadRecords.length,
-          activePeriods: uploadRecords.length // For now, each upload is an active period
+          activePeriods: activePeriods
         })
       }
     } catch (error) {
