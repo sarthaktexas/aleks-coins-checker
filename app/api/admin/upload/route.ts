@@ -1,107 +1,50 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import * as XLSX from "xlsx"
-
-// Get current year
-const CURRENT_YEAR = new Date().getFullYear()
-
-// Define the same periods as in the admin page
-const EXAM_PERIODS = {
-  spring2025: {
-    name: `Spring ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-01-15`,
-    endDate: `${CURRENT_YEAR}-02-10`,
-    excludedDates: [`${CURRENT_YEAR}-01-20`, `${CURRENT_YEAR}-02-03`],
-  },
-  spring2025_exam2: {
-    name: `Spring ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-02-11`,
-    endDate: `${CURRENT_YEAR}-03-10`,
-    excludedDates: [`${CURRENT_YEAR}-02-17`, `${CURRENT_YEAR}-03-03`],
-  },
-  spring2025_exam3: {
-    name: `Spring ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-03-11`,
-    endDate: `${CURRENT_YEAR}-04-07`,
-    excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-03-31`],
-  },
-  spring2025_final: {
-    name: `Spring ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-04-08`,
-    endDate: `${CURRENT_YEAR}-04-28`,
-    excludedDates: [`${CURRENT_YEAR}-04-21`],
-  },
-  summer2025: {
-    name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-05-31`,
-    endDate: `${CURRENT_YEAR}-06-23`,
-    excludedDates: [`${CURRENT_YEAR}-06-07`, `${CURRENT_YEAR}-06-08`],
-  },
-  summer2025_exam2: {
-    name: `Summer ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-06-24`,
-    endDate: `${CURRENT_YEAR}-07-17`,
-    excludedDates: [`${CURRENT_YEAR}-07-04`, `${CURRENT_YEAR}-07-05`, `${CURRENT_YEAR}-07-06`],
-  },
-  summer2025_exam3: {
-    name: `Summer ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-07-18`,
-    endDate: `${CURRENT_YEAR}-08-03`,
-    excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`],
-  },
-  summer2025_final: {
-    name: `Summer ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-08-04`,
-    endDate: `${CURRENT_YEAR}-08-10`,
-    excludedDates: [],
-  },
-  fall2025: {
-    name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-08-26`,
-    endDate: `${CURRENT_YEAR}-09-20`,
-    excludedDates: [`${CURRENT_YEAR}-09-02`, `${CURRENT_YEAR}-09-16`],
-  },
-  fall2025_exam2: {
-    name: `Fall ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-09-21`,
-    endDate: `${CURRENT_YEAR}-10-18`,
-    excludedDates: [`${CURRENT_YEAR}-10-14`],
-  },
-  fall2025_exam3: {
-    name: `Fall ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-10-19`,
-    endDate: `${CURRENT_YEAR}-11-15`,
-    excludedDates: [`${CURRENT_YEAR}-11-11`],
-  },
-  fall2025_final: {
-    name: `Fall ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-11-16`,
-    endDate: `${CURRENT_YEAR}-12-13`,
-    excludedDates: [
-      `${CURRENT_YEAR}-11-25`,
-      `${CURRENT_YEAR}-11-26`,
-      `${CURRENT_YEAR}-11-27`,
-      `${CURRENT_YEAR}-11-28`,
-      `${CURRENT_YEAR}-11-29`,
-    ],
-  },
-}
+import { EXAM_PERIODS } from "@/lib/exam-periods"
 
 function getWorkingDays(startDate: string, endDate: string, excludedDates: string[] = []) {
-  const start = new Date(startDate)
-  const end = new Date(endDate)
+  // Parse dates manually to avoid timezone issues
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number)
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number)
+  
   const excluded = new Set(excludedDates)
   const workingDays = []
 
-  const currentDate = new Date(start)
+  // Create current date object manually
+  let currentYear = startYear
+  let currentMonth = startMonth
+  let currentDay = startDay
   let dayNumber = 1
 
-  while (currentDate <= end) {
-    // Use local date string to avoid timezone issues
-    const year = currentDate.getFullYear()
-    const month = String(currentDate.getMonth() + 1).padStart(2, "0")
-    const day = String(currentDate.getDate()).padStart(2, "0")
-    const dateString = `${year}-${month}-${day}`
+  // Helper function to compare dates
+  const isDateBeforeOrEqual = (year1: number, month1: number, day1: number, year2: number, month2: number, day2: number) => {
+    if (year1 < year2) return true
+    if (year1 > year2) return false
+    if (month1 < month2) return true
+    if (month1 > month2) return false
+    return day1 <= day2
+  }
+
+  // Helper function to increment date
+  const incrementDate = () => {
+    const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
+    if (currentDay < daysInMonth) {
+      currentDay++
+    } else {
+      currentDay = 1
+      if (currentMonth < 12) {
+        currentMonth++
+      } else {
+        currentMonth = 1
+        currentYear++
+      }
+    }
+  }
+
+  while (isDateBeforeOrEqual(currentYear, currentMonth, currentDay, endYear, endMonth, endDay)) {
+    // Create date string manually
+    const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
 
     // Add all days but mark excluded ones
     workingDays.push({
@@ -110,18 +53,33 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
       isExcluded: excluded.has(dateString),
     })
     dayNumber++
-
-    currentDate.setDate(currentDate.getDate() + 1)
+    incrementDate()
   }
 
   return workingDays
 }
 
-function processExcelData(rawData: any[], examPeriod: string) {
+async function processExcelData(rawData: any[], examPeriod: string) {
   console.log(`Processing Excel data for exam period: ${examPeriod}`)
 
-  // Get period configuration
-  const period = EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS]
+  // Get period configuration from database
+  let period
+  try {
+    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/admin/exam-periods`)
+    const data = await response.json()
+    
+    if (response.ok && data.periods && data.periods[examPeriod]) {
+      period = data.periods[examPeriod]
+    } else {
+      // Fallback to hardcoded periods if database fails
+      period = EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS]
+    }
+  } catch (error) {
+    console.error("Error fetching period from database, using fallback:", error)
+    // Fallback to hardcoded periods if database fails
+    period = EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS]
+  }
+
   if (!period) {
     throw new Error(`Invalid exam period: ${examPeriod}. Available: ${Object.keys(EXAM_PERIODS).join(", ")}`)
   }
@@ -129,6 +87,20 @@ function processExcelData(rawData: any[], examPeriod: string) {
   console.log(`Period: ${period.name}`)
   console.log(`Date range: ${period.startDate} to ${period.endDate}`)
   console.log(`Excluded dates: ${period.excludedDates.join(", ")}`)
+
+  // Detect the maximum day number from Excel columns
+  let maxDayFromExcel = 0
+  rawData.forEach((row) => {
+    Object.keys(row).forEach((key) => {
+      const match = key.match(/^h:mm_(\d+)$/)
+      if (match) {
+        const dayNum = Number.parseInt(match[1])
+        if (dayNum > maxDayFromExcel) maxDayFromExcel = dayNum
+      }
+    })
+  })
+
+  console.log(`Maximum day detected from Excel: ${maxDayFromExcel}`)
 
   // Get all days for the period (including excluded ones)
   const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
@@ -139,104 +111,93 @@ function processExcelData(rawData: any[], examPeriod: string) {
   console.log(`Total days in period: ${totalPeriodDays}`)
   console.log(`Total working days (excluding exemptions): ${totalWorkingDays}`)
 
-  // === DETECT MAX DAY INDEX FROM ALL ROWS (like your code) ===
-  let maxDay = 0
-  rawData.forEach((row) => {
-    Object.keys(row).forEach((key) => {
-      const match = key.match(/^h:mm_(\d+)$/)
-      if (match) {
-        const dayNum = Number.parseInt(match[1])
-        if (dayNum > maxDay) maxDay = dayNum
-      }
-    })
-  })
-
-  console.log(`Detected max day from Excel: ${maxDay}`)
-
-  // === UTILITY FUNCTION (from your code) ===
-  function timeToMinutes(time: any): number {
-    if (!time || typeof time !== "string") return 0
-    const parts = time.split(":")
-    return Number.parseInt(parts[0]) * 60 + Number.parseInt(parts[1])
-  }
-
-  const MIN_MINUTES = 31
-  const MIN_TOPICS = 1
-
-  const processedData: any = {}
-
-  rawData.forEach((row, index) => {
-    try {
-      // Extract student info using your column structure
-      const name = String(row[Object.keys(row)[0]] || "").trim() // First column
-      const studentId = String(row[Object.keys(row)[2]] || "")
-        .toLowerCase()
-        .trim() // Third column
-      const email = String(row[Object.keys(row)[3]] || "").trim() // Fourth column
-
-      console.log(`Processing row ${index + 1}: Name="${name}", ID="${studentId}", Email="${email}"`)
-
-      if (!studentId || !name) {
-        console.warn(`Row ${index + 1}: Missing student ID or name, skipping`)
-        return
+      // === UTILITY FUNCTION (from your code) ===
+      function timeToMinutes(time: any): number {
+        if (!time || typeof time !== "string") return 0
+        const parts = time.split(":")
+        return Number.parseInt(parts[0]) * 60 + Number.parseInt(parts[1])
       }
 
-      // Process daily data using your exact logic
-      let coins = 0
-      const dailyLog: any[] = []
+      const MIN_MINUTES = 31
+      const MIN_TOPICS = 1
 
-      // Create pairs for time/topic columns (like your code)
-      const pairs = []
-      for (let i = 1; i <= maxDay; i++) {
-        pairs.push([`h:mm_${i}`, `added to pie_${i}`])
-      }
+      const processedData: any = {}
 
-      pairs.forEach(([timeCol, topicCol], dayIndex) => {
-        const calendarDay = dayIndex + 1
+      rawData.forEach((row, index) => {
+        try {
+          // Extract student info using your column structure
+          const name = String(row[Object.keys(row)[0]] || "").trim() // First column
+          const studentId = String(row[Object.keys(row)[2]] || "")
+            .toLowerCase()
+            .trim() // Third column
+          const email = String(row[Object.keys(row)[3]] || "").trim() // Fourth column
 
-        // Find the corresponding date from our period days
-        const dayInfo = allDays.find((d) => d.day === calendarDay)
-        const date = dayInfo ? dayInfo.date : `${period.startDate.split("-")[0]}-01-01` // fallback
-        const isExcluded = dayInfo ? dayInfo.isExcluded : false
+          console.log(`Processing row ${index + 1}: Name="${name}", ID="${studentId}", Email="${email}"`)
 
-        const minutes = timeToMinutes(row[timeCol])
-        const topics = Number.parseFloat(row[topicCol]) || 0
-
-        let qualified = false
-        let reason = ""
-
-        if (isExcluded) {
-          // Excluded days don't count toward qualification, even if they have data
-          qualified = false
-          reason = "📅 Exempt day - does not count toward progress"
-        } else {
-          // Use your exact logic for qualification
-          const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
-          const topicMsg =
-            topics >= MIN_TOPICS ? null : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
-
-          qualified = !minMsg && !topicMsg
-          if (qualified) {
-            coins++
-            reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
-          } else {
-            const parts = []
-            if (minMsg) parts.push(minMsg)
-            if (topicMsg) parts.push(topicMsg)
-            reason = `❌ Not enough: ` + parts.join(" and ")
+          if (!studentId || !name) {
+            console.warn(`Row ${index + 1}: Missing student ID or name, skipping`)
+            return
           }
-        }
 
-        dailyLog.push({
-          day: calendarDay,
-          date,
-          qualified,
-          minutes,
-          topics,
-          reason,
-          isExcluded,
-        })
-      })
+          // Process daily data for ALL days in the period
+          let coins = 0
+          const dailyLog: any[] = []
+
+          // Process days 1 through maxDayFromExcel (the actual days with data in Excel)
+          for (let dayNum = 1; dayNum <= maxDayFromExcel; dayNum++) {
+            // Find the corresponding day info from allDays
+            const dayInfo = allDays.find(d => d.day === dayNum)
+            if (!dayInfo) {
+              console.warn(`Day ${dayNum} not found in period days, skipping`)
+              continue
+            }
+
+            const calendarDay = dayInfo.day
+            const date = dayInfo.date
+            const isExcluded = dayInfo.isExcluded
+
+            // Try to get data from Excel columns if they exist
+            const timeCol = `h:mm_${calendarDay}`
+            const topicCol = `added to pie_${calendarDay}`
+            
+            const minutes = timeToMinutes(row[timeCol])
+            const topics = Number.parseFloat(row[topicCol]) || 0
+
+            let qualified = false
+            let reason = ""
+
+            if (isExcluded) {
+              // Excluded days don't count toward qualification, even if they have data
+              qualified = false
+              reason = "📅 Exempt day - does not count toward progress"
+            } else {
+              // Use your exact logic for qualification
+              const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
+              const topicMsg =
+                topics >= MIN_TOPICS ? null : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
+
+              qualified = !minMsg && !topicMsg
+              if (qualified) {
+                coins++
+                reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
+              } else {
+                const parts = []
+                if (minMsg) parts.push(minMsg)
+                if (topicMsg) parts.push(topicMsg)
+                reason = `❌ Not enough: ` + parts.join(" and ")
+              }
+            }
+
+            dailyLog.push({
+              day: calendarDay,
+              date,
+              qualified,
+              minutes,
+              topics,
+              reason,
+              isExcluded,
+            })
+          }
 
       // Calculate completion percentage based only on working days
       const workingDayLogs = dailyLog.filter((d) => !d.isExcluded)
@@ -249,7 +210,7 @@ function processExcelData(rawData: any[], examPeriod: string) {
         name,
         email,
         coins,
-        totalDays: completedWorkingDays, // Only count working days
+        totalDays: maxDayFromExcel, // Use the actual number of days with data from Excel
         periodDays: totalWorkingDays, // Only count working days for period
         percentComplete,
         dailyLog, // Include all days (working + excluded)
@@ -318,7 +279,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Process the Excel data
-    const studentData = processExcelData(rawData, examPeriod)
+    const studentData = await processExcelData(rawData, examPeriod)
     const studentCount = Object.keys(studentData).length
 
     if (studentCount === 0) {

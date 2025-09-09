@@ -2,108 +2,71 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet } from "lucide-react"
+import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2 } from "lucide-react"
+import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 
-// Get current year
-const CURRENT_YEAR = new Date().getFullYear()
-
-// Define the exam periods with test 3 added
-const EXAM_PERIODS = {
-  spring2025: {
-    name: `Spring ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-01-15`,
-    endDate: `${CURRENT_YEAR}-02-10`,
-    excludedDates: [`${CURRENT_YEAR}-01-20`, `${CURRENT_YEAR}-02-03`],
-  },
-  spring2025_exam2: {
-    name: `Spring ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-02-11`,
-    endDate: `${CURRENT_YEAR}-03-10`,
-    excludedDates: [`${CURRENT_YEAR}-02-17`, `${CURRENT_YEAR}-03-03`],
-  },
-  spring2025_exam3: {
-    name: `Spring ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-03-11`,
-    endDate: `${CURRENT_YEAR}-04-07`,
-    excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-03-31`],
-  },
-  spring2025_final: {
-    name: `Spring ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-04-08`,
-    endDate: `${CURRENT_YEAR}-04-28`,
-    excludedDates: [`${CURRENT_YEAR}-04-21`],
-  },
-  summer2025: {
-    name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-05-31`,
-    endDate: `${CURRENT_YEAR}-06-23`,
-    excludedDates: [`${CURRENT_YEAR}-06-07`, `${CURRENT_YEAR}-06-08`],
-  },
-  summer2025_exam2: {
-    name: `Summer ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-06-24`,
-    endDate: `${CURRENT_YEAR}-07-17`,
-    excludedDates: [`${CURRENT_YEAR}-07-04`, `${CURRENT_YEAR}-07-05`, `${CURRENT_YEAR}-07-06`],
-  },
-  summer2025_exam3: {
-    name: `Summer ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-07-18`,
-    endDate: `${CURRENT_YEAR}-08-03`,
-    excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`],
-  },
-  summer2025_final: {
-    name: `Summer ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-08-04`,
-    endDate: `${CURRENT_YEAR}-08-10`,
-    excludedDates: [],
-  },
-  fall2025: {
-    name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
-    startDate: `${CURRENT_YEAR}-08-26`,
-    endDate: `${CURRENT_YEAR}-09-20`,
-    excludedDates: [`${CURRENT_YEAR}-09-02`, `${CURRENT_YEAR}-09-16`],
-  },
-  fall2025_exam2: {
-    name: `Fall ${CURRENT_YEAR} - Exam 2 Period`,
-    startDate: `${CURRENT_YEAR}-09-21`,
-    endDate: `${CURRENT_YEAR}-10-18`,
-    excludedDates: [`${CURRENT_YEAR}-10-14`],
-  },
-  fall2025_exam3: {
-    name: `Fall ${CURRENT_YEAR} - Exam 3 Period`,
-    startDate: `${CURRENT_YEAR}-10-19`,
-    endDate: `${CURRENT_YEAR}-11-15`,
-    excludedDates: [`${CURRENT_YEAR}-11-11`],
-  },
-  fall2025_final: {
-    name: `Fall ${CURRENT_YEAR} - Final Exam Period`,
-    startDate: `${CURRENT_YEAR}-11-16`,
-    endDate: `${CURRENT_YEAR}-12-13`,
-    excludedDates: [
-      `${CURRENT_YEAR}-11-25`,
-      `${CURRENT_YEAR}-11-26`,
-      `${CURRENT_YEAR}-11-27`,
-      `${CURRENT_YEAR}-11-28`,
-      `${CURRENT_YEAR}-11-29`,
-    ],
-  },
+type ExamPeriodData = {
+  name: string
+  startDate: string
+  endDate: string
+  excludedDates: readonly string[]
 }
 
 export default function AdminPage() {
   const [password, setPassword] = useState("")
   const [file, setFile] = useState<File | null>(null)
-  const [selectedPeriod, setSelectedPeriod] = useState("summer2025_exam2")
+  const [selectedPeriod, setSelectedPeriod] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [periods, setPeriods] = useState<Record<string, ExamPeriodData>>({})
+  const [isLoadingPeriods, setIsLoadingPeriods] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Load periods from database
+  const loadPeriods = async () => {
+    try {
+      const response = await fetch('/api/admin/exam-periods')
+      const data = await response.json()
+      
+      if (response.ok) {
+        setPeriods(data.periods || {})
+        // Set default period to first available if none selected
+        if (!selectedPeriod && Object.keys(data.periods || {}).length > 0) {
+          setSelectedPeriod(Object.keys(data.periods)[0])
+        }
+      } else {
+        console.error("Failed to load periods:", data.error)
+        // Fallback to hardcoded periods if database fails
+        setPeriods(EXAM_PERIODS)
+        if (!selectedPeriod) {
+          setSelectedPeriod("summer2025_exam2")
+        }
+      }
+    } catch (error) {
+      console.error("Error loading periods:", error)
+      // Fallback to hardcoded periods if database fails
+      setPeriods(EXAM_PERIODS)
+      if (!selectedPeriod) {
+        setSelectedPeriod("summer2025_exam2")
+      }
+    } finally {
+      setIsLoadingPeriods(false)
+    }
+  }
+
+  useEffect(() => {
+    loadPeriods()
+  }, [])
 
   const handleFileChange = (selectedFile: File) => {
     if (selectedFile && (selectedFile.name.endsWith(".xlsx") || selectedFile.name.endsWith(".xls"))) {
@@ -202,9 +165,53 @@ export default function AdminPage() {
     }
   }
 
+  const handleDeleteAllData = async () => {
+    if (!password) {
+      setMessage({ type: "error", text: "Please enter the admin password" })
+      return
+    }
+
+    setIsDeleting(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/admin/student-data", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage({
+          type: "success",
+          text: result.message || "All student data deleted successfully",
+        })
+      } else {
+        setMessage({ type: "error", text: result.error || "Delete failed" })
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Network error. Please try again." })
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   const formatDateRange = (startDate: string, endDate: string) => {
-    const start = new Date(startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    const end = new Date(endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    // Format dates without timezone conversion
+    const formatDate = (dateStr: string) => {
+      const [year, month, day] = dateStr.split('-').map(Number)
+      const date = new Date(year, month - 1, day)
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      return `${monthNames[date.getMonth()]} ${date.getDate()}`
+    }
+    
+    const start = formatDate(startDate)
+    const end = formatDate(endDate)
     return `${start} - ${end}`
   }
 
@@ -260,12 +267,12 @@ export default function AdminPage() {
                 <Label htmlFor="period" className="text-sm font-medium text-slate-700">
                   Exam Period ({CURRENT_YEAR})
                 </Label>
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={isUploading}>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={isUploading || isLoadingPeriods}>
                   <SelectTrigger className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500">
-                    <SelectValue placeholder="Select exam period" />
+                    <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(EXAM_PERIODS).map(([key, period]) => (
+                    {Object.entries(periods).map(([key, period]) => (
                       <SelectItem key={key} value={key}>
                         <div className="flex flex-col">
                           <span className="font-medium">{period.name}</span>
@@ -278,29 +285,32 @@ export default function AdminPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedPeriod && (
+                {selectedPeriod && periods[selectedPeriod] && (
                   <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="h-3 w-3" />
                       <span className="font-medium">Selected Period Details:</span>
                     </div>
                     <p>
-                      <strong>Period:</strong> {EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].name}
+                      <strong>Period:</strong> {periods[selectedPeriod].name}
                     </p>
                     <p>
                       <strong>Date Range:</strong>{" "}
                       {formatDateRange(
-                        EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].startDate,
-                        EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].endDate,
+                        periods[selectedPeriod].startDate,
+                        periods[selectedPeriod].endDate,
                       )}
                     </p>
                     <p>
                       <strong>Exempt Dates:</strong>{" "}
-                      {EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].excludedDates.length > 0
-                        ? EXAM_PERIODS[selectedPeriod as keyof typeof EXAM_PERIODS].excludedDates
-                            .map((date) =>
-                              new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-                            )
+                      {periods[selectedPeriod].excludedDates.length > 0
+                        ? periods[selectedPeriod].excludedDates
+                            .map((date) => {
+                              const [year, month, day] = date.split('-').map(Number)
+                              const dateObj = new Date(year, month - 1, day)
+                              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                              return `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}`
+                            })
                             .join(", ")
                         : "None"}
                     </p>
@@ -415,6 +425,102 @@ export default function AdminPage() {
                   </AlertDescription>
                 </div>
               </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Delete All Data Card */}
+        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm border-red-200">
+          <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100">
+            <CardTitle className="flex items-center gap-3 text-xl text-red-900">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              Danger Zone
+            </CardTitle>
+            <CardDescription>
+              Permanently delete all uploaded student data from the database. This action cannot be undone.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="p-6">
+            {!showDeleteConfirm ? (
+              <div className="space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-red-900 mb-1">Warning</h4>
+                      <p className="text-sm text-red-800">
+                        This will permanently delete ALL student data from the database, including:
+                      </p>
+                      <ul className="text-sm text-red-800 mt-2 ml-4 list-disc">
+                        <li>All uploaded Excel data</li>
+                        <li>Student progress records</li>
+                        <li>Coin calculations</li>
+                        <li>Daily log entries</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isDeleting || isUploading}
+                  className="w-full h-12"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete All Student Data
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-6 w-6 text-red-700 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-red-900 mb-2">Final Confirmation</h4>
+                      <p className="text-red-800 font-medium">
+                        Are you absolutely sure you want to delete ALL student data? This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDeleteAllData}
+                    disabled={isDeleting || isUploading || !password}
+                    className="flex-1 h-12"
+                  >
+                    {isDeleting ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Deleting...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="h-4 w-4" />
+                        Yes, Delete Everything
+                      </div>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={isDeleting}
+                    className="flex-1 h-12 border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

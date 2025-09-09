@@ -23,8 +23,72 @@ export function CalendarView({ dailyLog, totalDays, periodDays }: CalendarViewPr
   // Create a map for quick lookup
   const logMap = new Map(dailyLog.map((log) => [log.day, log]))
 
-  // Generate all days for the period (we'll show all days from the dailyLog)
-  const allDays = dailyLog.length > 0 ? dailyLog : []
+  // Function to generate all days of the period with correct dates
+  const generateAllDays = () => {
+    if (dailyLog.length === 0) {
+      return []
+    }
+
+    // Get start date from first day in dailyLog
+    const firstDay = dailyLog[0]
+    const [startYear, startMonth, startDay] = firstDay.date.split('-').map(Number)
+    
+    const allDays: DailyLog[] = []
+
+    // Create current date object manually
+    let currentYear = startYear
+    let currentMonth = startMonth
+    let currentDay = startDay
+    let dayNumber = 1
+
+    // Helper function to increment date
+    const incrementDate = () => {
+      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate()
+      if (currentDay < daysInMonth) {
+        currentDay++
+      } else {
+        currentDay = 1
+        if (currentMonth < 12) {
+          currentMonth++
+        } else {
+          currentMonth = 1
+          currentYear++
+        }
+      }
+    }
+
+    // Generate all days up to periodDays
+    for (let i = 0; i < periodDays; i++) {
+      // Create date string manually
+      const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
+
+      // Check if this day has data
+      const existingLog = logMap.get(dayNumber)
+
+      if (existingLog) {
+        // Use existing data
+        allDays.push(existingLog)
+      } else {
+        // Create placeholder for days without data
+        allDays.push({
+          day: dayNumber,
+          date: dateString,
+          qualified: false,
+          minutes: 0,
+          topics: 0,
+          reason: "⏳ No data available",
+          isExcluded: false
+        })
+      }
+
+      dayNumber++
+      incrementDate()
+    }
+
+    return allDays
+  }
+
+  const allDays = generateAllDays()
 
   const getDayColor = (day: DailyLog, dayNumber: number) => {
     // Exempt days are always gray
@@ -32,12 +96,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays }: CalendarViewPr
       return "bg-gray-200 border-gray-300 text-gray-500 cursor-default"
     }
 
-    // Future days (beyond totalDays but not exempt)
-    if (dayNumber > totalDays) {
-      return "bg-gray-100 border-gray-200 text-gray-400"
+    // Days without data and future days are treated the same
+    if (day.reason === "No data available" || dayNumber > totalDays) {
+      return "bg-gray-100 border-gray-200 text-gray-400 cursor-default"
     }
 
-    // Regular days
+    // Regular days with data
     if (day.qualified) {
       return "bg-green-100 border-green-300 text-green-800 hover:bg-green-200"
     } else {
@@ -49,29 +113,30 @@ export function CalendarView({ dailyLog, totalDays, periodDays }: CalendarViewPr
     if (day.isExcluded) {
       return "📅" // Calendar emoji for exempt days
     }
-    if (dayNumber > totalDays) {
-      return "⏳"
+
+    // Days without data and future days use the same icon
+    if (day.reason === "No data available" || dayNumber > totalDays) {
+      return "⏳" // Clock emoji for both no data and future days
     }
+
     return day.qualified ? "✅" : "❌"
   }
 
   const formatDate = (dateString: string) => {
     if (!dateString) return ""
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+    // Parse dates as local dates to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
   }
 
   const formatShortDate = (dateString: string) => {
     if (!dateString) return ""
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      month: "numeric",
-      day: "numeric",
-    })
+    // Parse dates as local dates to avoid timezone issues
+    const [year, month, day] = dateString.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return `${date.getMonth() + 1}/${date.getDate()}`
   }
 
   return (
@@ -137,7 +202,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays }: CalendarViewPr
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
-            <span className="text-gray-600 font-medium">Future Days (⏳)</span>
+            <span className="text-gray-600 font-medium">No Data / Future Days (⏳)</span>
           </div>
         </div>
 

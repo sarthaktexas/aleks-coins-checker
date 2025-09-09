@@ -142,8 +142,11 @@ export default function StudentLookup() {
   }
 
   const calculateExtraCreditStatus = (dailyLog: DailyLog[], totalDays: number, periodDays: number) => {
-    const qualifiedDays = dailyLog.filter((d) => d.qualified).length
-    const daysMissed = totalDays - qualifiedDays
+    // Filter out exempt days from calculations
+    const workingDays = dailyLog.filter((d) => !d.isExcluded)
+    const qualifiedDays = workingDays.filter((d) => d.qualified).length
+    const workingDaysWithData = workingDays.filter((d) => d.day <= totalDays)
+    const daysMissed = workingDaysWithData.length - qualifiedDays
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
 
@@ -186,20 +189,6 @@ export default function StudentLookup() {
     }
   }
 
-  const calculateMissedDayImpact = (dailyLog: DailyLog[], totalDays: number, periodDays: number) => {
-    const currentQualified = dailyLog.filter((d) => d.qualified).length
-    const newQualified = currentQualified // If they miss tomorrow, qualified days stay the same
-    const newTotal = totalDays + 1
-    const newPercent = (newQualified / newTotal) * 100
-    const { requiredQualifiedDays } = calculateMaxMissableDays(periodDays)
-    const finalRequiredPercent = (requiredQualifiedDays / periodDays) * 100
-
-    return {
-      newPercent: Math.round(newPercent * 10) / 10,
-      requiredPercent: Math.round(finalRequiredPercent * 10) / 10,
-    }
-  }
-
   const getRedemptionInfo = (coins: number) => {
     const assignmentRedemptions = Math.floor(coins / 10)
     const quizRedemptions = Math.floor(coins / 20)
@@ -214,11 +203,11 @@ export default function StudentLookup() {
     }
   }
 
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+  const today = (() => {
+    const now = new Date()
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    return `${monthNames[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
+  })()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -489,60 +478,6 @@ export default function StudentLookup() {
                           {studentInfo.percentComplete}% of days completed in extra credit period
                         </p>
 
-                        {/* Missed Day Impact Warning */}
-                        {(() => {
-                          const { newPercent, requiredPercent } = calculateMissedDayImpact(
-                            studentInfo.dailyLog,
-                            studentInfo.totalDays,
-                            studentInfo.periodDays,
-                          )
-                          const willLoseExtraCredit =
-                            studentInfo.percentComplete >= requiredPercent && newPercent < requiredPercent
-                          const qualifiedDays = studentInfo.dailyLog.filter((d) => d.qualified).length
-                          const daysMissed = studentInfo.totalDays - qualifiedDays
-                          const { maxMissableDays } = calculateMaxMissableDays(studentInfo.periodDays)
-                          const isAtLimit = daysMissed === maxMissableDays
-
-                          return (
-                            <div
-                              className={`p-3 sm:p-4 rounded-xl border ${
-                                willLoseExtraCredit || isAtLimit
-                                  ? "bg-red-50 border-red-200"
-                                  : "bg-slate-50 border-slate-200"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 mb-2">
-                                {(willLoseExtraCredit || isAtLimit) && (
-                                  <AlertTriangle className="h-4 w-4 text-red-600" />
-                                )}
-                                <span
-                                  className={`text-xs sm:text-sm font-semibold ${
-                                    willLoseExtraCredit || isAtLimit ? "text-red-800" : "text-slate-700"
-                                  }`}
-                                >
-                                  Impact of Missing Tomorrow
-                                </span>
-                              </div>
-                              <p
-                                className={`text-xs sm:text-sm ${willLoseExtraCredit || isAtLimit ? "text-red-700" : "text-slate-600"}`}
-                              >
-                                If you miss tomorrow, your percentage will drop to <strong>{newPercent}%</strong> (need{" "}
-                                {requiredPercent}% for extra credit)
-                                {willLoseExtraCredit && (
-                                  <span className="block mt-1 font-semibold">
-                                    ⚠️ This will cause you to lose extra credit for the test!
-                                  </span>
-                                )}
-                                {isAtLimit && !willLoseExtraCredit && (
-                                  <span className="block mt-1 font-semibold">
-                                    ⚠️ This will put you in recovery mode - you'll need to complete every remaining day
-                                    to get extra credit!
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                          )
-                        })()}
                       </div>
                     </>
                   )}
@@ -610,9 +545,9 @@ export default function StudentLookup() {
           {/* Admin Access */}
           <div className="pt-2 border-t border-slate-200">
             <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-slate-600 text-xs">
-              <a href="/admin" className="flex items-center gap-1">
+              <a href="/admin/dashboard" className="flex items-center gap-1">
                 <Lock className="h-3 w-3" />
-                Admin Upload
+                Admin Dashboard
               </a>
             </Button>
           </div>
