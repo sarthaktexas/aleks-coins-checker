@@ -23,7 +23,6 @@ type StudentData = {
   }
 }
 
-import { EXAM_PERIODS } from "@/lib/exam-periods"
 
 function getWorkingDays(startDate: string, endDate: string, excludedDates: string[] = []) {
   // Parse dates manually to avoid timezone issues
@@ -86,8 +85,12 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 }
 
 function generateDemoData(): any {
-  // Use the actual summer 2025 exam 2 period for demo
-  const period = EXAM_PERIODS.summer2025_exam2
+  // Use hardcoded demo period dates (no hardcoded periods import)
+  const period = {
+    startDate: "2025-06-24",
+    endDate: "2025-07-17", 
+    excludedDates: ["2025-07-04", "2025-07-05", "2025-07-06"]
+  }
   const allDays = getWorkingDays(period.startDate, period.endDate, [...period.excludedDates])
   const workingDays = allDays.filter((day) => !day.isExcluded)
 
@@ -181,7 +184,7 @@ function generateDemoData(): any {
   }
 }
 
-async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; periodInfo?: any }> {
+async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
   try {
     // Check if database URL is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -207,9 +210,18 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
       return { studentData: {} }
     }
 
-    // Merge all student data from all sections
+    console.log(`Found ${result.rows.length} data uploads, processing from newest to oldest`)
+    console.log(`Data replacement strategy: Replace existing data for same exam period, add new data for new periods`)
+    
+    // Log all uploads to see what periods we have
+    result.rows.forEach((row, index) => {
+      console.log(`Upload ${index + 1}: period=${row.period}, section=${row.section_number}, uploaded_at=${row.uploaded_at}`)
+    })
+
+    // Load student data, replacing data for the same exam period
     let studentData: StudentData = {}
     let latestPeriodInfo: any = null
+    const processedPeriods = new Set<string>()
 
     for (const row of result.rows) {
       
@@ -221,9 +233,41 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
         rowStudentData = row.data as StudentData
       }
 
-      // Merge this row's data into the main studentData object
-      // Newer data (from later uploads) will overwrite older data for the same student IDs
-      studentData = { ...studentData, ...rowStudentData }
+      // Create a unique key for this period and section combination
+      const periodKey = `${row.period}_${row.section_number || 'default'}`
+      
+      // Only process this data if we haven't seen this period/section combination yet
+      // Since we're processing newest first, this ensures we get the latest data for each period
+      if (!processedPeriods.has(periodKey)) {
+        // Add all students from this period/section
+        Object.keys(rowStudentData).forEach(studentId => {
+          studentData[studentId] = rowStudentData[studentId]
+        })
+        
+        processedPeriods.add(periodKey)
+        console.log(`Loaded data for period: ${row.period}, section: ${row.section_number || 'default'} (uploaded at ${row.uploaded_at})`)
+        
+        // Log sample dailyLog data to see actual dates
+        const sampleStudentIds = Object.keys(rowStudentData).slice(0, 1)
+        sampleStudentIds.forEach(studentId => {
+          const student = rowStudentData[studentId]
+          if (student.dailyLog && student.dailyLog.length > 0) {
+            console.log(`🔍 DEBUG: Student ${studentId} dailyLog from upload:`, {
+              firstDay: student.dailyLog[0] ? {
+                day: student.dailyLog[0].day,
+                date: student.dailyLog[0].date,
+                qualified: student.dailyLog[0].qualified
+              } : 'No first day',
+              lastDay: student.dailyLog[student.dailyLog.length - 1] ? {
+                day: student.dailyLog[student.dailyLog.length - 1].day,
+                date: student.dailyLog[student.dailyLog.length - 1].date,
+                qualified: student.dailyLog[student.dailyLog.length - 1].qualified
+              } : 'No last day',
+              totalDays: student.dailyLog.length
+            })
+          }
+        })
+      }
 
       // Keep track of the most recent period info
       if (!latestPeriodInfo || new Date(row.uploaded_at) > new Date(latestPeriodInfo.uploaded_at)) {
@@ -235,74 +279,32 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData; peri
       }
     }
 
+    console.log(`Processed ${processedPeriods.size} unique period/section combinations: ${Array.from(processedPeriods).join(', ')}`)
 
-    // Get period information from the database
-    let periodInfo = null
-    if (latestPeriodInfo && latestPeriodInfo.period) {
-      try {
-        // Fetch period data from the database
-        const periodResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/admin/exam-periods`)
-        const periodData = await periodResponse.json()
-        
-        if (periodResponse.ok && periodData.periods && periodData.periods[latestPeriodInfo.period]) {
-          const period = periodData.periods[latestPeriodInfo.period]
-          periodInfo = {
-            startDate: period.startDate,
-            endDate: period.endDate,
-            excludedDates: period.excludedDates,
-          }
-
-          // Fix the dailyLog dates to match the correct period dates
-          // This corrects for timezone issues in previously uploaded data
-          const correctedStudentData = { ...studentData }
-          Object.keys(correctedStudentData).forEach(studentId => {
-            const student = correctedStudentData[studentId]
-            if (student.dailyLog && student.dailyLog.length > 0) {
-              // Regenerate correct dates for the dailyLog
-              const correctedDailyLog = getWorkingDays(period.startDate, period.endDate, [...period.excludedDates])
-              
-              // Map the existing data to the corrected dates
-              const logMap = new Map(student.dailyLog.map((log: any) => [log.day, log]))
-              const correctedLog = correctedDailyLog.map((correctedDay, index) => {
-                const existingLog = logMap.get(correctedDay.day)
-                if (existingLog) {
-                  // Use existing data but with corrected date
-                  // Preserve the original isExcluded status from the existing data
-                  return {
-                    ...existingLog,
-                    date: correctedDay.date
-                    // Don't overwrite isExcluded - keep the original value
-                  }
-                } else {
-                  // Create placeholder for missing days
-                  // For missing days, use the corrected isExcluded status
-                  return {
-                    day: correctedDay.day,
-                    date: correctedDay.date,
-                    qualified: false,
-                    minutes: 0,
-                    topics: 0,
-                    reason: correctedDay.isExcluded ? "📅 Exempt day - does not count toward progress" : "⏳ No data available",
-                    isExcluded: correctedDay.isExcluded
-                  }
-                }
-              })
-              
-              correctedStudentData[studentId] = {
-                ...student,
-                dailyLog: correctedLog
-              }
-            }
-          })
-          
-          return { studentData: correctedStudentData, periodInfo }
-        }
-      } catch (error) {
-        console.error("Error fetching period data from database:", error)
+    // Log final student data to see what dates we're returning
+    const sampleStudentIds = Object.keys(studentData).slice(0, 1)
+    sampleStudentIds.forEach(studentId => {
+      const student = studentData[studentId]
+      if (student.dailyLog && student.dailyLog.length > 0) {
+        console.log(`🔍 DEBUG: Final student ${studentId} dailyLog being returned:`, {
+          firstDay: student.dailyLog[0] ? {
+            day: student.dailyLog[0].day,
+            date: student.dailyLog[0].date,
+            qualified: student.dailyLog[0].qualified
+          } : 'No first day',
+          lastDay: student.dailyLog[student.dailyLog.length - 1] ? {
+            day: student.dailyLog[student.dailyLog.length - 1].day,
+            date: student.dailyLog[student.dailyLog.length - 1].date,
+            qualified: student.dailyLog[student.dailyLog.length - 1].qualified
+          } : 'No last day',
+          totalDays: student.dailyLog.length
+        })
       }
-    }
+    })
 
-    return { studentData, periodInfo }
+    // Return student data without separate period lookup
+    // The period info should be embedded in the student data itself
+    return { studentData }
   } catch (error) {
     console.error("Error loading student data from database:", error)
 
@@ -344,12 +346,10 @@ export async function POST(request: NextRequest) {
 
     // Load student data from database
     let studentData: StudentData
-    let periodInfo: any = null
 
     try {
       const result = await loadStudentDataFromDB()
       studentData = result.studentData
-      periodInfo = result.periodInfo
     } catch (dbError) {
       console.error("Database error:", dbError)
 
@@ -398,8 +398,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Log the student data being returned to track where dates come from
+    console.log(`🔍 DEBUG: Returning data for student ${normalizedId}:`, {
+      name: student.name,
+      totalDays: student.totalDays,
+      periodDays: student.periodDays,
+      dailyLogLength: student.dailyLog?.length || 0,
+      firstDayDate: student.dailyLog?.[0]?.date || 'No first day',
+      lastDayDate: student.dailyLog?.[student.dailyLog?.length - 1]?.date || 'No last day'
+    })
 
-    // Return the student's data including daily log and period info
+
+    // Return the student's data including daily log
     return NextResponse.json({
       success: true,
       student: {
@@ -410,7 +420,6 @@ export async function POST(request: NextRequest) {
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
         dailyLog: student.dailyLog,
-        periodInfo,
       },
     })
   } catch (error) {

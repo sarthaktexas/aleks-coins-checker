@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import * as XLSX from "xlsx"
-import { EXAM_PERIODS } from "@/lib/exam-periods"
 
 function getWorkingDays(startDate: string, endDate: string, excludedDates: string[] = []) {
   // Parse dates manually to avoid timezone issues
@@ -61,26 +60,34 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 
 async function processExcelData(rawData: any[], examPeriod: string) {
 
-  // Get period configuration from database
+  // Get period configuration from database ONLY - no hardcoded fallbacks
   let period
   try {
     const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/admin/exam-periods`)
     const data = await response.json()
     
+    console.log(`🔍 DEBUG: Upload processing for period: ${examPeriod}`)
+    console.log(`🔍 DEBUG: Period API response status: ${response.ok}`)
+    console.log(`🔍 DEBUG: Available periods in database:`, Object.keys(data.periods || {}))
+    
     if (response.ok && data.periods && data.periods[examPeriod]) {
       period = data.periods[examPeriod]
+      console.log(`🔍 DEBUG: Using period from database:`, {
+        name: period.name,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        excludedDates: period.excludedDates
+      })
     } else {
-      // Fallback to hardcoded periods if database fails
-      period = EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS]
+      throw new Error(`Period ${examPeriod} not found in database. Available periods: ${Object.keys(data.periods || {}).join(", ")}`)
     }
   } catch (error) {
-    console.error("Error fetching period from database, using fallback:", error)
-    // Fallback to hardcoded periods if database fails
-    period = EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS]
+    console.error("Error fetching period from database:", error)
+    throw new Error(`Failed to fetch period ${examPeriod} from database: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 
   if (!period) {
-    throw new Error(`Invalid exam period: ${examPeriod}. Available: ${Object.keys(EXAM_PERIODS).join(", ")}`)
+    throw new Error(`Period ${examPeriod} not found`)
   }
 
 
@@ -102,6 +109,10 @@ async function processExcelData(rawData: any[], examPeriod: string) {
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalPeriodDays = allDays.length
   const totalWorkingDays = workingDays.length
+
+  console.log(`🔍 DEBUG: Generated ${allDays.length} total days for period`)
+  console.log(`🔍 DEBUG: First few days:`, allDays.slice(0, 3).map(d => ({ day: d.day, date: d.date, isExcluded: d.isExcluded })))
+  console.log(`🔍 DEBUG: Last few days:`, allDays.slice(-3).map(d => ({ day: d.day, date: d.date, isExcluded: d.isExcluded })))
 
 
       // === UTILITY FUNCTION (from your code) ===
@@ -206,6 +217,23 @@ async function processExcelData(rawData: any[], examPeriod: string) {
         periodDays: totalWorkingDays, // Only count working days for period
         percentComplete,
         dailyLog, // Include all days (working + excluded)
+      }
+
+      // Log sample dailyLog for first student to debug dates
+      if (Object.keys(processedData).length === 1) {
+        console.log(`🔍 DEBUG: Sample student ${studentId} dailyLog:`, {
+          firstDay: dailyLog[0] ? {
+            day: dailyLog[0].day,
+            date: dailyLog[0].date,
+            qualified: dailyLog[0].qualified
+          } : 'No first day',
+          lastDay: dailyLog[dailyLog.length - 1] ? {
+            day: dailyLog[dailyLog.length - 1].day,
+            date: dailyLog[dailyLog.length - 1].date,
+            qualified: dailyLog[dailyLog.length - 1].qualified
+          } : 'No last day',
+          totalDays: dailyLog.length
+        })
       }
 
     } catch (error) {
@@ -354,7 +382,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Excel file processed and student data uploaded successfully",
       studentCount: studentCount,
-      examPeriod: EXAM_PERIODS[examPeriod as keyof typeof EXAM_PERIODS].name,
+      examPeriod: examPeriod,
     })
   } catch (error) {
     console.error("Upload error:", error)
