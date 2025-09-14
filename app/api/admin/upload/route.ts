@@ -60,18 +60,57 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 
 async function processExcelData(rawData: any[], examPeriod: string) {
 
-  // Get period configuration from database ONLY - no hardcoded fallbacks
+  // Get period configuration from database directly - no HTTP fetch needed
   let period
   try {
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/admin/exam-periods`)
-    const data = await response.json()
-    
+    // Check if database is available
+    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+      throw new Error("Database not configured")
+    }
+
     console.log(`🔍 DEBUG: Upload processing for period: ${examPeriod}`)
-    console.log(`🔍 DEBUG: Period API response status: ${response.ok}`)
-    console.log(`🔍 DEBUG: Available periods in database:`, Object.keys(data.periods || {}))
     
-    if (response.ok && data.periods && data.periods[examPeriod]) {
-      period = data.periods[examPeriod]
+    // Ensure the exam_periods table exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS exam_periods (
+        id SERIAL PRIMARY KEY,
+        period_key VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        excluded_dates JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `
+
+    // Fetch the specific period from database
+    const result = await sql`
+      SELECT period_key, name, start_date, end_date, excluded_dates
+      FROM exam_periods
+      WHERE period_key = ${examPeriod}
+    `
+    
+    console.log(`🔍 DEBUG: Database query returned ${result.rows.length} rows`)
+    
+    if (result.rows.length > 0) {
+      const row = result.rows[0]
+      // Format dates to YYYY-MM-DD string format
+      const formatDate = (date: any) => {
+        if (!date) return ""
+        if (typeof date === 'string') return date
+        // If it's a Date object, format it
+        const d = new Date(date)
+        return d.toISOString().split('T')[0]
+      }
+      
+      period = {
+        name: row.name,
+        startDate: formatDate(row.start_date),
+        endDate: formatDate(row.end_date),
+        excludedDates: row.excluded_dates || [],
+      }
+      
       console.log(`🔍 DEBUG: Using period from database:`, {
         name: period.name,
         startDate: period.startDate,
@@ -79,7 +118,7 @@ async function processExcelData(rawData: any[], examPeriod: string) {
         excludedDates: period.excludedDates
       })
     } else {
-      throw new Error(`Period ${examPeriod} not found in database. Available periods: ${Object.keys(data.periods || {}).join(", ")}`)
+      throw new Error(`Period ${examPeriod} not found in database`)
     }
   } catch (error) {
     console.error("Error fetching period from database:", error)
