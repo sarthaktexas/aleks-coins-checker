@@ -382,34 +382,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database table setup failed" }, { status: 500 })
     }
 
-    // Store in database with upsert logic
+    // Store in database - replace old data for this period/section combination
     try {
-      // First, check if we have existing data for this period and section
-      const existingData = await sql`
-        SELECT data FROM student_data 
+      // First, delete any existing data for this period and section combination
+      await sql`
+        DELETE FROM student_data 
         WHERE period = ${examPeriod} AND section_number = ${sectionNumber}
-        ORDER BY uploaded_at DESC 
-        LIMIT 1
       `
 
-      let finalStudentData = studentData
-
-      // If we have existing data, merge it with new data (new data overwrites existing)
-      if (existingData.rows.length > 0) {
-        const existing = typeof existingData.rows[0].data === "string" 
-          ? JSON.parse(existingData.rows[0].data) 
-          : existingData.rows[0].data
-
-        // Merge: new data overwrites existing data for same student IDs
-        finalStudentData = { ...existing, ...studentData }
-      }
-
-      // Insert new record with merged data
+      // Insert new record with fresh data (no merging needed)
       const insertResult = await sql`
         INSERT INTO student_data (data, period, section_number, uploaded_at)
-        VALUES (${JSON.stringify(finalStudentData)}, ${examPeriod}, ${sectionNumber}, NOW())
+        VALUES (${JSON.stringify(studentData)}, ${examPeriod}, ${sectionNumber}, NOW())
         RETURNING id, uploaded_at
       `
+
+      console.log(`✅ Successfully replaced data for period ${examPeriod}, section ${sectionNumber} with ${studentCount} students`)
 
     } catch (insertError) {
       console.error("Insert error:", insertError)

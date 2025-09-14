@@ -54,9 +54,9 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         const uploadRecords = result.uploadRecords || []
-        let totalStudents = 0
         
-        // Calculate total students across all uploads
+        // Calculate total students from latest uploads only (no duplicates)
+        let totalStudents = 0
         uploadRecords.forEach((record: any) => {
           totalStudents += record.student_count || 0
         })

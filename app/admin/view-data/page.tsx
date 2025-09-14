@@ -369,10 +369,10 @@ export default function ViewDataPage() {
               <div className="p-2 bg-green-100 rounded-lg">
                 <Database className="h-5 w-5 text-green-600" />
               </div>
-              Data Upload History
+              Available Data Sets
             </CardTitle>
             <CardDescription>
-              Select a period to view student data
+              Select a period to view student data (shows latest upload only)
             </CardDescription>
           </CardHeader>
           <CardContent>

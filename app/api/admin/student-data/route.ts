@@ -120,18 +120,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      uploadRecords: uploadRecords.rows.map(row => {
-        const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {}
-        return {
+    // Group uploads by period and section, keeping only the latest upload for each combination
+    const latestUploads = new Map<string, any>()
+    
+    uploadRecords.rows.forEach(row => {
+      const key = `${row.period}-${row.section_number || 'default'}`
+      const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {}
+      
+      // Only keep if this is the first time we see this period/section combo
+      // or if this upload is newer than what we have
+      if (!latestUploads.has(key) || new Date(row.uploaded_at) > new Date(latestUploads.get(key).uploaded_at)) {
+        latestUploads.set(key, {
           id: row.id,
           period: row.period,
           section_number: row.section_number,
           uploaded_at: row.uploaded_at,
           student_count: Object.keys(data).length
-        }
-      }),
+        })
+      }
+    })
+
+    return NextResponse.json({
+      success: true,
+      uploadRecords: Array.from(latestUploads.values()),
       studentData
     })
   } catch (error) {
