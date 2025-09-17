@@ -140,9 +140,9 @@ export default function StudentLookup() {
   const calculateExtraCreditStatus = (dailyLog: DailyLog[], totalDays: number, periodDays: number) => {
     // Filter out exempt days from calculations
     const workingDays = dailyLog.filter((d) => !d.isExcluded)
-    const qualifiedDays = workingDays.filter((d) => d.qualified).length
     const workingDaysWithData = workingDays.filter((d) => d.day <= totalDays)
-    const daysMissed = workingDaysWithData.length - qualifiedDays
+    const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
+    const daysMissed = workingDaysWithData.length - qualifiedDaysWithData
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
 

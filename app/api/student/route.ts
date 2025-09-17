@@ -285,18 +285,12 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
   }
 }
 
-async function applyOverridesToStudentData(studentData: StudentData, periodInfo: any): Promise<StudentData> {
-  if (!periodInfo || !periodInfo.period) {
-    return studentData // No period info, return data as-is
-  }
-
+async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
   try {
-    // Get all overrides for this period
+    // Get all overrides (now student-specific only)
     const overridesResult = await sql`
       SELECT student_id, day_number, override_type, reason
       FROM student_day_overrides
-      WHERE period = ${periodInfo.period}
-      AND section_number = ${periodInfo.section_number || 'default'}
     `
 
     const overridesMap = new Map<string, Map<number, any>>()
@@ -336,7 +330,8 @@ async function applyOverridesToStudentData(studentData: StudentData, periodInfo:
         const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
         const percentComplete = completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
         
-        student.totalDays = qualifiedWorkingDays
+        // Don't overwrite totalDays - it should remain the max day number with data
+        // student.totalDays should stay as the original value (max day number with data)
         student.percentComplete = percentComplete
         student.coins = qualifiedWorkingDays
       }
@@ -384,7 +379,7 @@ export async function POST(request: NextRequest) {
       periodInfo = result.periodInfo
       
       // Apply overrides to student data
-      studentData = await applyOverridesToStudentData(studentData, periodInfo)
+      studentData = await applyOverridesToStudentData(studentData)
     } catch (dbError) {
       console.error("Database error:", dbError)
 
