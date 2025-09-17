@@ -317,14 +317,14 @@ export default function AdminPage() {
                 <Input
                   id="sectionNumber"
                   type="text"
-                  placeholder="e.g., 001, 002, A, B"
+                  placeholder="e.g., 003, 006"
                   value={sectionNumber}
                   onChange={(e) => setSectionNumber(e.target.value)}
                   disabled={isUploading}
                   className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500"
                 />
                 <p className="text-xs text-slate-500">
-                  Enter the section number for this upload (e.g., 001, 002, A, B)
+                  Enter the section number for this upload (e.g., 003, 006)
                 </p>
               </div>
 

@@ -153,7 +153,7 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
               </Label>
               <Input
                 id="courseSection"
-                placeholder="e.g., MATH 1093.001"
+                placeholder="e.g., 003, 006"
                 value={formData.courseSection}
                 onChange={(e) => setFormData({ ...formData, courseSection: e.target.value })}
                 required
