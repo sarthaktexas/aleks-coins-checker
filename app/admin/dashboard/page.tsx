@@ -15,7 +15,8 @@ import {
   FileSpreadsheet,
   CheckCircle,
   AlertTriangle,
-  Lock
+  Lock,
+  Settings
 } from "lucide-react"
 import Link from "next/link"
 
@@ -184,6 +185,15 @@ export default function AdminDashboard() {
       color: "bg-purple-500 hover:bg-purple-600",
       iconColor: "text-purple-600",
       bgColor: "bg-purple-50",
+    },
+    {
+      title: "View Day Overrides",
+      description: "View and manage student day overrides and exceptions",
+      icon: Settings,
+      href: "/admin/view-overrides",
+      color: "bg-orange-500 hover:bg-orange-600",
+      iconColor: "text-orange-600",
+      bgColor: "bg-orange-50",
     },
   ]
 

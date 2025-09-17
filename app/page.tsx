@@ -519,6 +519,10 @@ export default function StudentLookup() {
               dailyLog={studentInfo.dailyLog}
               totalDays={studentInfo.totalDays}
               periodDays={studentInfo.periodDays}
+              studentInfo={{
+                studentId: studentId,
+                name: studentInfo.name
+              }}
             />
           </div>
         )}

@@ -184,11 +184,11 @@ function generateDemoData(): any {
   }
 }
 
-async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
+async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, periodInfo: any }> {
   try {
     // Check if database URL is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      return { studentData: {} }
+      return { studentData: {}, periodInfo: null }
     }
 
     // First, check if the table exists and has data
@@ -197,7 +197,7 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
     `
 
     if (tableCheck.rows[0].count === 0) {
-      return { studentData: {} }
+      return { studentData: {}, periodInfo: null }
     }
 
     // Get all data from all sections and merge them
@@ -207,7 +207,7 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
     `
 
     if (result.rows.length === 0) {
-      return { studentData: {} }
+      return { studentData: {}, periodInfo: null }
     }
 
     console.log(`Found ${result.rows.length} data uploads, processing from newest to oldest`)
@@ -247,26 +247,6 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
         processedPeriods.add(periodKey)
         console.log(`Loaded data for period: ${row.period}, section: ${row.section_number || 'default'} (uploaded at ${row.uploaded_at})`)
         
-        // Log sample dailyLog data to see actual dates
-        const sampleStudentIds = Object.keys(rowStudentData).slice(0, 1)
-        sampleStudentIds.forEach(studentId => {
-          const student = rowStudentData[studentId]
-          if (student.dailyLog && student.dailyLog.length > 0) {
-            console.log(`🔍 DEBUG: Student ${studentId} dailyLog from upload:`, {
-              firstDay: student.dailyLog[0] ? {
-                day: student.dailyLog[0].day,
-                date: student.dailyLog[0].date,
-                qualified: student.dailyLog[0].qualified
-              } : 'No first day',
-              lastDay: student.dailyLog[student.dailyLog.length - 1] ? {
-                day: student.dailyLog[student.dailyLog.length - 1].day,
-                date: student.dailyLog[student.dailyLog.length - 1].date,
-                qualified: student.dailyLog[student.dailyLog.length - 1].qualified
-              } : 'No last day',
-              totalDays: student.dailyLog.length
-            })
-          }
-        })
       }
 
       // Keep track of the most recent period info
@@ -281,30 +261,12 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
 
     console.log(`Processed ${processedPeriods.size} unique period/section combinations: ${Array.from(processedPeriods).join(', ')}`)
 
-    // Log final student data to see what dates we're returning
-    const sampleStudentIds = Object.keys(studentData).slice(0, 1)
-    sampleStudentIds.forEach(studentId => {
-      const student = studentData[studentId]
-      if (student.dailyLog && student.dailyLog.length > 0) {
-        console.log(`🔍 DEBUG: Final student ${studentId} dailyLog being returned:`, {
-          firstDay: student.dailyLog[0] ? {
-            day: student.dailyLog[0].day,
-            date: student.dailyLog[0].date,
-            qualified: student.dailyLog[0].qualified
-          } : 'No first day',
-          lastDay: student.dailyLog[student.dailyLog.length - 1] ? {
-            day: student.dailyLog[student.dailyLog.length - 1].day,
-            date: student.dailyLog[student.dailyLog.length - 1].date,
-            qualified: student.dailyLog[student.dailyLog.length - 1].qualified
-          } : 'No last day',
-          totalDays: student.dailyLog.length
-        })
-      }
-    })
 
-    // Return student data without separate period lookup
-    // The period info should be embedded in the student data itself
-    return { studentData }
+    // Return student data with period info
+    return { 
+      studentData,
+      periodInfo: latestPeriodInfo
+    }
   } catch (error) {
     console.error("Error loading student data from database:", error)
 
@@ -315,11 +277,75 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData }> {
         error.message.includes('relation "student_data" does not exist') ||
         error.message.includes("POSTGRES_URL")
       ) {
-        return { studentData: {} }
+        return { studentData: {}, periodInfo: null }
       }
     }
 
     throw error
+  }
+}
+
+async function applyOverridesToStudentData(studentData: StudentData, periodInfo: any): Promise<StudentData> {
+  if (!periodInfo || !periodInfo.period) {
+    return studentData // No period info, return data as-is
+  }
+
+  try {
+    // Get all overrides for this period
+    const overridesResult = await sql`
+      SELECT student_id, day_number, override_type, reason
+      FROM student_day_overrides
+      WHERE period = ${periodInfo.period}
+      AND section_number = ${periodInfo.section_number || 'default'}
+    `
+
+    const overridesMap = new Map<string, Map<number, any>>()
+    
+    // Group overrides by student_id
+    overridesResult.rows.forEach(override => {
+      if (!overridesMap.has(override.student_id)) {
+        overridesMap.set(override.student_id, new Map())
+      }
+      overridesMap.get(override.student_id)!.set(override.day_number, override)
+    })
+
+    // Apply overrides to each student's daily log
+    const updatedStudentData = { ...studentData }
+    
+    Object.keys(updatedStudentData).forEach(studentId => {
+      const student = updatedStudentData[studentId]
+      const studentOverrides = overridesMap.get(studentId)
+      
+      if (studentOverrides && student.dailyLog) {
+        // Apply overrides to daily log
+        student.dailyLog = student.dailyLog.map(day => {
+          const override = studentOverrides.get(day.day)
+          if (override) {
+            return {
+              ...day,
+              qualified: override.override_type === "qualified",
+              reason: override.reason || day.reason
+            }
+          }
+          return day
+        })
+
+        // Recalculate totals based on updated daily log
+        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
+        const completedWorkingDays = workingDayLogs.length
+        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+        const percentComplete = completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
+        
+        student.totalDays = qualifiedWorkingDays
+        student.percentComplete = percentComplete
+        student.coins = qualifiedWorkingDays
+      }
+    })
+
+    return updatedStudentData
+  } catch (error) {
+    console.error("Error applying overrides:", error)
+    return studentData // Return original data if override application fails
   }
 }
 
@@ -340,16 +366,25 @@ export async function POST(request: NextRequest) {
       const demoStudent = generateDemoData()
       return NextResponse.json({
         success: true,
-        student: demoStudent,
+        student: {
+          ...demoStudent,
+          period: 'Fall 2024',
+          sectionNumber: 'default'
+        },
       })
     }
 
     // Load student data from database
     let studentData: StudentData
+    let periodInfo: any
 
     try {
       const result = await loadStudentDataFromDB()
       studentData = result.studentData
+      periodInfo = result.periodInfo
+      
+      // Apply overrides to student data
+      studentData = await applyOverridesToStudentData(studentData, periodInfo)
     } catch (dbError) {
       console.error("Database error:", dbError)
 
@@ -398,18 +433,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Log the student data being returned to track where dates come from
-    console.log(`🔍 DEBUG: Returning data for student ${normalizedId}:`, {
-      name: student.name,
-      totalDays: student.totalDays,
-      periodDays: student.periodDays,
-      dailyLogLength: student.dailyLog?.length || 0,
-      firstDayDate: student.dailyLog?.[0]?.date || 'No first day',
-      lastDayDate: student.dailyLog?.[student.dailyLog?.length - 1]?.date || 'No last day'
-    })
 
 
-    // Return the student's data including daily log
+    // Return the student's data including daily log and period info
     return NextResponse.json({
       success: true,
       student: {
@@ -420,6 +446,8 @@ export async function POST(request: NextRequest) {
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
         dailyLog: student.dailyLog,
+        period: periodInfo?.period || 'Unknown',
+        sectionNumber: periodInfo?.section_number || 'default'
       },
     })
   } catch (error) {
