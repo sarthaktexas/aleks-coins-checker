@@ -31,6 +31,8 @@ type DailyLog = {
   minutes: number
   topics: number
   reason: string
+  isExcluded?: boolean
+  wouldHaveQualified?: boolean
 }
 
 type StudentInfo = {
@@ -41,6 +43,7 @@ type StudentInfo = {
   periodDays: number
   percentComplete: number
   dailyLog: DailyLog[]
+  exemptDayCredits?: number
 }
 
 export default function StudentLookup() {
@@ -325,6 +328,13 @@ export default function StudentLookup() {
                         </div>
                         <p className="text-4xl sm:text-5xl font-bold text-amber-900 mb-2">{studentInfo.coins}</p>
                         <p className="text-xs sm:text-sm text-amber-700 font-medium">Total coins collected</p>
+                        {studentInfo.exemptDayCredits && studentInfo.exemptDayCredits > 0 && (
+                          <div className="mt-3 p-2 bg-amber-100 rounded-lg border border-amber-200">
+                            <p className="text-xs text-amber-800 font-medium">
+                              🎁 {studentInfo.exemptDayCredits} extra credit coin{studentInfo.exemptDayCredits !== 1 ? 's' : ''} from exempt days
+                            </p>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
 

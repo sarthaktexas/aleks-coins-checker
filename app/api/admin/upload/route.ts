@@ -184,6 +184,7 @@ async function processExcelData(rawData: any[], examPeriod: string) {
           // Process daily data for ALL days in the period
           let coins = 0
           const dailyLog: any[] = []
+          let exemptDayCredits = 0 // Track extra credit coins from exempt days
 
           // Process days 1 through maxDayFromExcel (the actual days with data in Excel)
           for (let dayNum = 1; dayNum <= maxDayFromExcel; dayNum++) {
@@ -207,11 +208,25 @@ async function processExcelData(rawData: any[], examPeriod: string) {
 
             let qualified = false
             let reason = ""
+            let wouldHaveQualified = false // Track if they would have qualified on exempt day
 
             if (isExcluded) {
-              // Excluded days don't count toward qualification, even if they have data
+              // Check if they would have qualified on exempt day
+              const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
+              const topicMsg =
+                topics >= MIN_TOPICS ? null : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
+
+              wouldHaveQualified = !minMsg && !topicMsg
+              
+              if (wouldHaveQualified) {
+                // Give extra credit Aleks coin for qualifying on exempt day
+                exemptDayCredits++
+                reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+              } else {
+                reason = "📅 Exempt day - does not count toward progress"
+              }
+              // Excluded days never count toward regular qualification
               qualified = false
-              reason = "📅 Exempt day - does not count toward progress"
             } else {
               // Use your exact logic for qualification
               const minMsg = minutes >= MIN_MINUTES ? null : `${minutes} mins (needs ${MIN_MINUTES} mins)`
@@ -238,6 +253,7 @@ async function processExcelData(rawData: any[], examPeriod: string) {
               topics,
               reason,
               isExcluded,
+              wouldHaveQualified, // Add this field for UI display
             })
           }
 
@@ -251,11 +267,12 @@ async function processExcelData(rawData: any[], examPeriod: string) {
       processedData[studentId] = {
         name,
         email,
-        coins,
+        coins: coins + exemptDayCredits, // Include exempt day credits in total coins
         totalDays: maxDayFromExcel, // Use the actual number of days with data from Excel
         periodDays: totalWorkingDays, // Only count working days for period
         percentComplete,
         dailyLog, // Include all days (working + excluded)
+        exemptDayCredits, // Track exempt day credits separately for display
       }
 
       // Log sample dailyLog for first student to debug dates

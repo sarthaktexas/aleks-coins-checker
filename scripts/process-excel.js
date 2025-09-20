@@ -146,6 +146,7 @@ function processExcelFile(filePath, examPeriod = "summer2025") {
       // Process daily data
       const dailyLog = []
       let coins = 0
+      let exemptDayCredits = 0 // Track extra credit coins from exempt days
 
       // Look for day columns for ALL days (including excluded ones)
       allDays.forEach(({ day, date, isExcluded }) => {
@@ -157,11 +158,21 @@ function processExcelFile(filePath, examPeriod = "summer2025") {
 
         let qualified = false
         let reason = ""
+        let wouldHaveQualified = false
 
         if (isExcluded) {
-          // Excluded days don't count toward qualification, even if they have data
+          // Check if they would have qualified on exempt day
+          wouldHaveQualified = minutes >= 31 && topics >= 1
+          
+          if (wouldHaveQualified) {
+            // Give extra credit Aleks coin for qualifying on exempt day
+            exemptDayCredits++
+            reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+          } else {
+            reason = "📅 Exempt day - does not count toward progress"
+          }
+          // Excluded days never count toward regular qualification
           qualified = false
-          reason = "📅 Exempt day - does not count toward progress"
         } else {
           // Regular days: check if qualified (31+ minutes AND 1+ topics)
           qualified = minutes >= 31 && topics >= 1
@@ -188,6 +199,7 @@ function processExcelFile(filePath, examPeriod = "summer2025") {
           topics,
           reason,
           isExcluded,
+          wouldHaveQualified,
         })
       })
 
@@ -201,15 +213,16 @@ function processExcelFile(filePath, examPeriod = "summer2025") {
       processedData[studentId] = {
         name,
         email,
-        coins,
+        coins: coins + exemptDayCredits, // Include exempt day credits in total coins
         totalDays: completedWorkingDays, // Only count working days
         periodDays: totalWorkingDays, // Only count working days for period
         percentComplete,
         dailyLog, // Include all days (working + excluded)
+        exemptDayCredits, // Track exempt day credits separately for display
       }
 
       console.log(
-        `Processed: ${name} (${studentId}) - ${coins} coins, ${percentComplete}% complete (${qualifiedWorkingDays}/${completedWorkingDays} working days)`,
+        `Processed: ${name} (${studentId}) - ${coins + exemptDayCredits} coins (${coins} regular + ${exemptDayCredits} exempt), ${percentComplete}% complete (${qualifiedWorkingDays}/${completedWorkingDays} working days)`,
       )
     } catch (error) {
       console.error(`Error processing row ${index + 1}:`, error)

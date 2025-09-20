@@ -13,6 +13,7 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  wouldHaveQualified?: boolean
 }
 
 type DayOverride = {
@@ -144,8 +145,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
   const getDayColor = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
     
-    // Exempt days are always gray
+    // Exempt days - special styling for those that would have qualified
     if (day.isExcluded) {
+      if (day.wouldHaveQualified) {
+        return "bg-amber-100 border-amber-300 text-amber-800 cursor-default ring-1 ring-amber-300"
+      }
       return "bg-gray-200 border-gray-300 text-gray-500 cursor-default"
     }
 
@@ -182,7 +186,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
   const getDayIcon = (day: DailyLog, dayNumber: number) => {
     if (day.isExcluded) {
-      return "📅" // Calendar emoji for exempt days
+      return day.wouldHaveQualified ? "🎁" : "📅" // Gift emoji for exempt days that would have qualified, calendar for others
     }
 
     // Days without data use clock icon
@@ -299,7 +303,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
                       {day.minutes} mins • {day.topics} topics
                     </div>
                   )}
-                  {day.isExcluded && <div className="text-gray-300 text-xs mt-1">Exempt - Not counted in progress</div>}
+                  {day.isExcluded && (
+                    <div className="text-gray-300 text-xs mt-1">
+                      {day.wouldHaveQualified ? "🎁 Extra credit earned" : "Exempt - Not counted in progress"}
+                    </div>
+                  )}
                   {canClick && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
                   {/* Arrow */}
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
@@ -318,6 +326,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
             <span className="text-red-800 font-medium">Not Qualified (❌)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-amber-100 border-2 border-amber-300 rounded ring-1 ring-amber-300"></div>
+            <span className="text-amber-800 font-medium">Extra Credit (🎁)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-gray-200 border-2 border-gray-300 rounded"></div>

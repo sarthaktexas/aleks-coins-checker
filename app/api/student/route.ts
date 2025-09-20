@@ -9,6 +9,7 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  wouldHaveQualified?: boolean
 }
 
 type StudentData = {
@@ -20,6 +21,7 @@ type StudentData = {
     periodDays: number
     percentComplete: number
     dailyLog: DailyLog[]
+    exemptDayCredits?: number
   }
 }
 
@@ -330,10 +332,14 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
         const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
         const percentComplete = completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
         
+        // Calculate exempt day credits (from days that would have qualified on exempt days)
+        const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
+        
         // Don't overwrite totalDays - it should remain the max day number with data
         // student.totalDays should stay as the original value (max day number with data)
         student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays
+        student.coins = qualifiedWorkingDays + exemptDayCredits
+        student.exemptDayCredits = exemptDayCredits
       }
     })
 
