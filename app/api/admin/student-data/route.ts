@@ -1,6 +1,82 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
+type StudentData = {
+  [studentId: string]: {
+    name: string
+    email: string
+    coins: number
+    totalDays: number
+    periodDays: number
+    percentComplete: number
+    dailyLog: any[]
+    exemptDayCredits?: number
+  }
+}
+
+async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
+  try {
+    // Get all overrides (now student-specific only)
+    const overridesResult = await sql`
+      SELECT student_id, day_number, override_type, reason
+      FROM student_day_overrides
+    `
+
+    const overridesMap = new Map<string, Map<number, any>>()
+    
+    // Group overrides by student_id
+    overridesResult.rows.forEach(override => {
+      if (!overridesMap.has(override.student_id)) {
+        overridesMap.set(override.student_id, new Map())
+      }
+      overridesMap.get(override.student_id)!.set(override.day_number, override)
+    })
+
+    // Apply overrides to each student's daily log
+    const updatedStudentData = { ...studentData }
+    
+    Object.keys(updatedStudentData).forEach(studentId => {
+      const student = updatedStudentData[studentId]
+      const studentOverrides = overridesMap.get(studentId)
+      
+      if (studentOverrides && student.dailyLog) {
+        // Apply overrides to daily log
+        student.dailyLog = student.dailyLog.map(day => {
+          const override = studentOverrides.get(day.day)
+          if (override) {
+            return {
+              ...day,
+              qualified: override.override_type === "qualified",
+              reason: override.reason || day.reason
+            }
+          }
+          return day
+        })
+
+        // Recalculate totals based on updated daily log
+        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
+        const completedWorkingDays = workingDayLogs.length
+        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+        const percentComplete = completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
+        
+        // Calculate exempt day credits (from days that would have qualified on exempt days)
+        const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
+        
+        // Don't overwrite totalDays - it should remain the max day number with data
+        // student.totalDays should stay as the original value (max day number with data)
+        student.percentComplete = percentComplete
+        student.coins = qualifiedWorkingDays + exemptDayCredits
+        student.exemptDayCredits = exemptDayCredits
+      }
+    })
+
+    return updatedStudentData
+  } catch (error) {
+    console.error("Error applying overrides:", error)
+    return studentData // Return original data if override application fails
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -117,6 +193,9 @@ export async function GET(request: NextRequest) {
         } else {
           studentData = row.data
         }
+        
+        // Apply overrides to student data to match what students see
+        studentData = await applyOverridesToStudentData(studentData)
       }
     }
 
