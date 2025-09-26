@@ -354,144 +354,6 @@ export default function StudentLookup() {
           </CardContent>
         </Card>
 
-        {/* Analytics Section */}
-        {analytics.length > 0 && (
-          <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-3 text-lg sm:text-xl">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
-                </div>
-                Class Analytics
-              </CardTitle>
-              <CardDescription className="text-sm sm:text-base">
-                Average completion rates and study times across all sections
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {analytics.map((period) => (
-                <div key={period.period} className="space-y-4">
-                  {/* Period Header */}
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
-                    <div>
-                      <h3 className="font-semibold text-purple-900">
-                        {period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </h3>
-                      <p className="text-sm text-purple-700">
-                        Sections {period.sections.join(', ')} • {period.totalStudents} students
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 text-sm text-purple-700">
-                        <TrendingUp className="h-4 w-4" />
-                        <span className="font-medium">{period.averageCompletion}% avg completion</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-purple-600">
-                        <Clock className="h-4 w-4" />
-                        <span>{period.averageTime.toFixed(1)} min avg time</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Line Chart */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-purple-800 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" />
-                      Completion Trends Over Time
-                    </h4>
-                    <div className="w-full h-96 bg-white rounded-lg p-4">
-                      <CompletionChart data={[period]} />
-                    </div>
-                  </div>
-
-                  {/* Day-by-day stats as bar charts */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                    {period.dayStats.map((day) => {
-                      const completionPercent = Math.min(100, Math.max(0, day.averageCompletion))
-                      const isExempt = day.isExcluded
-                      
-                      return (
-                        <div
-                          key={day.day}
-                          className="relative p-3 rounded-lg border border-gray-200 bg-white overflow-hidden"
-                          style={{
-                            background: isExempt 
-                              ? `linear-gradient(to right, #6b7280 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
-                              : `linear-gradient(to right, #8b5cf6 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
-                          }}
-                        >
-                          <div className="relative z-10">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-800">
-                                Day {day.day}
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {isExempt && (
-                                  <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
-                                    Exempt
-                                  </Badge>
-                                )}
-                                {day.discrepancy > 10 && (
-                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
-                                    ±{day.discrepancy.toFixed(0)}%
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-700 font-medium">Completion:</span>
-                                <span className="font-bold text-gray-800">
-                                  {day.averageCompletion.toFixed(1)}%
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-700">Avg Time:</span>
-                                <span className="font-medium text-gray-800">
-                                  {day.averageTime.toFixed(0)}m
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-700">Students:</span>
-                                <span className="font-medium text-gray-800">
-                                  {day.qualifiedStudents}/{day.totalStudents}
-                                </span>
-                              </div>
-                              {day.sectionData.length > 1 && (
-                                <div className="pt-1 border-t border-gray-300">
-                                  <div className="text-xs text-gray-600">
-                                    {day.sectionData.map((section, idx) => (
-                                      <div key={section.sectionNumber} className="flex justify-between">
-                                        <span>Sec {section.sectionNumber}:</span>
-                                        <span className="font-medium">{section.completion.toFixed(0)}%</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loading Analytics */}
-        {isLoadingAnalytics && (
-          <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-            <CardContent className="p-6 text-center">
-              <div className="flex items-center justify-center gap-3">
-                <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-purple-700 font-medium">Loading class analytics...</span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Results Card */}
         {studentInfo && (
@@ -796,6 +658,149 @@ export default function StudentLookup() {
                 name: studentInfo.name
               }}
             />
+          </div>
+        )}
+
+        {/* Analytics Section - Only show when student data is displayed */}
+        {studentInfo && analytics.length > 0 && (
+          <div className="mt-8 sm:mt-12">
+            <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-3 text-lg sm:text-xl">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                  </div>
+                  Class Analytics
+                </CardTitle>
+                <CardDescription className="text-sm sm:text-base">
+                  Average completion rates and study times across all sections
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {analytics.map((period) => (
+                  <div key={period.period} className="space-y-4">
+                    {/* Period Header */}
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                      <div>
+                        <h3 className="font-semibold text-purple-900">
+                          {period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </h3>
+                        <p className="text-sm text-purple-700">
+                          Sections {period.sections.join(', ')} • {period.totalStudents} students
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-2 text-sm text-purple-700">
+                          <TrendingUp className="h-4 w-4" />
+                          <span className="font-medium">{period.averageCompletion}% avg completion</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-purple-600">
+                          <Clock className="h-4 w-4" />
+                          <span>{period.averageTime.toFixed(1)} min avg time</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Line Chart */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-purple-800 flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Completion Trends Over Time
+                      </h4>
+                      <div className="w-full h-96 bg-white rounded-lg p-4">
+                        <CompletionChart data={[period]} />
+                      </div>
+                    </div>
+
+                    {/* Day-by-day stats as bar charts */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {period.dayStats.map((day) => {
+                        const completionPercent = Math.min(100, Math.max(0, day.averageCompletion))
+                        const isExempt = day.isExcluded
+                        
+                        return (
+                          <div
+                            key={day.day}
+                            className="relative p-3 rounded-lg border border-gray-200 bg-white overflow-hidden"
+                            style={{
+                              background: isExempt 
+                                ? `linear-gradient(to right, #6b7280 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
+                                : `linear-gradient(to right, #8b5cf6 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
+                            }}
+                          >
+                            <div className="relative z-10">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-800">
+                                  Day {day.day}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {isExempt && (
+                                    <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                      Exempt
+                                    </Badge>
+                                  )}
+                                  {day.discrepancy > 10 && (
+                                    <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+                                      ±{day.discrepancy.toFixed(0)}%
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-gray-700 font-medium">Completion:</span>
+                                  <span className="font-bold text-gray-800">
+                                    {day.averageCompletion.toFixed(1)}%
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-gray-700">Avg Time:</span>
+                                  <span className="font-medium text-gray-800">
+                                    {day.averageTime.toFixed(0)}m
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-gray-700">Students:</span>
+                                  <span className="font-medium text-gray-800">
+                                    {day.qualifiedStudents}/{day.totalStudents}
+                                  </span>
+                                </div>
+                                {day.sectionData.length > 1 && (
+                                  <div className="pt-1 border-t border-gray-300">
+                                    <div className="text-xs text-gray-600">
+                                      {day.sectionData.map((section, idx) => (
+                                        <div key={section.sectionNumber} className="flex justify-between">
+                                          <span>Sec {section.sectionNumber}:</span>
+                                          <span className="font-medium">{section.completion.toFixed(0)}%</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Loading Analytics - Only show when student data is displayed */}
+        {studentInfo && isLoadingAnalytics && (
+          <div className="mt-8 sm:mt-12">
+            <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+              <CardContent className="p-6 text-center">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-purple-700 font-medium">Loading class analytics...</span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
