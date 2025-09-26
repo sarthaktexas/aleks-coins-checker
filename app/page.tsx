@@ -116,6 +116,7 @@ export default function StudentLookup() {
     }
   }
 
+
   const getProgressColor = (percent: number) => {
     if (percent >= 90) return "bg-emerald-500"
     if (percent >= 70) return "bg-amber-500"
@@ -148,8 +149,32 @@ export default function StudentLookup() {
     const daysMissed = workingDaysWithData.length - qualifiedDaysWithData
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
+    const qualificationPercentage = workingDaysWithData.length > 0 ? (qualifiedDaysWithData / workingDaysWithData.length) * 100 : 0
 
-    if (daysMissed <= maxMissableDays - 1) {
+    // Check if student has qualified for extra credit (>=90% days qualified)
+    if (qualificationPercentage >= 90) {
+      const isProgressComplete = (qualifiedDaysWithData / workingDaysWithData.length) * 100 >= 100
+      
+      if (isProgressComplete) {
+        return {
+          status: "qualified",
+          message: "🎆 PERFECT SCORE! Extra Credit Achieved! 🎆",
+          icon: CheckCircle,
+          color: "text-emerald-600",
+          bgColor: "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300",
+          detail: `🎉 INCREDIBLE! You've achieved 100% completion AND qualified for extra credit! You completed ${qualifiedDaysWithData}/${workingDaysWithData.length} days perfectly!`,
+        }
+      } else {
+        return {
+          status: "qualified",
+          message: "🎉 Qualified for Extra Credit!",
+          icon: CheckCircle,
+          color: "text-emerald-600",
+          bgColor: "bg-emerald-50 border-emerald-200",
+          detail: `Congratulations! You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% of days completed (${qualifiedDaysWithData}/${workingDaysWithData.length} qualified days).`,
+        }
+      }
+    } else if (daysMissed <= maxMissableDays - 1) {
       return {
         status: "eligible",
         message: "You're on track for extra credit!",
@@ -425,6 +450,49 @@ export default function StudentLookup() {
                     </Card>
                   </div>
 
+                  {/* Special Achievement Banner */}
+                  {(() => {
+                    const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
+                    const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
+                    const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
+                    const qualificationPercentage = workingDaysWithData.length > 0 ? (qualifiedDaysWithData / workingDaysWithData.length) * 100 : 0
+                    const isProgressComplete = studentInfo.percentComplete >= 100
+                    const isExtraCreditQualified = qualificationPercentage >= 90
+
+                    if (isProgressComplete && isExtraCreditQualified) {
+                      return (
+                        <div className="bg-gradient-to-r from-yellow-50 via-amber-50 to-orange-50 border-2 border-yellow-300 rounded-xl p-4 sm:p-6 text-center">
+                          <div className="text-4xl sm:text-5xl mb-3">🏆</div>
+                          <h3 className="text-xl sm:text-2xl font-bold text-amber-800 mb-2">
+                            PERFECT ACHIEVEMENT!
+                          </h3>
+                          <p className="text-sm sm:text-base text-amber-700 font-medium">
+                            You've achieved 100% progress AND qualified for extra credit!
+                          </p>
+                          <p className="text-xs sm:text-sm text-amber-600 mt-2">
+                            Outstanding dedication to your ALEKS studies! 🎉
+                          </p>
+                        </div>
+                      )
+                    } else if (isExtraCreditQualified) {
+                      return (
+                        <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl p-4 sm:p-6 text-center">
+                          <div className="text-3xl sm:text-4xl mb-3">🎉</div>
+                          <h3 className="text-lg sm:text-xl font-bold text-emerald-800 mb-2">
+                            Extra Credit Qualified!
+                          </h3>
+                          <p className="text-sm sm:text-base text-emerald-700 font-medium">
+                            Congratulations on qualifying for extra credit!
+                          </p>
+                          <p className="text-xs sm:text-sm text-emerald-600 mt-2">
+                            Keep up the excellent work! 🌟
+                          </p>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
+
                   {/* Progress Section - Only prominent if student has good chance */}
                   {studentInfo.percentComplete >= 60 && (
                     <>
@@ -573,6 +641,7 @@ export default function StudentLookup() {
             studentEmail={studentInfo.email}
           />
         )}
+
       </div>
     </div>
   )
