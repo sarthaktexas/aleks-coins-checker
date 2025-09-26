@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2 } from "lucide-react"
+import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail } from "lucide-react"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 
 type ExamPeriodData = {
@@ -585,11 +585,45 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Back to Home */}
-        <div className="text-center mt-8">
-          <Button variant="outline" asChild>
-            <a href="/">← Back to Student Portal</a>
-          </Button>
+        {/* Admin Navigation */}
+        <div className="text-center mt-8 space-y-4">
+          <div className="flex flex-wrap justify-center gap-4">
+            <Button variant="outline" asChild>
+              <a href="/admin/email-students">
+                <Mail className="h-4 w-4 mr-2" />
+                Email Students
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/view-data">
+                <Database className="h-4 w-4 mr-2" />
+                View Data
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/view-overrides">
+                <Calendar className="h-4 w-4 mr-2" />
+                View Overrides
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/manage-periods">
+                <Calendar className="h-4 w-4 mr-2" />
+                Manage Periods
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/dashboard">
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Dashboard
+              </a>
+            </Button>
+          </div>
+          <div>
+            <Button variant="outline" asChild>
+              <a href="/">← Back to Student Portal</a>
+            </Button>
+          </div>
         </div>
       </div>
     </div>

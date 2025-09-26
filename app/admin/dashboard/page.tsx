@@ -16,7 +16,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Lock,
-  Settings
+  Settings,
+  Mail
 } from "lucide-react"
 import Link from "next/link"
 
@@ -194,6 +195,15 @@ export default function AdminDashboard() {
       color: "bg-orange-500 hover:bg-orange-600",
       iconColor: "text-orange-600",
       bgColor: "bg-orange-50",
+    },
+    {
+      title: "Email Students",
+      description: "Send targeted emails to students based on progress and criteria",
+      icon: Mail,
+      href: "/admin/email-students",
+      color: "bg-indigo-500 hover:bg-indigo-600",
+      iconColor: "text-indigo-600",
+      bgColor: "bg-indigo-50",
     },
   ]
 
