@@ -128,15 +128,51 @@ export async function GET(request: NextRequest) {
       `
       overrides = result.rows
     } else {
-      // Get all overrides (for admin view)
+      // Get all overrides (for admin view) with student names
       const result = await sql`
         SELECT 
-          id, student_id, day_number, date,
-          override_type, reason, created_at, updated_at
-        FROM student_day_overrides
-        ORDER BY created_at DESC
+          o.id, o.student_id, o.day_number, o.date,
+          o.override_type, o.reason, o.created_at, o.updated_at,
+          s.data as student_data
+        FROM student_day_overrides o
+        LEFT JOIN student_data s ON true
+        ORDER BY o.created_at DESC
       `
-      overrides = result.rows
+      
+      // Process the results to extract student names
+      const studentNameMap = new Map<string, string>()
+      
+      // Build a map of student IDs to names from all student data
+      for (const row of result.rows) {
+        if (row.student_data) {
+          let studentData
+          if (typeof row.student_data === "string") {
+            studentData = JSON.parse(row.student_data)
+          } else {
+            studentData = row.student_data
+          }
+          
+          // Extract student names from the data
+          Object.keys(studentData).forEach(studentId => {
+            if (studentData[studentId] && studentData[studentId].name) {
+              studentNameMap.set(studentId, studentData[studentId].name)
+            }
+          })
+        }
+      }
+      
+      // Map the overrides with student names
+      overrides = result.rows.map(row => ({
+        id: row.id,
+        student_id: row.student_id,
+        student_name: studentNameMap.get(row.student_id) || 'Unknown Student',
+        day_number: row.day_number,
+        date: row.date,
+        override_type: row.override_type,
+        reason: row.reason,
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      }))
     }
     
     return NextResponse.json({

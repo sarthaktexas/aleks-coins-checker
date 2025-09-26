@@ -19,6 +19,7 @@ type DailyLog = {
 type DayOverride = {
   id: number
   student_id: string
+  student_name?: string
   day_number: number
   date: string
   override_type: "qualified" | "not_qualified"

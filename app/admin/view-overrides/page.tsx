@@ -25,6 +25,7 @@ import Link from "next/link"
 type DayOverride = {
   id: number
   student_id: string
+  student_name: string
   day_number: number
   date: string
   override_type: "qualified" | "not_qualified"
@@ -148,6 +149,7 @@ export default function ViewOverridesPage() {
   const filteredOverrides = overrides.filter((override) => {
     const matchesSearch = searchTerm === "" || 
       override.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      override.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       override.reason?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       override.date.includes(searchTerm)
     
@@ -181,10 +183,11 @@ export default function ViewOverridesPage() {
     }
 
     // Convert overrides to CSV format
-    const headers = ["Student ID", "Day Number", "Date", "Override Type", "Reason", "Created At", "Updated At"]
+    const headers = ["Student Name", "Student ID", "Day Number", "Date", "Override Type", "Reason", "Created At", "Updated At"]
     const csvData = [
       headers.join(","),
       ...filteredOverrides.map((override) => [
+        `"${override.student_name}"`,
         override.student_id,
         override.day_number,
         override.date,
@@ -324,7 +327,7 @@ export default function ViewOverridesPage() {
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-slate-500" />
                 <Input
-                  placeholder="Search by student ID, reason, or date..."
+                  placeholder="Search by student name, ID, reason, or date..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="max-w-md"
@@ -336,7 +339,7 @@ export default function ViewOverridesPage() {
             <div className="space-y-2">
               {/* Header Row */}
               <div className="flex items-center gap-4 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-600">
-                <div className="flex-1">Student ID</div>
+                <div className="flex-1">Student</div>
                 <div className="w-20 text-center">Day</div>
                 <div className="flex-1">Date</div>
                 <div className="w-24 text-center">Status</div>
@@ -347,9 +350,10 @@ export default function ViewOverridesPage() {
               
               {filteredOverrides.map((override) => (
                 <div key={override.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                  {/* Student ID */}
+                  {/* Student Name and ID */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-semibold text-slate-900 truncate">{override.student_id}</p>
+                    <p className="font-semibold text-slate-900 truncate">{override.student_name}</p>
+                    <p className="font-mono text-xs text-slate-500 truncate">{override.student_id}</p>
                   </div>
 
                   {/* Day Number */}
