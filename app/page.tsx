@@ -661,8 +661,8 @@ export default function StudentLookup() {
           </div>
         )}
 
-        {/* Analytics Section - Only show when student data is displayed */}
-        {studentInfo && analytics.length > 0 && (
+        {/* Analytics Section - Show when analytics data is available */}
+        {analytics.length > 0 && (
           <div className="mt-8 sm:mt-12">
             <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
               <CardHeader className="pb-4">
@@ -790,8 +790,8 @@ export default function StudentLookup() {
           </div>
         )}
 
-        {/* Loading Analytics - Only show when student data is displayed */}
-        {studentInfo && isLoadingAnalytics && (
+        {/* Loading Analytics - Show when analytics are loading */}
+        {isLoadingAnalytics && (
           <div className="mt-8 sm:mt-12">
             <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
               <CardContent className="p-6 text-center">
