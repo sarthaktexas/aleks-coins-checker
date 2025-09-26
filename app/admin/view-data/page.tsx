@@ -21,7 +21,9 @@ import {
   ArrowUp,
   ArrowDown,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Copy,
+  CheckCircle
 } from "lucide-react"
 import Link from "next/link"
 
@@ -57,6 +59,9 @@ export default function ViewDataPage() {
   const [error, setError] = useState("")
   const [sortField, setSortField] = useState<keyof StudentData | "studentId" | "status">("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
+  const [isPeriodComplete, setIsPeriodComplete] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [showToast, setShowToast] = useState(false)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -134,13 +139,78 @@ export default function ViewDataPage() {
 
       if (response.ok) {
         setStudentData(result.studentData || {})
+        
+        // Check if period is complete - look for students who have reached the end of the period
+        const studentDataObj = result.studentData || {}
+        const isComplete = Object.values(studentDataObj).some((student: any) => {
+          // A period is complete if any student has data for all working days
+          // This means totalDays (days with data) >= periodDays (total working days)
+          return student.totalDays >= student.periodDays
+        })
+        setIsPeriodComplete(isComplete)
       } else {
         setError(result.error || "Failed to load student data")
+        setIsPeriodComplete(false)
       }
     } catch (error) {
       setError("Failed to load student data")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const exportExtraCreditStudents = async () => {
+    if (!password) {
+      setError("Please enter the admin password")
+      return
+    }
+
+    setIsExporting(true)
+    setError("")
+
+    try {
+      // Get extra credit students (≥90% completion)
+      const extraCreditStudents = Object.entries(studentData)
+        .filter(([_, data]) => data.percentComplete >= 90)
+        .map(([studentId, data]) => ({
+          name: data.name,
+          studentId: studentId,
+          percentComplete: data.percentComplete
+        }))
+        .sort((a, b) => b.percentComplete - a.percentComplete) // Sort by completion percentage
+
+      if (extraCreditStudents.length === 0) {
+        setError("No students qualify for extra credit (≥90% completion)")
+        return
+      }
+
+      // Format the list for email
+      const formattedList = extraCreditStudents
+        .map((student, index) => `${index + 1}. ${student.name} (${student.studentId})`)
+        .join('\n')
+
+      const emailText = `Extra Credit Students - ${selectedPeriod} - Section ${selectedSection}
+
+Students who achieved ≥90% completion:
+
+${formattedList}
+
+Total: ${extraCreditStudents.length} students`
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(emailText)
+      
+      // Show toast notification
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 3000)
+
+      // Clear any previous errors
+      setError("")
+
+    } catch (error) {
+      setError("Failed to copy to clipboard. Please try again.")
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -434,6 +504,27 @@ export default function ViewDataPage() {
                     {Object.keys(studentData).length} students found
                   </CardDescription>
                 </div>
+                
+                {/* Export Button - Only show when period is complete */}
+                {isPeriodComplete && (
+                  <Button
+                    onClick={exportExtraCreditStudents}
+                    disabled={isExporting || !password}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {isExporting ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Exporting...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Copy className="h-4 w-4" />
+                        Export Extra Credit
+                      </div>
+                    )}
+                  </Button>
+                )}
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={handleExport}>
                     <Download className="h-4 w-4 mr-2" />
@@ -486,6 +577,12 @@ export default function ViewDataPage() {
                     className="min-w-0 flex items-center gap-1 hover:text-slate-800 transition-colors"
                   >
                     Status {getSortIcon("status")}
+                  </button>
+                  <button 
+                    onClick={() => handleSort("percentComplete")}
+                    className="min-w-0 flex items-center gap-1 hover:text-slate-800 transition-colors"
+                  >
+                    Extra Credit {getSortIcon("percentComplete")}
                   </button>
                   <button 
                     onClick={() => handleSort("email")}
@@ -550,9 +647,28 @@ export default function ViewDataPage() {
                             : "bg-rose-500 hover:bg-rose-600 text-white"
                         }
                       >
-                        {data.percentComplete >= 90 ? "Excellent" : 
+                        {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
                          data.percentComplete >= 70 ? "Good" : "Needs Work"}
                       </Badge>
+                    </div>
+
+                    {/* Extra Credit Details */}
+                    <div className="min-w-0 text-center">
+                      {data.percentComplete >= 90 ? (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
+                          <div className="text-xs text-emerald-600">
+                            {data.percentComplete.toFixed(1)}% • {Math.round((data.percentComplete / 100) * data.periodDays)}/{data.periodDays} days
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-slate-500">Not Qualified</div>
+                          <div className="text-xs text-slate-400">
+                            {data.percentComplete.toFixed(1)}% • Need 90%
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Email - Collapsible */}
@@ -596,6 +712,18 @@ export default function ViewDataPage() {
               <p className="text-red-800">{error}</p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Toast Notification */}
+        {showToast && (
+          <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
+            <Alert className="border-emerald-200 bg-emerald-50 shadow-lg">
+              <CheckCircle className="h-4 w-4 text-emerald-600" />
+              <AlertDescription className="text-emerald-800 font-medium">
+                Extra credit list copied to clipboard! 🎉
+              </AlertDescription>
+            </Alert>
+          </div>
         )}
 
         {/* Back to Student Portal */}

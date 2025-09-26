@@ -19,6 +19,7 @@ type ExamPeriodData = {
   excludedDates: readonly string[]
 }
 
+
 export default function AdminPage() {
   const [password, setPassword] = useState("")
   const [file, setFile] = useState<File | null>(null)
