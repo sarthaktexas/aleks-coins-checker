@@ -119,9 +119,12 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
 
       // Create day of week labels
       const dayLabels = data[0].dayStats.map(d => {
-        const date = new Date(d.date)
+        // Parse date manually to avoid timezone issues
+        const [year, month, day] = d.date.split('-').map(Number)
+        const date = new Date(year, month - 1, day) // Manual parsing (month is 0-indexed)
         const dayOfWeek = date.getDay() // 0 = Sunday, 1 = Monday, etc.
-        const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] // First letter of each day
+        const dayNames = ['S', 'M', 'T', 'W', 'R', 'F', 'S'] // Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
+        
         return {
           day: d.day,
           dayOfWeek: dayNames[dayOfWeek],
