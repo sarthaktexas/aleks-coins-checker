@@ -48,6 +48,21 @@ type StudentInfo = {
   percentComplete: number
   dailyLog: DailyLog[]
   exemptDayCredits?: number
+  period?: string
+  sectionNumber?: string
+}
+
+type PeriodInfo = {
+  period: string
+  section: string
+  name: string
+  email: string
+  coins: number
+  totalDays: number
+  periodDays: number
+  percentComplete: number
+  dailyLog: DailyLog[]
+  exemptDayCredits?: number
 }
 
 type DayStats = {
@@ -80,6 +95,7 @@ type MergedPeriodStats = {
 export default function StudentLookup() {
   const [studentId, setStudentId] = useState("")
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null)
+  const [studentPeriods, setStudentPeriods] = useState<PeriodInfo[]>([])
   const [error, setError] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [isDemoStudent, setIsDemoStudent] = useState(false)
@@ -144,6 +160,7 @@ export default function StudentLookup() {
 
       if (data.success && data.student) {
         setStudentInfo(data.student)
+        setStudentPeriods(data.periods || [])
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
@@ -648,16 +665,136 @@ export default function StudentLookup() {
               </CardContent>
             </Card>
 
-            {/* Calendar View */}
-            <CalendarView
-              dailyLog={studentInfo.dailyLog}
-              totalDays={studentInfo.totalDays}
-              periodDays={studentInfo.periodDays}
-              studentInfo={{
-                studentId: studentId,
-                name: studentInfo.name
-              }}
-            />
+            {/* Multiple Exam Periods Section */}
+            {studentPeriods.length > 0 && (
+              <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm overflow-hidden">
+                <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                  <CardTitle className="flex items-center gap-3 text-lg sm:text-xl text-purple-900">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                    </div>
+                    Exam Period History
+                  </CardTitle>
+                  <CardDescription className="text-sm sm:text-base">
+                    Your performance across {studentPeriods.length} exam period{studentPeriods.length !== 1 ? 's' : ''}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 space-y-6">
+                  {studentPeriods.map((periodData, index) => {
+                    const isLatest = index === 0
+                    return (
+                      <div key={`${periodData.period}-${periodData.section}`} className="space-y-4">
+                        {/* Period Header */}
+                        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                          <div>
+                            <h3 className="font-semibold text-purple-900 flex items-center gap-2">
+                              {periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              {isLatest && (
+                                <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Latest</span>
+                              )}
+                            </h3>
+                            <p className="text-sm text-purple-700">
+                              Section {periodData.section}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-5 w-5 text-yellow-500" />
+                              <span className="text-2xl font-bold text-purple-900">{periodData.coins}</span>
+                            </div>
+                            <p className="text-sm text-purple-600">{periodData.percentComplete}% complete</p>
+                          </div>
+                        </div>
+
+                        {/* Period Stats */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                            <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                              <Target className="h-4 w-4" />
+                              Progress
+                            </div>
+                            <p className="text-xl font-bold text-blue-900 mt-1">
+                              {periodData.totalDays}/{periodData.periodDays}
+                            </p>
+                            <p className="text-xs text-blue-600">days completed</p>
+                          </div>
+
+                          <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                            <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+                              <CheckCircle className="h-4 w-4" />
+                              Qualified
+                            </div>
+                            <p className="text-xl font-bold text-green-900 mt-1">
+                              {periodData.dailyLog.filter(d => d.qualified && !d.isExcluded).length}
+                            </p>
+                            <p className="text-xs text-green-600">working days</p>
+                          </div>
+
+                          {periodData.exemptDayCredits !== undefined && periodData.exemptDayCredits > 0 && (
+                            <div className="bg-purple-50 p-3 rounded-lg border border-purple-100">
+                              <div className="flex items-center gap-2 text-sm font-medium text-purple-700">
+                                <Gift className="h-4 w-4" />
+                                Exempt Bonus
+                              </div>
+                              <p className="text-xl font-bold text-purple-900 mt-1">
+                                {periodData.exemptDayCredits}
+                              </p>
+                              <p className="text-xs text-purple-600">extra coins</p>
+                            </div>
+                          )}
+
+                          <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
+                            <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
+                              <Clock className="h-4 w-4" />
+                              Avg Time
+                            </div>
+                            <p className="text-xl font-bold text-amber-900 mt-1">
+                              {Math.round(periodData.dailyLog.reduce((sum, d) => sum + d.minutes, 0) / periodData.dailyLog.filter(d => d.minutes > 0).length || 0)}
+                            </p>
+                            <p className="text-xs text-amber-600">minutes/day</p>
+                          </div>
+                        </div>
+
+                        {/* Calendar View for this period */}
+                        <div className="mt-4">
+                          <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            Daily Progress
+                          </h4>
+                          <CalendarView
+                            dailyLog={periodData.dailyLog}
+                            totalDays={periodData.totalDays}
+                            periodDays={periodData.periodDays}
+                            studentInfo={{
+                              studentId: studentId,
+                              name: periodData.name
+                            }}
+                          />
+                        </div>
+
+                        {/* Divider between periods */}
+                        {index < studentPeriods.length - 1 && (
+                          <hr className="my-6 border-purple-200" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Calendar View - Show only if no multiple periods */}
+            {studentPeriods.length === 0 && (
+              <CalendarView
+                dailyLog={studentInfo.dailyLog}
+                totalDays={studentInfo.totalDays}
+                periodDays={studentInfo.periodDays}
+                studentInfo={{
+                  studentId: studentId,
+                  name: studentInfo.name
+                }}
+              />
+            )}
           </div>
         )}
 

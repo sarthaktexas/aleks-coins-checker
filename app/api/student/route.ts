@@ -186,7 +186,7 @@ function generateDemoData(): any {
   }
 }
 
-async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, periodInfo: any }> {
+async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, periodInfo: any, studentPeriods?: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> }> {
   try {
     // Check if database URL is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -213,14 +213,17 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
     }
 
     console.log(`Found ${result.rows.length} data uploads, processing from newest to oldest`)
-    console.log(`Data replacement strategy: Replace existing data for same exam period, add new data for new periods`)
+    console.log(`Data replacement strategy: Keep all exam periods per student, replace data for same period/section`)
     
     // Log all uploads to see what periods we have
     result.rows.forEach((row, index) => {
       console.log(`Upload ${index + 1}: period=${row.period}, section=${row.section_number}, uploaded_at=${row.uploaded_at}`)
     })
 
-    // Load student data, replacing data for the same exam period
+    // Track multiple periods per student
+    const studentPeriods = new Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>>()
+    
+    // Load student data - keep most recent upload, but track all periods per student
     let studentData: StudentData = {}
     let latestPeriodInfo: any = null
     const processedPeriods = new Set<string>()
@@ -241,9 +244,23 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
       // Only process this data if we haven't seen this period/section combination yet
       // Since we're processing newest first, this ensures we get the latest data for each period
       if (!processedPeriods.has(periodKey)) {
-        // Add all students from this period/section
+        // Add all students from this period/section to the period tracking
         Object.keys(rowStudentData).forEach(studentId => {
-          studentData[studentId] = rowStudentData[studentId]
+          if (!studentPeriods.has(studentId)) {
+            studentPeriods.set(studentId, [])
+          }
+          
+          studentPeriods.get(studentId)!.push({
+            period: row.period,
+            section: row.section_number || 'default',
+            data: rowStudentData[studentId],
+            uploadedAt: row.uploaded_at
+          })
+          
+          // For backward compatibility, keep the latest upload in the main studentData object
+          if (!studentData[studentId]) {
+            studentData[studentId] = rowStudentData[studentId]
+          }
         })
         
         processedPeriods.add(periodKey)
@@ -264,10 +281,11 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
     console.log(`Processed ${processedPeriods.size} unique period/section combinations: ${Array.from(processedPeriods).join(', ')}`)
 
 
-    // Return student data with period info
+    // Return student data with period info and all periods per student
     return { 
       studentData,
-      periodInfo: latestPeriodInfo
+      periodInfo: latestPeriodInfo,
+      studentPeriods
     }
   } catch (error) {
     console.error("Error loading student data from database:", error)
@@ -378,11 +396,13 @@ export async function POST(request: NextRequest) {
     // Load student data from database
     let studentData: StudentData
     let periodInfo: any
+    let studentPeriods: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> | undefined
 
     try {
       const result = await loadStudentDataFromDB()
       studentData = result.studentData
       periodInfo = result.periodInfo
+      studentPeriods = result.studentPeriods
       
       // Apply overrides to student data
       studentData = await applyOverridesToStudentData(studentData)
@@ -434,9 +454,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get all periods for this student
+    const allPeriods = studentPeriods?.get(normalizedId) || []
+    
+    // Sort periods by upload date (most recent first)
+    allPeriods.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+    
+    // Format periods data with overrides applied
+    const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
+      // Apply overrides to this period's data
+      const tempStudentData = { [normalizedId]: periodData.data }
+      const overriddenData = await applyOverridesToStudentData(tempStudentData)
+      const studentWithOverrides = overriddenData[normalizedId]
+      
+      return {
+        period: periodData.period,
+        section: periodData.section,
+        name: studentWithOverrides.name,
+        email: studentWithOverrides.email,
+        coins: studentWithOverrides.coins,
+        totalDays: studentWithOverrides.totalDays,
+        periodDays: studentWithOverrides.periodDays,
+        percentComplete: studentWithOverrides.percentComplete,
+        dailyLog: studentWithOverrides.dailyLog,
+        exemptDayCredits: studentWithOverrides.exemptDayCredits
+      }
+    }))
 
-
-    // Return the student's data including daily log and period info
+    // Return the student's data including all periods
     return NextResponse.json({
       success: true,
       student: {
@@ -448,8 +493,10 @@ export async function POST(request: NextRequest) {
         percentComplete: student.percentComplete,
         dailyLog: student.dailyLog,
         period: periodInfo?.period || 'Unknown',
-        sectionNumber: periodInfo?.section_number || 'default'
+        sectionNumber: periodInfo?.section_number || 'default',
+        exemptDayCredits: student.exemptDayCredits
       },
+      periods: periodsData
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)

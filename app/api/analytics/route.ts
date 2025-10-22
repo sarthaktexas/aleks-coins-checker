@@ -215,26 +215,33 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Group uploads by period
-    const periodGroups = new Map<string, any[]>()
+    // Group uploads by period and track the latest upload date for each period
+    const periodGroups = new Map<string, { uploads: any[], latestUploadDate: Date }>()
     for (const [key, upload] of latestUploads) {
       if (period && upload.period !== period) {
         continue
       }
       
       if (!periodGroups.has(upload.period)) {
-        periodGroups.set(upload.period, [])
+        periodGroups.set(upload.period, { uploads: [], latestUploadDate: new Date(upload.uploaded_at) })
       }
-      periodGroups.get(upload.period)!.push(upload)
+      const periodGroup = periodGroups.get(upload.period)!
+      periodGroup.uploads.push(upload)
+      
+      // Track the latest upload date for this period
+      const uploadDate = new Date(upload.uploaded_at)
+      if (uploadDate > periodGroup.latestUploadDate) {
+        periodGroup.latestUploadDate = uploadDate
+      }
     }
 
-    const mergedPeriods: MergedPeriodStats[] = []
+    const mergedPeriods: (MergedPeriodStats & { latestUploadDate: Date })[] = []
 
     // Process each period (merging all sections)
-    for (const [periodName, uploads] of periodGroups) {
-      const allStudents: any[] = []
+    for (const [periodName, periodGroup] of periodGroups) {
+      const uploads = periodGroup.uploads
       const sectionNames: string[] = []
-      let totalStudents = 0
+      const uniqueStudents = new Map<string, any>() // studentId -> student data with section
       let totalCompletion = 0
       let totalTime = 0
       let totalDaysWithTime = 0
@@ -251,26 +258,34 @@ export async function GET(request: NextRequest) {
         // Apply overrides to match what students see
         studentData = await applyOverridesToStudentData(studentData)
 
-        const students = Object.values(studentData)
-        if (students.length === 0) continue
+        const studentIds = Object.keys(studentData)
+        if (studentIds.length === 0) continue
 
         sectionNames.push(upload.section_number)
-        allStudents.push(...students.map(s => ({ ...s, sectionNumber: upload.section_number })))
-        totalStudents += students.length
-        totalCompletion += students.reduce((sum, student) => sum + student.percentComplete, 0)
         
-        // Calculate time for this section
-        students.forEach(student => {
-          student.dailyLog.forEach(day => {
-            if (day.minutes > 0) {
-              totalTime += day.minutes
-              totalDaysWithTime++
-            }
-          })
+        // Track unique students - if a student is in multiple sections, keep the first one we encounter
+        studentIds.forEach(studentId => {
+          if (!uniqueStudents.has(studentId)) {
+            const student = studentData[studentId]
+            uniqueStudents.set(studentId, { ...student, studentId, sectionNumber: upload.section_number })
+            
+            totalCompletion += student.percentComplete
+            
+            // Calculate time for this student
+            student.dailyLog.forEach(day => {
+              if (day.minutes > 0) {
+                totalTime += day.minutes
+                totalDaysWithTime++
+              }
+            })
+          }
         })
       }
 
+      const allStudents = Array.from(uniqueStudents.values())
       if (allStudents.length === 0) continue
+      
+      const totalStudents = uniqueStudents.size
 
       const averageCompletion = totalStudents > 0 ? totalCompletion / totalStudents : 0
       const averageTime = totalDaysWithTime > 0 ? totalTime / totalDaysWithTime : 0
@@ -394,23 +409,27 @@ export async function GET(request: NextRequest) {
         totalStudents,
         averageCompletion: Math.round(averageCompletion * 10) / 10,
         averageTime: Math.round(averageTime * 10) / 10,
-        dayStats
+        dayStats,
+        latestUploadDate: periodGroup.latestUploadDate
       })
     }
 
-    // Sort periods by name
-    mergedPeriods.sort((a, b) => a.period.localeCompare(b.period))
+    // Sort periods by upload date (most recent first)
+    mergedPeriods.sort((a, b) => b.latestUploadDate.getTime() - a.latestUploadDate.getTime())
+
+    // Remove latestUploadDate before caching/returning (it was only needed for sorting)
+    const cleanedPeriods: MergedPeriodStats[] = mergedPeriods.map(({ latestUploadDate, ...period }) => period)
 
     // Update cache
     analyticsCache = {
-      data: mergedPeriods,
+      data: cleanedPeriods,
       timestamp: Date.now()
     }
 
     // Filter by period if requested
-    let filteredPeriods = mergedPeriods
+    let filteredPeriods = cleanedPeriods
     if (period) {
-      filteredPeriods = mergedPeriods.filter(p => p.period === period)
+      filteredPeriods = cleanedPeriods.filter(p => p.period === period)
     }
 
     return NextResponse.json({

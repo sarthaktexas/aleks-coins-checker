@@ -57,11 +57,8 @@ export default function AdminDashboard() {
       if (response.ok) {
         const uploadRecords = result.uploadRecords || []
         
-        // Calculate total students from latest uploads only (no duplicates)
-        let totalStudents = 0
-        uploadRecords.forEach((record: any) => {
-          totalStudents += record.student_count || 0
-        })
+        // Use the unique student count provided by the API
+        const totalStudents = result.uniqueStudentCount || 0
 
         // Count unique periods
         const uniquePeriods = new Set(uploadRecords.map((record: any) => record.period))

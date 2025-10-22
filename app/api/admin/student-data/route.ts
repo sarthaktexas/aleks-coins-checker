@@ -201,6 +201,7 @@ export async function GET(request: NextRequest) {
 
     // Group uploads by period and section, keeping only the latest upload for each combination
     const latestUploads = new Map<string, any>()
+    const uniqueStudentIds = new Set<string>()
     
     uploadRecords.rows.forEach(row => {
       const key = `${row.period}-${row.section_number || 'default'}`
@@ -218,11 +219,27 @@ export async function GET(request: NextRequest) {
         })
       }
     })
+    
+    // Calculate unique student count across ALL latest uploads
+    for (const upload of latestUploads.values()) {
+      // Find the row data for this upload
+      const rowData = uploadRecords.rows.find(row => 
+        row.period === upload.period && 
+        (row.section_number || 'default') === upload.section_number
+      )
+      if (rowData) {
+        const data = typeof rowData.data === "string" ? JSON.parse(rowData.data) : rowData.data || {}
+        Object.keys(data).forEach(studentId => {
+          uniqueStudentIds.add(studentId)
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,
       uploadRecords: Array.from(latestUploads.values()),
-      studentData
+      studentData,
+      uniqueStudentCount: uniqueStudentIds.size
     })
   } catch (error) {
     console.error("Error fetching student data:", error)
