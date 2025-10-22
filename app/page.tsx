@@ -497,7 +497,9 @@ export default function StudentLookup() {
                         </div>
 
                         {(() => {
-                          const redemptionInfo = getRedemptionInfo(studentInfo.coins)
+                          // Use total coins across all periods for redemption calculations
+                          const coinsForRedemption = totalCoinsAcrossPeriods || studentInfo.totalCoins || studentInfo.coins
+                          const redemptionInfo = getRedemptionInfo(coinsForRedemption)
 
                           return (
                             <div className="space-y-4">
