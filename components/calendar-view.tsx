@@ -35,6 +35,9 @@ type CalendarViewProps = {
   studentInfo?: {
     studentId: string
     name: string
+    email?: string
+    period?: string
+    sectionNumber?: string
   }
 }
 
@@ -174,9 +177,8 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     // Regular days with data (no overrides)
     if (isQualified) {
       const baseColor = "bg-green-100 border-green-300 text-green-800"
-      const hoverColor = "hover:bg-green-200"
-      const clickable = studentInfo ? "cursor-pointer" : "cursor-default"
-      return `${baseColor} ${hoverColor} ${clickable}`
+      // Already qualified days are not clickable
+      return `${baseColor} cursor-default`
     } else {
       const baseColor = "bg-red-100 border-red-300 text-red-800"
       const hoverColor = "hover:bg-red-200"
@@ -232,6 +234,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
     const override = overrideMap.get(day.day)
     const isQualified = override ? override.override_type === "qualified" : day.qualified
+    
+    // Don't allow clicking on already qualified days (unless they have an override)
+    if (isQualified && !override) {
+      return
+    }
     
     setOverrideModal({
       isOpen: true,

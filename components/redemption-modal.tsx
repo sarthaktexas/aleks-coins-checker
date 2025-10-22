@@ -24,37 +24,67 @@ type RedemptionModalProps = {
   redemptionType: "assignment" | "quiz"
   studentName: string
   studentEmail: string
+  studentId?: string
+  period?: string
+  sectionNumber?: string
 }
 
-export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, studentEmail }: RedemptionModalProps) {
+export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, studentEmail, studentId, period, sectionNumber }: RedemptionModalProps) {
   const [formData, setFormData] = useState({
     assignmentName: "",
-    courseSection: "",
     additionalNotes: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError("")
 
-    // Simulate submission delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Submit the request to the API
+      const requestType = redemptionType === "assignment" ? "assignment_replacement" : "quiz_replacement"
+      const requestDetails = `${redemptionType === "assignment" ? "Assignment/Video" : "Quiz"}: ${formData.assignmentName}${formData.additionalNotes ? `\nNotes: ${formData.additionalNotes}` : ""}`
 
-    setIsSubmitted(true)
-    setIsSubmitting(false)
-
-    // Reset form after a delay
-    setTimeout(() => {
-      setIsSubmitted(false)
-      setFormData({
-        assignmentName: "",
-        courseSection: "",
-        additionalNotes: "",
+      const response = await fetch("/api/student/requests", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          studentId: studentId || "",
+          studentName,
+          studentEmail,
+          period: period || "Unknown",
+          sectionNumber: sectionNumber || "default",
+          requestType,
+          requestDetails,
+        }),
       })
-      onClose()
-    }, 2000)
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setIsSubmitted(true)
+        // Reset form after a delay
+        setTimeout(() => {
+          setIsSubmitted(false)
+          setFormData({
+            assignmentName: "",
+            additionalNotes: "",
+          })
+          onClose()
+        }, 2000)
+      } else {
+        setError(data.error || "Failed to submit request")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const redemptionInfo = {
@@ -85,8 +115,7 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Redemption Submitted!</h3>
             <p className="text-sm text-gray-600">
-              Your redemption request has been sent to your instructor. You should receive confirmation via email
-              shortly.
+              Your redemption request has been sent to your instructor for processing.
             </p>
           </div>
         </DialogContent>
@@ -148,20 +177,6 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
             </div>
 
             <div>
-              <Label htmlFor="courseSection" className="text-sm font-medium">
-                Course Section *
-              </Label>
-              <Input
-                id="courseSection"
-                placeholder="e.g., 003, 006"
-                value={formData.courseSection}
-                onChange={(e) => setFormData({ ...formData, courseSection: e.target.value })}
-                required
-                className="mt-1"
-              />
-            </div>
-
-            <div>
               <Label htmlFor="additionalNotes" className="text-sm font-medium">
                 Additional Notes (Optional)
               </Label>
@@ -174,6 +189,12 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
               />
             </div>
           </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-800 text-sm">{error}</p>
+            </div>
+          )}
 
           <DialogFooter className="gap-3">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>

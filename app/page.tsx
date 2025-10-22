@@ -43,6 +43,8 @@ type StudentInfo = {
   name: string
   email: string
   coins: number
+  coinAdjustment?: number
+  totalCoins?: number
   totalDays: number
   periodDays: number
   percentComplete: number
@@ -58,11 +60,23 @@ type PeriodInfo = {
   name: string
   email: string
   coins: number
+  coinAdjustment?: number
+  totalCoins?: number
   totalDays: number
   periodDays: number
   percentComplete: number
   dailyLog: DailyLog[]
   exemptDayCredits?: number
+}
+
+type CoinAdjustment = {
+  id: number
+  period: string
+  section_number: string
+  adjustment_amount: number
+  reason: string
+  created_at: string
+  created_by: string
 }
 
 type DayStats = {
@@ -96,6 +110,8 @@ export default function StudentLookup() {
   const [studentId, setStudentId] = useState("")
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null)
   const [studentPeriods, setStudentPeriods] = useState<PeriodInfo[]>([])
+  const [coinAdjustments, setCoinAdjustments] = useState<CoinAdjustment[]>([])
+  const [totalCoinsAcrossPeriods, setTotalCoinsAcrossPeriods] = useState(0)
   const [error, setError] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [isDemoStudent, setIsDemoStudent] = useState(false)
@@ -161,6 +177,8 @@ export default function StudentLookup() {
       if (data.success && data.student) {
         setStudentInfo(data.student)
         setStudentPeriods(data.periods || [])
+        setCoinAdjustments(data.coinAdjustments || [])
+        setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins)
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
@@ -230,26 +248,26 @@ export default function StudentLookup() {
       if (isProgressComplete) {
         return {
           status: "qualified",
-          message: "🎆 PERFECT SCORE! Extra Credit Achieved! 🎆",
+          message: "Extra credit qualified",
           icon: CheckCircle,
           color: "text-emerald-600",
           bgColor: "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300",
-          detail: `🎉 INCREDIBLE! You've achieved 100% completion AND qualified for extra credit! You completed ${qualifiedDaysWithData}/${workingDaysWithData.length} days perfectly!`,
+          detail: `You've completed ${qualifiedDaysWithData}/${workingDaysWithData.length} days (100% completion) and qualified for extra credit.`,
         }
       } else {
         return {
           status: "qualified",
-          message: "🎉 Qualified for Extra Credit!",
+          message: "Extra credit qualified",
           icon: CheckCircle,
           color: "text-emerald-600",
           bgColor: "bg-emerald-50 border-emerald-200",
-          detail: `Congratulations! You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% of days completed (${qualifiedDaysWithData}/${workingDaysWithData.length} qualified days).`,
+          detail: `You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% completion (${qualifiedDaysWithData}/${workingDaysWithData.length} qualified days).`,
         }
       }
     } else if (daysMissed <= maxMissableDays - 1) {
       return {
         status: "eligible",
-        message: "You're on track for extra credit!",
+        message: "On track for extra credit",
         icon: CheckCircle,
         color: "text-emerald-600",
         bgColor: "bg-emerald-50 border-emerald-200",
@@ -258,7 +276,7 @@ export default function StudentLookup() {
     } else if (daysMissed === maxMissableDays) {
       return {
         status: "warning",
-        message: "You're at your limit for extra credit!",
+        message: "At the limit for extra credit",
         icon: AlertTriangle,
         color: "text-amber-600",
         bgColor: "bg-amber-50 border-amber-200",
@@ -267,7 +285,7 @@ export default function StudentLookup() {
     } else if (daysMissed === maxMissableDays + 1) {
       return {
         status: "recovery",
-        message: "You can still recover extra credit!",
+        message: "Can still recover extra credit",
         icon: Clock,
         color: "text-amber-600",
         bgColor: "bg-amber-50 border-amber-200",
@@ -413,6 +431,29 @@ export default function StudentLookup() {
                     </div>
                   </div>
 
+                  {/* Total Coins Across All Periods */}
+                  {studentPeriods.length > 0 && (
+                    <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200 shadow-lg">
+                      <CardContent className="p-6 text-center">
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                          <div className="p-2 sm:p-3 bg-purple-100 rounded-full">
+                            <Coins className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
+                          </div>
+                          <span className="text-lg sm:text-xl font-semibold text-purple-800">Total Coins (All Periods)</span>
+                        </div>
+                        <p className="text-4xl sm:text-5xl font-bold text-purple-900 mb-2">{totalCoinsAcrossPeriods}</p>
+                        <p className="text-xs sm:text-sm text-purple-700 font-medium">Accumulated across {studentPeriods.length} exam period{studentPeriods.length !== 1 ? 's' : ''}</p>
+                        {coinAdjustments.length > 0 && (
+                          <div className="mt-3 p-2 bg-purple-100 rounded-lg border border-purple-200">
+                            <p className="text-xs text-purple-800 font-medium">
+                              ⭐ Includes {coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0)} adjustment coin{coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0) !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Coins and Redemption Section */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Coins Card */}
@@ -422,14 +463,23 @@ export default function StudentLookup() {
                           <div className="p-2 sm:p-3 bg-amber-100 rounded-full">
                             <Coins className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600" />
                           </div>
-                          <span className="text-lg sm:text-xl font-semibold text-amber-800">Coins Earned</span>
+                          <span className="text-lg sm:text-xl font-semibold text-amber-800">Current Period Coins</span>
                         </div>
-                        <p className="text-4xl sm:text-5xl font-bold text-amber-900 mb-2">{studentInfo.coins}</p>
-                        <p className="text-xs sm:text-sm text-amber-700 font-medium">Total coins collected</p>
-                        {studentInfo.exemptDayCredits && studentInfo.exemptDayCredits > 0 && (
+                        <p className="text-4xl sm:text-5xl font-bold text-amber-900 mb-2">{studentInfo.totalCoins !== undefined ? studentInfo.totalCoins : studentInfo.coins}</p>
+                        <p className="text-xs sm:text-sm text-amber-700 font-medium">
+                          {studentInfo.period?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • Section {studentInfo.sectionNumber}
+                        </p>
+                        {studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0 && (
                           <div className="mt-3 p-2 bg-amber-100 rounded-lg border border-amber-200">
                             <p className="text-xs text-amber-800 font-medium">
                               🎁 {studentInfo.exemptDayCredits} extra credit coin{studentInfo.exemptDayCredits !== 1 ? 's' : ''} from exempt days
+                            </p>
+                          </div>
+                        )}
+                        {studentInfo.coinAdjustment !== undefined && studentInfo.coinAdjustment !== 0 && (
+                          <div className="mt-3 p-2 bg-blue-100 rounded-lg border border-blue-200">
+                            <p className="text-xs text-blue-800 font-medium">
+                              ⭐ {studentInfo.coinAdjustment > 0 ? '+' : ''}{studentInfo.coinAdjustment} adjustment coin{Math.abs(studentInfo.coinAdjustment) !== 1 ? 's' : ''}
                             </p>
                           </div>
                         )}
@@ -523,7 +573,7 @@ export default function StudentLookup() {
                     </Card>
                   </div>
 
-                  {/* Special Achievement Banner */}
+                  {/* Achievement Banner - Only show at end of period */}
                   {(() => {
                     const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
                     const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
@@ -531,7 +581,14 @@ export default function StudentLookup() {
                     const qualificationPercentage = workingDaysWithData.length > 0 ? (qualifiedDaysWithData / workingDaysWithData.length) * 100 : 0
                     const isProgressComplete = studentInfo.percentComplete >= 100
                     const isExtraCreditQualified = qualificationPercentage >= 90
+                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
 
+                    // Only show achievement banners at END of period
+                    if (!isPeriodComplete) {
+                      return null
+                    }
+
+                    // End of period with perfect achievement - Yellow card
                     if (isProgressComplete && isExtraCreditQualified) {
                       return (
                         <div className="bg-gradient-to-r from-yellow-50 via-amber-50 to-orange-50 border-2 border-yellow-300 rounded-xl p-4 sm:p-6 text-center">
@@ -547,7 +604,10 @@ export default function StudentLookup() {
                           </p>
                         </div>
                       )
-                    } else if (isExtraCreditQualified) {
+                    }
+                    
+                    // End of period with extra credit - Green card
+                    if (isExtraCreditQualified) {
                       return (
                         <div className="bg-gradient-to-r from-emerald-50 to-green-50 border-2 border-emerald-300 rounded-xl p-4 sm:p-6 text-center">
                           <div className="text-3xl sm:text-4xl mb-3">🎉</div>
@@ -558,101 +618,126 @@ export default function StudentLookup() {
                             Congratulations on qualifying for extra credit!
                           </p>
                           <p className="text-xs sm:text-sm text-emerald-600 mt-2">
-                            Keep up the excellent work! 🌟
+                            Excellent work! 🌟
                           </p>
                         </div>
                       )
                     }
-                    return null
+                    
+                    // End of period but didn't qualify
+                    return (
+                      <div className="bg-gradient-to-r from-slate-50 to-gray-50 border border-slate-200 rounded-xl p-4 sm:p-6 text-center">
+                        <div className="text-2xl mb-3">📊</div>
+                        <h3 className="text-lg font-bold text-slate-800 mb-2">
+                          Period Complete
+                        </h3>
+                        <p className="text-sm text-slate-700 font-medium">
+                          You completed {qualificationPercentage.toFixed(1)}% of the period.
+                        </p>
+                      </div>
+                    )
                   })()}
 
-                  {/* Progress Section - Only prominent if student has good chance */}
-                  {studentInfo.percentComplete >= 60 && (
-                    <>
-                      {/* Extra Credit Status */}
-                      {(() => {
-                        const extraCreditStatus = calculateExtraCreditStatus(
-                          studentInfo.dailyLog,
-                          studentInfo.totalDays,
-                          studentInfo.periodDays,
-                        )
-                        const IconComponent = extraCreditStatus.icon
+                  {/* Extra Credit Status and Progress - Only show during period */}
+                  {(() => {
+                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
+                    
+                    // Hide these sections at end of period (achievement banner shows instead)
+                    if (isPeriodComplete || studentInfo.percentComplete < 60) {
+                      return null
+                    }
 
-                        return (
-                          <div className={`p-3 sm:p-4 rounded-xl border ${extraCreditStatus.bgColor}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${extraCreditStatus.color}`} />
-                              <span className={`text-sm sm:text-base font-semibold ${extraCreditStatus.color}`}>
-                                Extra Credit Status
-                              </span>
-                            </div>
-                            <p className={`text-xs sm:text-sm font-medium ${extraCreditStatus.color} mb-1`}>
-                              {extraCreditStatus.message}
-                            </p>
-                            <p className={`text-xs sm:text-sm ${extraCreditStatus.color}`}>
-                              {extraCreditStatus.detail}
-                            </p>
-                          </div>
-                        )
-                      })()}
+                    const extraCreditStatus = calculateExtraCreditStatus(
+                      studentInfo.dailyLog,
+                      studentInfo.totalDays,
+                      studentInfo.periodDays,
+                    )
+                    const IconComponent = extraCreditStatus.icon
 
-                      {/* Progress Section */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm sm:text-base font-semibold text-slate-700">Period Progress</span>
-                          <Badge
-                            className={`${getProgressBadgeColor(studentInfo.percentComplete)} text-white border-0 px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium`}
-                          >
-                            {getProgressBadge(studentInfo.percentComplete)}
-                          </Badge>
-                        </div>
-
-                        <div className="relative">
-                          <div className="w-full bg-slate-200 rounded-full h-3 sm:h-4 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-700 ease-out ${getProgressColor(studentInfo.percentComplete)}`}
-                              style={{ width: `${studentInfo.percentComplete}%` }}
-                            />
-                          </div>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-xs font-bold text-white drop-shadow-sm">
-                              {studentInfo.percentComplete}%
+                    return (
+                      <>
+                        {/* Extra Credit Status */}
+                        <div className={`p-3 sm:p-4 rounded-xl border ${extraCreditStatus.bgColor}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${extraCreditStatus.color}`} />
+                            <span className={`text-sm sm:text-base font-semibold ${extraCreditStatus.color}`}>
+                              Extra Credit Status
                             </span>
                           </div>
+                          <p className={`text-xs sm:text-sm font-medium ${extraCreditStatus.color} mb-1`}>
+                            {extraCreditStatus.message}
+                          </p>
+                          <p className={`text-xs sm:text-sm ${extraCreditStatus.color}`}>
+                            {extraCreditStatus.detail}
+                          </p>
                         </div>
 
-                        <p className="text-xs sm:text-sm text-slate-600 text-center font-medium">
-                          {studentInfo.percentComplete}% of days completed in extra credit period
+                        {/* Progress Section */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm sm:text-base font-semibold text-slate-700">Period Progress</span>
+                            <Badge
+                              className={`${getProgressBadgeColor(studentInfo.percentComplete)} text-white border-0 px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium`}
+                            >
+                              {getProgressBadge(studentInfo.percentComplete)}
+                            </Badge>
+                          </div>
+
+                          <div className="relative">
+                            <div className="w-full bg-slate-200 rounded-full h-3 sm:h-4 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-700 ease-out ${getProgressColor(studentInfo.percentComplete)}`}
+                                style={{ width: `${studentInfo.percentComplete}%` }}
+                              />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-xs font-bold text-white drop-shadow-sm">
+                                {studentInfo.percentComplete}%
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-xs sm:text-sm text-slate-600 text-center font-medium">
+                            {studentInfo.percentComplete}% of days completed in extra credit period
+                          </p>
+                        </div>
+                      </>
+                    )
+                  })()}
+
+                  {/* Compact progress for low performers - Only during period */}
+                  {(() => {
+                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
+                    
+                    // Hide at end of period
+                    if (isPeriodComplete || studentInfo.percentComplete >= 60) {
+                      return null
+                    }
+
+                    return (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-slate-700">Period Progress</span>
+                          <span className="text-sm font-semibold text-slate-900">{studentInfo.percentComplete}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                          <div
+                            className={`h-full rounded-full ${getProgressColor(studentInfo.percentComplete)}`}
+                            style={{ width: `${studentInfo.percentComplete}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-600 mt-2">
+                          Focus on earning coins! Extra credit requires{" "}
+                          {Math.round(
+                            (calculateMaxMissableDays(studentInfo.periodDays).requiredQualifiedDays /
+                              studentInfo.periodDays) *
+                              100,
+                          )}
+                          %+ completion.
                         </p>
-
                       </div>
-                    </>
-                  )}
-
-                  {/* Compact progress for low performers */}
-                  {studentInfo.percentComplete < 60 && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-700">Period Progress</span>
-                        <span className="text-sm font-semibold text-slate-900">{studentInfo.percentComplete}%</span>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-2">
-                        <div
-                          className={`h-full rounded-full ${getProgressColor(studentInfo.percentComplete)}`}
-                          style={{ width: `${studentInfo.percentComplete}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-600 mt-2">
-                        Focus on earning coins! Extra credit requires{" "}
-                        {Math.round(
-                          (calculateMaxMissableDays(studentInfo.periodDays).requiredQualifiedDays /
-                            studentInfo.periodDays) *
-                            100,
-                        )}
-                        %+ completion.
-                      </p>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Footer */}
                   <div className="text-center pt-4 sm:pt-6 border-t border-slate-200">
@@ -700,9 +785,14 @@ export default function StudentLookup() {
                           <div className="text-right">
                             <div className="flex items-center gap-2">
                               <Coins className="h-5 w-5 text-yellow-500" />
-                              <span className="text-2xl font-bold text-purple-900">{periodData.coins}</span>
+                              <span className="text-2xl font-bold text-purple-900">{periodData.totalCoins || periodData.coins}</span>
                             </div>
                             <p className="text-sm text-purple-600">{periodData.percentComplete}% complete</p>
+                            {periodData.coinAdjustment !== undefined && periodData.coinAdjustment !== 0 && (
+                              <p className="text-xs text-blue-600 mt-1">
+                                {periodData.coinAdjustment > 0 ? '+' : ''}{periodData.coinAdjustment} adjustment
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -767,7 +857,10 @@ export default function StudentLookup() {
                             periodDays={periodData.periodDays}
                             studentInfo={{
                               studentId: studentId,
-                              name: periodData.name
+                              name: periodData.name,
+                              email: periodData.email,
+                              period: periodData.period,
+                              sectionNumber: periodData.section
                             }}
                           />
                         </div>
@@ -791,7 +884,10 @@ export default function StudentLookup() {
                 periodDays={studentInfo.periodDays}
                 studentInfo={{
                   studentId: studentId,
-                  name: studentInfo.name
+                  name: studentInfo.name,
+                  email: studentInfo.email,
+                  period: studentInfo.period,
+                  sectionNumber: studentInfo.sectionNumber
                 }}
               />
             )}
@@ -975,6 +1071,9 @@ export default function StudentLookup() {
             redemptionType={redemptionModal.type}
             studentName={studentInfo.name}
             studentEmail={studentInfo.email}
+            studentId={studentId}
+            period={studentInfo.period || 'Unknown'}
+            sectionNumber={studentInfo.sectionNumber || 'default'}
           />
         )}
 

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail } from "lucide-react"
+import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail, Coins } from "lucide-react"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 
 type ExamPeriodData = {
@@ -610,6 +610,18 @@ export default function AdminPage() {
               <a href="/admin/manage-periods">
                 <Calendar className="h-4 w-4 mr-2" />
                 Manage Periods
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/requests">
+                <Mail className="h-4 w-4 mr-2" />
+                Student Requests
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/admin/coin-adjustments">
+                <Coins className="h-4 w-4 mr-2" />
+                Coin Adjustments
               </a>
             </Button>
             <Button variant="outline" asChild>

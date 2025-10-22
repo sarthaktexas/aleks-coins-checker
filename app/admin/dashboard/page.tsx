@@ -17,7 +17,9 @@ import {
   AlertTriangle,
   Lock,
   Settings,
-  Mail
+  Mail,
+  Coins,
+  MessageSquare
 } from "lucide-react"
 import Link from "next/link"
 
@@ -201,6 +203,24 @@ export default function AdminDashboard() {
       color: "bg-indigo-500 hover:bg-indigo-600",
       iconColor: "text-indigo-600",
       bgColor: "bg-indigo-50",
+    },
+    {
+      title: "Student Requests",
+      description: "View and manage student requests for replacements and other ALEKS matters",
+      icon: MessageSquare,
+      href: "/admin/requests",
+      color: "bg-cyan-500 hover:bg-cyan-600",
+      iconColor: "text-cyan-600",
+      bgColor: "bg-cyan-50",
+    },
+    {
+      title: "Coin Adjustments",
+      description: "Add, view, and manage manual coin adjustments (fudge points) for students",
+      icon: Coins,
+      href: "/admin/coin-adjustments",
+      color: "bg-amber-500 hover:bg-amber-600",
+      iconColor: "text-amber-600",
+      bgColor: "bg-amber-50",
     },
   ]
 

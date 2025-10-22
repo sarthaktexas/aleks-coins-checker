@@ -460,6 +460,38 @@ export async function POST(request: NextRequest) {
     // Sort periods by upload date (most recent first)
     allPeriods.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
     
+    // Get coin adjustments for this student
+    let coinAdjustments: any[] = []
+    try {
+      const adjustmentsResult = await sql`
+        SELECT 
+          id,
+          period,
+          section_number,
+          adjustment_amount,
+          reason,
+          created_at,
+          created_by
+        FROM coin_adjustments
+        WHERE student_id = ${normalizedId} AND is_active = true
+        ORDER BY created_at DESC
+      `
+      coinAdjustments = adjustmentsResult.rows
+    } catch (error) {
+      console.error("Error fetching coin adjustments:", error)
+    }
+
+    // Create a map of adjustments by period and section
+    const adjustmentsByPeriod = new Map<string, number>()
+    let totalAdjustments = 0
+    
+    coinAdjustments.forEach(adj => {
+      const key = `${adj.period}_${adj.section_number}`
+      const current = adjustmentsByPeriod.get(key) || 0
+      adjustmentsByPeriod.set(key, current + adj.adjustment_amount)
+      totalAdjustments += adj.adjustment_amount
+    })
+    
     // Format periods data with overrides applied
     const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
       // Apply overrides to this period's data
@@ -467,12 +499,18 @@ export async function POST(request: NextRequest) {
       const overriddenData = await applyOverridesToStudentData(tempStudentData)
       const studentWithOverrides = overriddenData[normalizedId]
       
+      // Add coin adjustments for this period
+      const periodKey = `${periodData.period}_${periodData.section}`
+      const adjustment = adjustmentsByPeriod.get(periodKey) || 0
+      
       return {
         period: periodData.period,
         section: periodData.section,
         name: studentWithOverrides.name,
         email: studentWithOverrides.email,
         coins: studentWithOverrides.coins,
+        coinAdjustment: adjustment,
+        totalCoins: studentWithOverrides.coins + adjustment,
         totalDays: studentWithOverrides.totalDays,
         periodDays: studentWithOverrides.periodDays,
         percentComplete: studentWithOverrides.percentComplete,
@@ -481,6 +519,13 @@ export async function POST(request: NextRequest) {
       }
     }))
 
+    // Calculate total coins across all periods with adjustments
+    const totalCoinsAcrossPeriods = periodsData.reduce((sum, p) => sum + p.totalCoins, 0)
+    
+    // Get current period adjustment
+    const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${periodInfo?.section_number || 'default'}`
+    const currentPeriodAdjustment = adjustmentsByPeriod.get(currentPeriodKey) || 0
+    
     // Return the student's data including all periods
     return NextResponse.json({
       success: true,
@@ -488,6 +533,8 @@ export async function POST(request: NextRequest) {
         name: student.name,
         email: student.email,
         coins: student.coins,
+        coinAdjustment: currentPeriodAdjustment,
+        totalCoins: student.coins + currentPeriodAdjustment,
         totalDays: student.totalDays,
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
@@ -496,7 +543,9 @@ export async function POST(request: NextRequest) {
         sectionNumber: periodInfo?.section_number || 'default',
         exemptDayCredits: student.exemptDayCredits
       },
-      periods: periodsData
+      periods: periodsData,
+      coinAdjustments: coinAdjustments,
+      totalCoinsAcrossPeriods: totalCoinsAcrossPeriods
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)

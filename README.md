@@ -1,218 +1,517 @@
 # ALEKS Points Portal
 
-A comprehensive web application for tracking student progress in ALEKS (Assessment and Learning in Knowledge Spaces) and managing a coin-based reward system. Students can view their progress, earn coins for completing daily requirements, and redeem coins for assignment/quiz replacements.
-
-## 🎯 Features
-
-### Student Portal
-- **Student Lookup**: Enter student ID to view personalized progress dashboard
-- **Progress Tracking**: Visual calendar showing daily completion status
-- **Coin System**: Earn coins for meeting daily ALEKS requirements (31+ minutes, 1+ topics)
-- **Redemption System**: Use coins to replace assignments (10 coins) or quizzes (20 coins)
-- **Extra Credit Tracking**: Monitor eligibility for extra credit based on 90% completion rate
-- **Class Analytics**: View aggregated completion statistics across all sections
-
-### Admin Dashboard
-- **Student Data Management**: Upload Excel files with student progress data
-- **Period Management**: Configure exam periods and excluded dates
-- **Analytics Overview**: Comprehensive statistics and completion trends
-- **Day Overrides**: Manage exempt days and special circumstances
-- **Data Export**: Download processed student data and analytics
+A web application for tracking student progress in ALEKS and managing a coin-based reward system.
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Node.js 18+ 
-- npm, yarn, or pnpm
-- PostgreSQL database (optional for demo mode)
-
 ### Installation
 
-1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd v0-aleks-coins-checker
-   ```
-
-2. **Install dependencies**
-   ```bash
+cd aleks-coins-checker
    npm install
-   # or
-   yarn install
-   # or
-   pnpm install
-   ```
-
-3. **Environment Setup**
-   ```bash
-   cp .env.example .env.local
-   ```
-   
-   Configure your environment variables (see [Environment Setup](#environment-setup) for details)
-
-4. **Run the development server**
-   ```bash
    npm run dev
-   # or
-   yarn dev
-   # or
-   pnpm dev
-   ```
+```
 
-5. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 🔧 Environment Setup
-
-Create a `.env.local` file in your project root:
+### Environment Variables
 
 ```bash
-# Required: Admin authentication
-ADMIN_PASSWORD="your-secure-admin-password"
+# Required
+ADMIN_PASSWORD="your-secure-password"
 
-# Optional: Database connection (app works without it using demo data)
-POSTGRES_URL="postgres://username:password@host:port/database"
-# OR
-DATABASE_URL="postgres://username:password@host:port/database"
-
-# Optional: Environment
+# Optional (app works with demo data if not provided)
+POSTGRES_URL="postgres://..."
 NODE_ENV="development"
 ```
 
-### Quick Development Setup
-For local development without a database:
-```bash
-ADMIN_PASSWORD="admin123"
-NODE_ENV="development"
-```
+## 🏗️ Architecture
 
-The application will work with demo data. See [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md) for detailed configuration instructions.
+### Tech Stack
 
-## 📊 How It Works
-
-### Student Experience
-1. **Enter Student ID**: Students enter their unique identifier on the homepage
-2. **View Progress**: See daily completion status, coins earned, and progress toward extra credit
-3. **Track Performance**: Visual calendar shows qualified days, missed days, and exempt periods
-4. **Redeem Rewards**: Use earned coins to replace assignments or quizzes
-5. **Monitor Analytics**: View class-wide completion trends and statistics
-
-### Admin Workflow
-1. **Upload Data**: Import Excel files containing student progress data
-2. **Configure Periods**: Set up exam periods with start/end dates and excluded days
-3. **Manage Overrides**: Handle special circumstances and exempt days
-4. **Monitor Analytics**: Track class performance and completion trends
-5. **Export Data**: Download processed data for external analysis
-
-### Coin System
-- **Earning**: Students earn 1 coin per day when they meet requirements (31+ minutes, 1+ topics)
-- **Redemption**: 
-  - Assignment/Video Replacement: 10 coins
-  - Attendance Quiz Replacement: 20 coins
-- **Extra Credit**: Available when students achieve 90%+ completion rate
-
-## 🏗️ Project Structure
-
-```
-├── app/                    # Next.js app directory
-│   ├── admin/             # Admin dashboard pages
-│   │   ├── dashboard/     # Main admin dashboard
-│   │   ├── manage-periods/# Period management
-│   │   ├── view-data/     # Data viewing tools
-│   │   └── view-overrides/# Override management
-│   ├── api/               # API routes
-│   │   ├── admin/         # Admin-only endpoints
-│   │   ├── analytics/     # Analytics data
-│   │   └── student/       # Student lookup
-│   └── page.tsx           # Student portal homepage
-├── components/            # React components
-│   ├── ui/               # Reusable UI components
-│   ├── calendar-view.tsx # Student progress calendar
-│   ├── completion-chart.tsx # Analytics charts
-│   └── redemption-modal.tsx # Coin redemption interface
-├── lib/                  # Utility libraries
-│   ├── exam-periods.ts   # Period configuration
-│   └── utils.ts          # Helper functions
-├── scripts/              # Data processing scripts
-│   ├── migrate-database.js # Database setup
-│   └── process-excel.js  # Excel data processing
-└── public/               # Static assets
-```
-
-## 🛠️ Technology Stack
-
-- **Framework**: Next.js 14 with App Router
+- **Framework**: Next.js 14 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
-- **UI Components**: Radix UI primitives
-- **Database**: PostgreSQL (via Vercel Postgres)
-- **Charts**: D3.js for data visualization
-- **File Processing**: XLSX library for Excel handling
+- **UI Components**: Radix UI
+- **Database**: PostgreSQL (Vercel Postgres)
+- **Charts**: D3.js
+- **Excel Processing**: XLSX library
 - **Icons**: Lucide React
 
-## 📈 Data Processing
+### Project Structure
 
-The application processes Excel files containing student progress data with the following structure:
-- Student information (name, email, ID)
-- Daily time spent in ALEKS
-- Daily topics completed
-- Section assignments
-- Period-specific data
+```
+app/
+├── page.tsx                    # Student portal
+├── api/
+│   ├── student/
+│   │   ├── route.ts           # Student data lookup
+│   │   └── requests/route.ts  # Student request submission
+│   ├── admin/
+│   │   ├── auth/route.ts      # Admin authentication
+│   │   ├── upload/route.ts    # Excel file upload
+│   │   ├── requests/route.ts  # Admin request management
+│   │   └── coin-adjustments/route.ts  # Manual coin adjustments
+│   └── analytics/route.ts     # Class analytics
+└── admin/
+    ├── dashboard/page.tsx     # Main admin interface
+    ├── requests/page.tsx      # Request management UI
+    ├── coin-adjustments/page.tsx  # Adjustment management UI
+    └── view-data/page.tsx     # Data viewing interface
 
-### Excel File Format
-Expected columns:
-- `Student Name`, `Email`, `Student ID`
-- `h:mm_1`, `h:mm_2`, ... (time columns for each day)
-- `added to pie_1`, `added to pie_2`, ... (topic columns for each day)
+components/
+├── redemption-modal.tsx       # Coin redemption interface
+├── calendar-view.tsx          # Daily progress calendar
+└── completion-chart.tsx       # Analytics visualizations
 
-## 🔐 Security Features
+lib/
+├── exam-periods.ts            # Period configuration
+└── utils.ts                   # Utility functions
+```
 
-- **Admin Authentication**: Server-side password validation
-- **Data Privacy**: Student data only accessible with valid student ID
-- **Environment Variables**: Secure configuration management
-- **Input Validation**: Comprehensive data validation and sanitization
+## 🗄️ Database Schema
+
+### Core Tables
+
+```sql
+-- Student progress data (uploaded from Excel)
+CREATE TABLE student_data (
+  id SERIAL PRIMARY KEY,
+  data JSONB,
+  period VARCHAR(100),
+  section_number VARCHAR(20),
+  uploaded_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Student requests (redemptions + overrides)
+CREATE TABLE student_requests (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(100),
+  student_name VARCHAR(255),
+  student_email VARCHAR(255),
+  period VARCHAR(100),
+  section_number VARCHAR(20),
+  request_type VARCHAR(50),  -- assignment_replacement, quiz_replacement, override_request
+  request_details TEXT,
+  day_number INTEGER,  -- For override requests
+  override_date VARCHAR(10),  -- For override requests
+  submitted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  status VARCHAR(50) DEFAULT 'pending',
+  admin_notes TEXT,
+  processed_at TIMESTAMPTZ,
+  processed_by VARCHAR(255)
+);
+
+-- Manual coin adjustments
+CREATE TABLE coin_adjustments (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(100),
+  student_name VARCHAR(255),
+  period VARCHAR(100),
+  section_number VARCHAR(20),
+  adjustment_amount INTEGER,
+  reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  created_by VARCHAR(255),
+  is_active BOOLEAN DEFAULT true
+);
+
+-- Per-student day overrides
+CREATE TABLE student_day_overrides (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(100),
+  day_number INTEGER,
+  override_type VARCHAR(50),
+  reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Exam period configurations
+CREATE TABLE exam_periods (
+  id SERIAL PRIMARY KEY,
+  period_key VARCHAR(100) UNIQUE,
+  period_name VARCHAR(255),
+  start_date DATE,
+  end_date DATE,
+  excluded_dates JSONB,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Indexes
+
+```sql
+CREATE INDEX idx_student_requests_student_id ON student_requests(student_id);
+CREATE INDEX idx_student_requests_section ON student_requests(section_number, student_name);
+CREATE INDEX idx_student_requests_type ON student_requests(request_type);
+CREATE INDEX idx_coin_adjustments_student_id ON coin_adjustments(student_id);
+CREATE INDEX idx_coin_adjustments_period ON coin_adjustments(period, section_number);
+```
+
+## 📡 API Endpoints
+
+### Student Endpoints
+
+```typescript
+// Get student data with all periods and adjustments
+POST /api/student
+Body: { studentId: string }
+Returns: {
+  success: boolean
+  student: StudentInfo
+  periods: PeriodInfo[]
+  coinAdjustments: CoinAdjustment[]
+  totalCoinsAcrossPeriods: number
+}
+
+// Submit request (redemption or override)
+POST /api/student/requests
+Body: {
+  studentId: string
+  studentName: string
+  studentEmail: string
+  period: string
+  sectionNumber: string
+  requestType: 'assignment_replacement' | 'quiz_replacement' | 'override_request'
+  requestDetails: string
+  dayNumber?: number  // Required for override_request
+  overrideDate?: string  // Required for override_request
+}
+Returns: { success: boolean, requestId: number, submittedAt: string }
+```
+
+### Admin Endpoints
+
+```typescript
+// Authenticate admin
+POST /api/admin/auth
+Body: { password: string }
+Returns: { success: boolean }
+
+// Upload Excel file with student data
+POST /api/admin/upload
+Body: FormData {
+  file: File
+  password: string
+  examPeriod: string
+  sectionNumber: string
+}
+Returns: { success: boolean, studentCount: number }
+
+// Get all student requests
+GET /api/admin/requests?password={password}
+Returns: { success: boolean, requests: StudentRequest[] }
+
+// Update request status and optionally deduct coins
+PUT /api/admin/requests
+Body: {
+  password: string
+  requestId: number
+  status: 'pending' | 'approved' | 'rejected' | 'completed'
+  adminNotes?: string
+  coinDeduction?: number
+}
+Returns: { success: boolean, adjustmentId?: number }
+
+// Get coin adjustments
+GET /api/admin/coin-adjustments?studentId={id}
+Returns: { success: boolean, adjustments: CoinAdjustment[] }
+
+// Create coin adjustment
+POST /api/admin/coin-adjustments
+Body: {
+  password: string
+  studentId: string
+  studentName: string
+  period: string
+  sectionNumber: string
+  adjustmentAmount: number
+  reason: string
+}
+Returns: { success: boolean, adjustmentId: number }
+
+// Delete (soft) coin adjustment
+DELETE /api/admin/coin-adjustments
+Body: { password: string, adjustmentId: number }
+Returns: { success: boolean }
+```
+
+## 🔄 Data Flow
+
+### Coin Calculation Algorithm
+
+```typescript
+// Per-period calculation
+function calculatePeriodCoins(student: Student, period: Period): number {
+  // 1. Base coins from qualified days
+  const baseCoins = student.dailyLog
+    .filter(day => !day.isExcluded && day.qualified)
+    .length;
+  
+  // 2. Exempt day credits (would have qualified on exempt days)
+  const exemptCredits = student.dailyLog
+    .filter(day => day.isExcluded && day.wouldHaveQualified)
+    .length;
+  
+  // 3. Coin adjustments for this period
+  const adjustments = coinAdjustments
+    .filter(adj => adj.period === period && adj.student_id === student.id)
+    .reduce((sum, adj) => sum + adj.adjustment_amount, 0);
+  
+  return baseCoins + exemptCredits + adjustments;
+}
+
+// Total across all periods
+totalCoins = periods.reduce((sum, period) => 
+  sum + calculatePeriodCoins(student, period), 0
+);
+```
+
+### Request Processing Flow
+
+```typescript
+// 1. Student submits request
+POST /api/student/requests
+  → request_type: 'assignment_replacement' | 'quiz_replacement' | 'override_request'
+  → Insert into student_requests table
+  → Status: 'pending'
+
+// 2. Admin views and processes request
+GET /api/admin/requests
+  → Returns all requests sorted by section, name
+  → Filter by section and/or request type
+
+// 3. Admin updates request
+PUT /api/admin/requests
+  
+  // For override requests (approved):
+  → If request_type === 'override_request' and status === 'approved':
+      → Insert into student_day_overrides table
+      → override_type = 'qualified'
+      → Student's day status and coins recalculated automatically
+  
+  // For redemption requests (completed/approved):
+  → If coinDeduction > 0 and status is 'approved'/'completed':
+      → Insert into coin_adjustments (negative amount)
+      → reason = "Request fulfilled: {type}. {admin_notes}"
+  
+  → Update request status
+
+// 4. Student sees changes immediately
+GET /api/student
+  → For overrides: Day status updated in dailyLog
+  → For redemptions: Coins deducted and shown in adjustments
+```
+
+### Excel Processing
+
+```typescript
+// Excel file structure expected
+interface ExcelRow {
+  'Student Name': string
+  'Email': string
+  'Student ID': string
+  'h:mm_1', 'h:mm_2', ... // Time columns
+  'added to pie_1', 'added to pie_2', ... // Topic columns
+}
+
+// Processing algorithm
+1. Parse Excel file using XLSX library
+2. Extract student metadata (name, email, ID)
+3. Process daily columns (minutes, topics)
+4. Calculate qualification per day:
+   - Qualified if: minutes >= 31 AND topics >= 1
+5. Apply period-specific excluded dates
+6. Calculate exempt day credits
+7. Store as JSONB in student_data table
+```
+
+## 🎨 Component Architecture
+
+### Student Portal (`app/page.tsx`)
+
+```typescript
+StudentLookup Component
+├── State Management
+│   ├── studentInfo: StudentInfo | null
+│   ├── studentPeriods: PeriodInfo[]
+│   ├── coinAdjustments: CoinAdjustment[]
+│   └── totalCoinsAcrossPeriods: number
+├── API Calls
+│   ├── POST /api/student (fetch student data)
+│   └── GET /api/analytics (class stats)
+└── Child Components
+    ├── CalendarView (daily progress grid)
+    ├── RedemptionModal (coin redemption form)
+    └── CompletionChart (analytics visualization)
+```
+
+### Redemption Modal (`components/redemption-modal.tsx`)
+
+```typescript
+RedemptionModal Component
+├── Props
+│   ├── redemptionType: 'assignment' | 'quiz'
+│   ├── studentId, studentName, studentEmail
+│   └── period, sectionNumber
+├── Form State
+│   ├── assignmentName: string
+│   ├── courseSection: string
+│   └── additionalNotes: string
+└── Submission Flow
+    ├── Validate form data
+    ├── POST /api/student/requests
+    ├── request_type = 'assignment_replacement' | 'quiz_replacement'
+    └── request_details = formatted string with all info
+```
+
+### Admin Request Management (`app/admin/requests/page.tsx`)
+
+```typescript
+AdminRequestsPage Component
+├── State Management
+│   ├── requests: StudentRequest[]
+│   ├── selectedSection: string (filter)
+│   └── selectedStatus: string (filter)
+├── Filtering Logic
+│   └── Sort by: section_number ASC, student_name ASC
+├── Update Modal
+│   ├── Status dropdown
+│   ├── Admin notes textarea
+│   └── Coin deduction input (appears for approved/completed)
+└── API Calls
+    ├── GET /api/admin/requests
+    └── PUT /api/admin/requests
+```
+
+## 🔐 Authentication & Security
+
+### Admin Authentication
+
+```typescript
+// Server-side password validation
+if (password !== process.env.ADMIN_PASSWORD) {
+  return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+}
+
+// Client-side password persistence
+localStorage.setItem('adminPassword', password);
+```
+
+### Student Data Access
+
+```typescript
+// Students can only access their own data
+// No authentication - uses student ID as key
+// Student ID normalized: studentId.toLowerCase().trim()
+```
+
+### Input Validation
+
+```typescript
+// All endpoints validate required fields
+if (!studentId || typeof studentId !== "string") {
+  return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+}
+
+// Coin adjustment validation
+if (typeof adjustmentAmount !== 'number' || isNaN(adjustmentAmount)) {
+  return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+}
+```
+
+## 🔧 Key Implementation Details
+
+### Multi-Period Support
+
+```typescript
+// Students tracked across multiple exam periods
+// Each period has its own:
+//   - Base coins from daily completions
+//   - Exempt day credits
+//   - Coin adjustments
+// Total coins = sum of all period totals
+```
+
+### Soft Delete Pattern
+
+```typescript
+// Coin adjustments never hard-deleted
+// Instead: is_active = false
+// Allows audit trail and potential recovery
+DELETE /api/admin/coin-adjustments
+  → UPDATE coin_adjustments SET is_active = false WHERE id = ?
+```
+
+### Request-Linked Adjustments
+
+```typescript
+// When admin processes request with coin deduction:
+// 1. Create coin_adjustments record with negative amount
+// 2. Link via auto-generated reason
+// 3. Student sees adjustment with clear explanation
+reason = `Request fulfilled: ${requestType}. ${adminNotes}`
+```
+
+### Override System
+
+```typescript
+// Day overrides applied per-student
+// Two types:
+//   - 'qualified': Force day to qualified
+//   - 'disqualified': Force day to disqualified
+// Stored in student_day_overrides table
+// Applied during coin calculation
+```
+
+## 📊 Analytics Implementation
+
+### Class-Wide Statistics
+
+```typescript
+// Aggregated from all student_data
+interface Analytics {
+  period: string
+  sections: string[]
+  totalStudents: number
+  averageCompletion: number
+  dayStats: {
+    day: number
+    averageCompletion: number
+    qualifiedStudents: number
+    sectionBreakdown: SectionStats[]
+  }[]
+}
+```
+
+### Completion Tracking
+
+```typescript
+// Per student per period
+percentComplete = (qualifiedDays / totalWorkingDays) * 100
+extraCreditEligible = percentComplete >= 90
+
+// Working days excludes:
+//   - Future days (day > totalDays)
+//   - Excluded dates (holidays, etc)
+```
 
 ## 🚀 Deployment
 
-### Vercel (Recommended)
-1. Connect your GitHub repository to Vercel
-2. Configure environment variables in Vercel dashboard
-3. Deploy automatically on push to main branch
+### Environment Setup
 
-### Manual Deployment
 ```bash
-npm run build
-npm start
+# Vercel deployment
+vercel env add ADMIN_PASSWORD
+vercel env add POSTGRES_URL
 ```
 
-## 📝 API Endpoints
+### Database Migration
 
-### Student Endpoints
-- `POST /api/student` - Student lookup and progress retrieval
-
-### Admin Endpoints
-- `POST /api/admin/auth` - Admin authentication
-- `POST /api/admin/upload` - Student data upload
-- `GET/POST /api/admin/periods` - Period management
-- `GET/POST /api/admin/day-overrides` - Override management
-- `GET /api/admin/student-data` - Student data export
-
-### Analytics
-- `GET /api/analytics` - Class-wide analytics and trends
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📞 Support
-
-For questions or support, contact:
-- **Email**: sarthak.mohanty@utsa.edu
-- **Issues**: Create an issue in the GitHub repository
+```sql
+-- Run on first deployment
+-- Tables created automatically via CREATE TABLE IF NOT EXISTS
+-- See Database Schema section for full SQL
+```
 
 ## 📄 License
 
