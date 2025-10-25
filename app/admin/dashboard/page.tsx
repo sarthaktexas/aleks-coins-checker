@@ -19,7 +19,9 @@ import {
   Settings,
   Mail,
   Coins,
-  MessageSquare
+  MessageSquare,
+  Clock,
+  Gift
 } from "lucide-react"
 import Link from "next/link"
 
@@ -31,7 +33,9 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalStudents: 0,
     dataUploads: 0,
-    activePeriods: 0
+    activePeriods: 0,
+    overrideRequests: 0,
+    redemptionRequests: 0
   })
   const [statsLoading, setStatsLoading] = useState(false)
 
@@ -53,23 +57,34 @@ export default function AdminDashboard() {
   const loadStats = async () => {
     setStatsLoading(true)
     try {
-      const response = await fetch("/api/admin/student-data")
-      const result = await response.json()
+      // Load student data stats
+      const studentDataResponse = await fetch("/api/admin/student-data")
+      const studentDataResult = await studentDataResponse.json()
 
-      if (response.ok) {
-        const uploadRecords = result.uploadRecords || []
+      // Load request stats
+      const requestStatsResponse = await fetch(`/api/admin/request-stats?password=${encodeURIComponent(password)}`)
+      const requestStatsResult = await requestStatsResponse.json()
+
+      if (studentDataResponse.ok) {
+        const uploadRecords = studentDataResult.uploadRecords || []
         
         // Use the unique student count provided by the API
-        const totalStudents = result.uniqueStudentCount || 0
+        const totalStudents = studentDataResult.uniqueStudentCount || 0
 
         // Count unique periods
         const uniquePeriods = new Set(uploadRecords.map((record: any) => record.period))
         const activePeriods = uniquePeriods.size
 
+        // Get request counts
+        const overrideRequests = requestStatsResponse.ok ? requestStatsResult.overrideRequests || 0 : 0
+        const redemptionRequests = requestStatsResponse.ok ? requestStatsResult.redemptionRequests || 0 : 0
+
         setStats({
           totalStudents,
           dataUploads: uploadRecords.length,
-          activePeriods: activePeriods
+          activePeriods: activePeriods,
+          overrideRequests,
+          redemptionRequests
         })
       }
     } catch (error) {
@@ -239,7 +254,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
           <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center gap-3">
@@ -282,6 +297,38 @@ export default function AdminDashboard() {
                   <p className="text-sm font-medium text-slate-600">Active Periods</p>
                   <p className="text-2xl font-bold text-slate-900">
                     {statsLoading ? "..." : stats.activePeriods}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Clock className="h-6 w-6 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Override Requests</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {statsLoading ? "..." : stats.overrideRequests}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <Gift className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Redemption Requests</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {statsLoading ? "..." : stats.redemptionRequests}
                   </p>
                 </div>
               </div>

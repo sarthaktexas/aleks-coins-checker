@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -53,6 +53,7 @@ export default function AdminRequestsPage() {
   const [studentCoinData, setStudentCoinData] = useState<Record<string, StudentCoinData>>({})
   const [coinDataKey, setCoinDataKey] = useState(0) // For triggering SWR revalidation
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
+  const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
 
   // Function to get coin data for a specific student
   const getStudentCoinData = async (studentId: string): Promise<StudentCoinData> => {
@@ -266,6 +267,46 @@ export default function AdminRequestsPage() {
     setError("")
   }
 
+  const handleFastApproveAll = async (studentId: string) => {
+    if (!confirm(`Are you sure you want to approve ALL pending requests for ${studentId}? This action cannot be undone.`)) {
+      return
+    }
+
+    setFastApproving(studentId)
+    setError("")
+
+    try {
+      const response = await fetch('/api/admin/requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          password,
+          studentId: studentId,
+          adminNotes: 'Fast approved all pending requests'
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Reload requests and refresh coin data for this specific student
+        await loadRequests()
+        await refreshStudentCoinData(studentId)
+        
+        // Show success message
+        alert(`Successfully approved ${data.approvedCount} requests for ${studentId}`)
+      } else {
+        setError(data.error || "Failed to fast approve requests")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+    } finally {
+      setFastApproving(null)
+    }
+  }
+
 
 
   const getStatusBadge = (status: string) => {
@@ -296,6 +337,11 @@ export default function AdminRequestsPage() {
       default:
         return type
     }
+  }
+
+  // Helper function to check if a student has pending requests
+  const getStudentPendingCount = (studentId: string) => {
+    return requests.filter(r => r.student_id === studentId && r.status === 'pending').length
   }
 
   const getRequestTypeBadgeColor = (type: string) => {
@@ -570,13 +616,29 @@ export default function AdminRequestsPage() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => startEditing(request)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        Update Status
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => startEditing(request)}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          Update Status
+                        </Button>
+                        {getStudentPendingCount(request.student_id) > 1 && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleFastApproveAll(request.student_id)}
+                            disabled={fastApproving === request.student_id}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {fastApproving === request.student_id ? (
+                              "Approving..."
+                            ) : (
+                              `Fast Approve All (${getStudentPendingCount(request.student_id)})`
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
 

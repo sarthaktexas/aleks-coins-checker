@@ -93,6 +93,16 @@ export async function PUT(request: NextRequest) {
     let overrideId = null
     if (requestData.request_type === 'override_request' && status === 'approved' && requestData.day_number && requestData.override_date) {
       try {
+        // Extract just the reason part from request_details
+        let reasonText = adminNotes || ''
+        if (!reasonText && requestData.request_details) {
+          // Look for "Reason: " in the request details and extract everything after it
+          const reasonMatch = requestData.request_details.match(/Reason:\s*(.+)/s)
+          if (reasonMatch) {
+            reasonText = reasonMatch[1].trim()
+          }
+        }
+        
         const overrideResult = await sql`
           INSERT INTO student_day_overrides (
             student_id, 
@@ -106,7 +116,7 @@ export async function PUT(request: NextRequest) {
             ${requestData.day_number}, 
             ${requestData.override_date}, 
             'qualified',
-            ${`Override approved: ${adminNotes || requestData.request_details}`}
+            ${reasonText || 'Override approved'}
           )
           ON CONFLICT (student_id, day_number)
           DO UPDATE SET
@@ -155,6 +165,122 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       { 
         error: "Failed to update request",
+        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// POST - Fast approve all pending requests for a specific student
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { password, studentId, adminNotes } = body
+
+    // Check admin password
+    if (!password || password !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+    }
+
+    // Validate input
+    if (!studentId) {
+      return NextResponse.json({ error: "Student ID is required" }, { status: 400 })
+    }
+
+    // Check if database is available
+    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 503 })
+    }
+
+    // Get all pending requests for this student
+    const pendingRequestsResult = await sql`
+      SELECT id, request_type, request_details, day_number, override_date
+      FROM student_requests
+      WHERE student_id = ${studentId.toLowerCase().trim()} AND status = 'pending'
+    `
+
+    if (pendingRequestsResult.rows.length === 0) {
+      return NextResponse.json({ 
+        success: true, 
+        message: "No pending requests found for this student",
+        approvedCount: 0
+      })
+    }
+
+    const pendingRequests = pendingRequestsResult.rows
+    let approvedCount = 0
+    const createdOverrides = []
+
+    // Process each pending request
+    for (const requestData of pendingRequests) {
+      try {
+        // If this is an override request, create the override
+        if (requestData.request_type === 'override_request' && requestData.day_number && requestData.override_date) {
+          // Extract just the reason part from request_details
+          let reasonText = adminNotes || ''
+          if (!reasonText && requestData.request_details) {
+            // Look for "Reason: " in the request details and extract everything after it
+            const reasonMatch = requestData.request_details.match(/Reason:\s*(.+)/s)
+            if (reasonMatch) {
+              reasonText = reasonMatch[1].trim()
+            }
+          }
+          
+          const overrideResult = await sql`
+            INSERT INTO student_day_overrides (
+              student_id, 
+              day_number, 
+              date, 
+              override_type, 
+              reason
+            )
+            VALUES (
+              ${studentId.toLowerCase().trim()}, 
+              ${requestData.day_number}, 
+              ${requestData.override_date}, 
+              'qualified',
+              ${reasonText || 'Override approved via fast approve'}
+            )
+            ON CONFLICT (student_id, day_number)
+            DO UPDATE SET
+              override_type = 'qualified',
+              reason = EXCLUDED.reason,
+              updated_at = NOW()
+            RETURNING id
+          `
+          createdOverrides.push(overrideResult.rows[0]?.id)
+        }
+
+        // Update the request status
+        await sql`
+          UPDATE student_requests
+          SET 
+            status = 'approved',
+            admin_notes = ${adminNotes || 'Fast approved all requests'},
+            processed_at = CURRENT_TIMESTAMP,
+            processed_by = 'admin'
+          WHERE id = ${requestData.id}
+        `
+
+        approvedCount++
+      } catch (error) {
+        console.error(`Error processing request ${requestData.id}:`, error)
+        // Continue with other requests even if one fails
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully approved ${approvedCount} requests for student ${studentId}`,
+      approvedCount,
+      createdOverrides: createdOverrides.length
+    })
+  } catch (error) {
+    console.error("Error fast approving requests:", error)
+    return NextResponse.json(
+      { 
+        error: "Failed to fast approve requests",
         details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined
       },
       { status: 500 }
