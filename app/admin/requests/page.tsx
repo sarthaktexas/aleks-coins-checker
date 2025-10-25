@@ -28,6 +28,12 @@ type StudentRequest = {
   processed_by?: string
 }
 
+type StudentCoinData = {
+  currentCoins: number
+  totalCoinsAcrossPeriods: number
+  coinAdjustments: number
+}
+
 export default function AdminRequestsPage() {
   const [password, setPassword] = useState("")
   const [requests, setRequests] = useState<StudentRequest[]>([])
@@ -46,6 +52,7 @@ export default function AdminRequestsPage() {
   const [newStatus, setNewStatus] = useState("")
   const [coinDeduction, setCoinDeduction] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
+  const [studentCoinData, setStudentCoinData] = useState<Record<string, StudentCoinData>>({})
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -74,6 +81,9 @@ export default function AdminRequestsPage() {
         setIsAuthenticated(true)
         // Save password
         localStorage.setItem('adminPassword', password)
+        
+        // Load coin data for all students
+        await loadStudentCoinData(data.requests || [])
       } else {
         setError(data.error || "Failed to load requests")
         setIsAuthenticated(false)
@@ -84,6 +94,39 @@ export default function AdminRequestsPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const loadStudentCoinData = async (requests: StudentRequest[]) => {
+    const coinData: Record<string, StudentCoinData> = {}
+    
+    // Get unique student IDs
+    const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
+    
+    // Fetch coin data for each student
+    for (const studentId of studentIds) {
+      try {
+        const response = await fetch(`/api/student?studentId=${encodeURIComponent(studentId)}`)
+        const data = await response.json()
+        
+        if (response.ok && data.studentInfo) {
+          coinData[studentId] = {
+            currentCoins: data.studentInfo.coins || 0,
+            totalCoinsAcrossPeriods: data.studentInfo.totalCoinsAcrossPeriods || 0,
+            coinAdjustments: data.studentInfo.totalAdjustments || 0
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to load coin data for student ${studentId}:`, err)
+        // Set default values if fetch fails
+        coinData[studentId] = {
+          currentCoins: 0,
+          totalCoinsAcrossPeriods: 0,
+          coinAdjustments: 0
+        }
+      }
+    }
+    
+    setStudentCoinData(coinData)
   }
 
   // Filter requests when filters change
@@ -140,7 +183,7 @@ export default function AdminRequestsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Reload requests
+        // Reload requests and coin data
         await loadRequests()
         setUpdateModal({ isOpen: false, request: null })
         setAdminNotes("")
@@ -404,6 +447,20 @@ export default function AdminRequestsPage() {
                           <Clock className="h-4 w-4" />
                           Submitted: {formatDate(request.submitted_at)}
                         </p>
+                        {/* Coin Balance Information */}
+                        {studentCoinData[request.student_id] && (
+                          <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                            <Coins className="h-4 w-4 text-amber-600" />
+                            <span className="text-sm font-medium text-amber-800">
+                              Total Coins: {studentCoinData[request.student_id].totalCoinsAcrossPeriods}
+                              {coinDeduction && !isNaN(parseInt(coinDeduction)) && (
+                                <span className="text-amber-600">
+                                  {" "}→ {studentCoinData[request.student_id].totalCoinsAcrossPeriods - parseInt(coinDeduction)} after deduction
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -459,6 +516,25 @@ export default function AdminRequestsPage() {
                   <p className="text-sm font-medium text-slate-700 mb-2">Request Details:</p>
                   <p className="text-sm text-slate-900 whitespace-pre-wrap">{updateModal.request.request_details}</p>
                 </div>
+
+                {/* Student Coin Balance */}
+                {studentCoinData[updateModal.request.student_id] && (
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                    <p className="text-sm font-medium text-amber-800 mb-2 flex items-center gap-2">
+                      <Coins className="h-4 w-4" />
+                      Student Coin Balance
+                    </p>
+                    <div className="space-y-1 text-sm text-amber-700">
+                      <p>Current Period: {studentCoinData[updateModal.request.student_id].currentCoins} coins</p>
+                      <p className="font-medium">Total Across All Periods: {studentCoinData[updateModal.request.student_id].totalCoinsAcrossPeriods} coins</p>
+                      {coinDeduction && !isNaN(parseInt(coinDeduction)) && (
+                        <p className="font-medium text-amber-600">
+                          After Deduction: {studentCoinData[updateModal.request.student_id].totalCoinsAcrossPeriods - parseInt(coinDeduction)} coins
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="new-status">Status</Label>
