@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "fix-overrides": "pnpm exec node scripts/fix-missing-overrides.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.5",

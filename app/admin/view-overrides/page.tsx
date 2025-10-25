@@ -97,7 +97,7 @@ export default function ViewOverridesPage() {
   const loadOverrides = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/admin/day-overrides")
+      const response = await fetch(`/api/admin/day-overrides?password=${encodeURIComponent(password)}`)
       const result = await response.json()
 
       if (response.ok) {

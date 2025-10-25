@@ -105,6 +105,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
+    const password = searchParams.get("password")
+
+    // Check admin password for admin view (when no specific studentId)
+    if (!studentId) {
+      if (!password || password !== process.env.ADMIN_PASSWORD) {
+        return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+      }
+    }
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -128,36 +136,51 @@ export async function GET(request: NextRequest) {
       `
       overrides = result.rows
     } else {
-      // Get all overrides (for admin view) with student names
+      // Get all overrides (for admin view) - just the overrides first
       const result = await sql`
         SELECT 
-          o.id, o.student_id, o.day_number, o.date,
-          o.override_type, o.reason, o.created_at, o.updated_at,
-          s.data as student_data
-        FROM student_day_overrides o
-        LEFT JOIN student_data s ON true
-        ORDER BY o.created_at DESC
+          id, student_id, day_number, date,
+          override_type, reason, created_at, updated_at
+        FROM student_day_overrides
+        ORDER BY created_at DESC
       `
       
-      // Process the results to extract student names
+      // Get unique student IDs from overrides
+      const studentIds = [...new Set(result.rows.map(row => row.student_id))]
+      
+      // Get student names for these specific students only
       const studentNameMap = new Map<string, string>()
       
-      // Build a map of student IDs to names from all student data
-      for (const row of result.rows) {
-        if (row.student_data) {
-          let studentData
-          if (typeof row.student_data === "string") {
-            studentData = JSON.parse(row.student_data)
+      if (studentIds.length > 0) {
+        // Get all student data to check across all datasets
+        const studentDataResult = await sql`
+          SELECT data
+          FROM student_data
+          ORDER BY uploaded_at DESC
+        `
+        
+        // Check each dataset until we find names for all students
+        for (const row of studentDataResult.rows) {
+          const studentData = row.data
+          let parsedData
+          
+          if (typeof studentData === "string") {
+            parsedData = JSON.parse(studentData)
           } else {
-            studentData = row.student_data
+            parsedData = studentData
           }
           
-          // Extract student names from the data
-          Object.keys(studentData).forEach(studentId => {
-            if (studentData[studentId] && studentData[studentId].name) {
-              studentNameMap.set(studentId, studentData[studentId].name)
+          // Extract names for students who don't have names yet
+          studentIds.forEach(studentId => {
+            if (!studentNameMap.has(studentId) && parsedData[studentId] && parsedData[studentId].name) {
+              studentNameMap.set(studentId, parsedData[studentId].name)
             }
           })
+          
+          // If we found all student names, we can stop
+          if (studentNameMap.size === studentIds.length) {
+            break
+          }
         }
       }
       

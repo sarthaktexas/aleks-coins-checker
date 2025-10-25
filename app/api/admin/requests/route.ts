@@ -78,7 +78,7 @@ export async function PUT(request: NextRequest) {
 
     // Get the request details first (we need student info for coin deduction)
     const requestResult = await sql`
-      SELECT student_id, student_name, period, section_number, request_type, request_details
+      SELECT student_id, student_name, period, section_number, request_type, request_details, day_number, override_date
       FROM student_requests
       WHERE id = ${requestId}
     `

@@ -266,6 +266,7 @@ export default function AdminRequestsPage() {
     setError("")
   }
 
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -447,6 +448,17 @@ export default function AdminRequestsPage() {
             </div>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        )}
+
 
         {/* Requests List */}
         <div className="space-y-4">
