@@ -267,6 +267,7 @@ export default function AdminRequestsPage() {
   }
 
 
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -458,6 +459,7 @@ export default function AdminRequestsPage() {
             </div>
           </div>
         )}
+
 
 
         {/* Requests List */}

@@ -85,3 +85,4 @@ Creating override for John Doe - Day 15...
 
 - Database connection must be configured (POSTGRES_URL or DATABASE_URL)
 - The script uses the same database connection as your Next.js app
+
