@@ -323,14 +323,6 @@ Total: ${extraCreditStudents.length} students`
           aValue = dataA.percentComplete
           bValue = dataB.percentComplete
           break
-        case "totalDays":
-          aValue = dataA.totalDays
-          bValue = dataB.totalDays
-          break
-        case "periodDays":
-          aValue = dataA.periodDays
-          bValue = dataB.periodDays
-          break
         default:
           // For status sorting, use percentComplete with custom logic
           aValue = getStatusValue(dataA.percentComplete)
@@ -367,7 +359,7 @@ Total: ${extraCreditStudents.length} students`
     }
 
     // Convert student data to CSV format
-    const headers = ["Student ID", "Name", "Email", "Coins", "Total Days", "Period Days", "Percent Complete", "Status"]
+    const headers = ["Student ID", "Name", "Email", "Coins", "Percent Complete", "Status"]
     const csvData = [
       headers.join(","),
       ...Object.entries(studentData).map(([studentId, data]) => [
@@ -375,8 +367,6 @@ Total: ${extraCreditStudents.length} students`
         `"${data.name}"`,
         `"${data.email}"`,
         data.coins,
-        data.totalDays,
-        data.periodDays,
         data.percentComplete,
         `"${data.percentComplete >= 90 ? "Excellent" : data.percentComplete >= 70 ? "Good" : "Needs Work"}"`
       ].join(","))
@@ -630,9 +620,6 @@ Total: ${extraCreditStudents.length} students`
                   >
                     Progress {getSortIcon("percentComplete")}
                   </button>
-                  <div className="text-center min-w-0 flex items-center justify-center gap-1 text-slate-600">
-                    Days
-                  </div>
                   <button 
                     onClick={() => handleSort("status")}
                     className="min-w-0 flex items-center gap-1 hover:text-slate-800 transition-colors"
@@ -691,11 +678,6 @@ Total: ${extraCreditStudents.length} students`
                       </div>
                     </div>
 
-                    {/* Days Completed */}
-                    <div className="text-center min-w-0">
-                      <p className="text-sm font-medium text-slate-900">{data.totalDays}/{data.periodDays}</p>
-                      <p className="text-xs text-slate-500">days</p>
-                    </div>
 
                     {/* Status Badge */}
                     <div className="min-w-0">
@@ -719,7 +701,7 @@ Total: ${extraCreditStudents.length} students`
                         <div className="space-y-1">
                           <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
                           <div className="text-xs text-emerald-600">
-                            {data.percentComplete.toFixed(1)}% • {Math.round((data.percentComplete / 100) * data.periodDays)}/{data.periodDays} days
+                            {data.percentComplete.toFixed(1)}%
                           </div>
                         </div>
                       ) : (
