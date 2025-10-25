@@ -253,12 +253,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// DELETE - Delete all student data
+// DELETE - Delete student data (all or specific upload)
 export async function DELETE(request: NextRequest) {
   try {
     // Check admin password
     const body = await request.json()
-    const { password } = body
+    const { password, uploadId } = body
 
     if (!password || password !== process.env.ADMIN_PASSWORD) {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 })
@@ -269,37 +269,59 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    // Get count of records before deletion
-    const countResult = await sql`
-      SELECT COUNT(*) as count FROM student_data
-    `
-    const recordCount = parseInt(countResult.rows[0].count)
+    let result
 
-    if (recordCount === 0) {
+    if (uploadId) {
+      // Delete specific upload by ID
+      result = await sql`
+        DELETE FROM student_data
+        WHERE id = ${uploadId}
+        RETURNING id, period, section_number, uploaded_at
+      `
+
+      if (result.rows.length === 0) {
+        return NextResponse.json({ 
+          error: "Upload not found",
+        }, { status: 404 })
+      }
+
       return NextResponse.json({ 
         success: true, 
-        message: "No student data found to delete",
-        deletedCount: 0
+        message: `Successfully deleted upload for period ${result.rows[0].period}, section ${result.rows[0].section_number}`,
+        deletedCount: result.rows.length,
+        deletedRecord: result.rows[0]
+      })
+    } else {
+      // Delete all student data (original behavior)
+      const countResult = await sql`
+        SELECT COUNT(*) as count FROM student_data
+      `
+      const recordCount = parseInt(countResult.rows[0].count)
+
+      if (recordCount === 0) {
+        return NextResponse.json({ 
+          success: true, 
+          message: "No student data found to delete",
+          deletedCount: 0
+        })
+      }
+
+      result = await sql`
+        DELETE FROM student_data
+        RETURNING id, period, uploaded_at
+      `
+
+      return NextResponse.json({ 
+        success: true, 
+        message: `Successfully deleted all student data (${result.rows.length} records)`,
+        deletedCount: result.rows.length,
+        deletedRecords: result.rows.map(row => ({
+          id: row.id,
+          period: row.period,
+          uploaded_at: row.uploaded_at
+        }))
       })
     }
-
-    // Delete all student data
-    const result = await sql`
-      DELETE FROM student_data
-      RETURNING id, period, uploaded_at
-    `
-
-    
-    return NextResponse.json({ 
-      success: true, 
-      message: `Successfully deleted all student data (${result.rows.length} records)`,
-      deletedCount: result.rows.length,
-      deletedRecords: result.rows.map(row => ({
-        id: row.id,
-        period: row.period,
-        uploaded_at: row.uploaded_at
-      }))
-    })
   } catch (error) {
     console.error("Error deleting student data:", error)
     return NextResponse.json(

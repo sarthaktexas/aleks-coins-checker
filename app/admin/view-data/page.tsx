@@ -23,7 +23,8 @@ import {
   Shield,
   AlertTriangle,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from "lucide-react"
 import Link from "next/link"
 
@@ -62,6 +63,8 @@ export default function ViewDataPage() {
   const [isPeriodComplete, setIsPeriodComplete] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState("")
+  const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -159,6 +162,52 @@ export default function ViewDataPage() {
     }
   }
 
+  const deleteUpload = async (uploadId: number) => {
+    if (!password) {
+      setError("Please enter the admin password")
+      return
+    }
+
+    if (!confirm("Are you sure you want to delete this upload? This action cannot be undone.")) {
+      return
+    }
+
+    setDeletingUploadId(uploadId)
+    setError("")
+
+    try {
+      const response = await fetch("/api/admin/student-data", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password, uploadId }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        // Reload upload records to reflect the deletion
+        await loadUploadRecords()
+        
+        // Clear selected data if it was from the deleted upload
+        setSelectedPeriod("")
+        setSelectedSection("")
+        setStudentData({})
+        
+        setToastMessage("Upload deleted successfully!")
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 3000)
+      } else {
+        setError(result.error || "Failed to delete upload")
+      }
+    } catch (error) {
+      setError("Failed to delete upload")
+    } finally {
+      setDeletingUploadId(null)
+    }
+  }
+
   const exportExtraCreditStudents = async () => {
     if (!password) {
       setError("Please enter the admin password")
@@ -201,6 +250,7 @@ Total: ${extraCreditStudents.length} students`
       await navigator.clipboard.writeText(emailText)
       
       // Show toast notification
+      setToastMessage("Extra credit list copied to clipboard! 🎉")
       setShowToast(true)
       setTimeout(() => setShowToast(false), 3000)
 
@@ -467,19 +517,30 @@ Total: ${extraCreditStudents.length} students`
                       <p className="text-sm text-slate-600">
                         {formatDate(record.uploaded_at)}
                       </p>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedPeriod(record.period)
-                          setSelectedSection(record.section_number || 'default')
-                          loadStudentData(record.period, record.section_number || 'default')
-                        }}
-                        className="w-full bg-green-600 hover:bg-green-700"
-                        disabled={isLoading}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Data
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedPeriod(record.period)
+                            setSelectedSection(record.section_number || 'default')
+                            loadStudentData(record.period, record.section_number || 'default')
+                          }}
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                          disabled={isLoading}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Data
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deleteUpload(record.id)}
+                          disabled={isLoading || deletingUploadId === record.id}
+                          className="px-3"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -720,7 +781,7 @@ Total: ${extraCreditStudents.length} students`
             <Alert className="border-emerald-200 bg-emerald-50 shadow-lg">
               <CheckCircle className="h-4 w-4 text-emerald-600" />
               <AlertDescription className="text-emerald-800 font-medium">
-                Extra credit list copied to clipboard! 🎉
+                {toastMessage}
               </AlertDescription>
             </Alert>
           </div>
