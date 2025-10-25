@@ -34,6 +34,7 @@ type StudentCoinData = {
   coinAdjustments: number
 }
 
+
 export default function AdminRequestsPage() {
   const [password, setPassword] = useState("")
   const [requests, setRequests] = useState<StudentRequest[]>([])
@@ -44,15 +45,44 @@ export default function AdminRequestsPage() {
   const [selectedSection, setSelectedSection] = useState<string>("all")
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [selectedRequestType, setSelectedRequestType] = useState<string>("all")
-  const [updateModal, setUpdateModal] = useState<{
-    isOpen: boolean
-    request: StudentRequest | null
-  }>({ isOpen: false, request: null })
+  const [editingRequest, setEditingRequest] = useState<number | null>(null)
   const [adminNotes, setAdminNotes] = useState("")
   const [newStatus, setNewStatus] = useState("")
   const [coinDeduction, setCoinDeduction] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
   const [studentCoinData, setStudentCoinData] = useState<Record<string, StudentCoinData>>({})
+  const [coinDataKey, setCoinDataKey] = useState(0) // For triggering SWR revalidation
+  const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
+
+  // Function to get coin data for a specific student
+  const getStudentCoinData = async (studentId: string): Promise<StudentCoinData> => {
+    try {
+      const response = await fetch("/api/student", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ studentId: studentId.trim() }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.student) {
+        return {
+          currentCoins: data.student.coins || 0,
+          totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods || 0,
+          coinAdjustments: data.coinAdjustments || 0
+        }
+      }
+    } catch (err) {
+      // Return default values if fetch fails
+    }
+    
+    return {
+      currentCoins: 0,
+      totalCoinsAcrossPeriods: 0,
+      coinAdjustments: 0
+    }
+  }
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -101,48 +131,53 @@ export default function AdminRequestsPage() {
     
     // Get unique student IDs
     const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
-    console.log('Loading coin data for student IDs:', studentIds)
     
     // Fetch coin data for each student
     for (const studentId of studentIds) {
-      try {
-        const response = await fetch("/api/student", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ studentId: studentId.trim() }),
-        })
-        const data = await response.json()
-        
-        console.log(`API Response for student ${studentId}:`, {
-          ok: response.ok,
-          status: response.status,
-          data: data
-        })
-        
-        if (response.ok && data.student) {
-          coinData[studentId] = {
-            currentCoins: data.student.coins || 0,
-            totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods || 0,
-            coinAdjustments: data.coinAdjustments || 0
-          }
-        } else {
-          console.log(`Failed to get coin data for ${studentId}:`, data)
-        }
-      } catch (err) {
-        console.error(`Failed to load coin data for student ${studentId}:`, err)
-        // Set default values if fetch fails
-        coinData[studentId] = {
-          currentCoins: 0,
-          totalCoinsAcrossPeriods: 0,
-          coinAdjustments: 0
-        }
-      }
+      coinData[studentId] = await getStudentCoinData(studentId)
     }
     
-    console.log('Final coin data loaded:', coinData)
     setStudentCoinData(coinData)
+  }
+
+  // Function to refresh coin data for a specific student
+  const refreshStudentCoinData = async (studentId: string) => {
+    const newCoinData = await getStudentCoinData(studentId)
+    setStudentCoinData(prev => ({
+      ...prev,
+      [studentId]: newCoinData
+    }))
+  }
+
+  // Function to get day details for override requests
+  const getDayDetails = async (studentId: string, dayNumber: number) => {
+    try {
+      const response = await fetch("/api/student", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ studentId: studentId.trim() }),
+      })
+      const data = await response.json()
+      
+      if (response.ok && data.student && data.student.dailyLog) {
+        const day = data.student.dailyLog.find((d: any) => d.day === dayNumber)
+        if (day) {
+          return {
+            minutes: day.minutes || 0,
+            topics: day.topics || 0
+          }
+        }
+      }
+    } catch (err) {
+      // Return default values if fetch fails
+    }
+    
+    return {
+      minutes: 0,
+      topics: 0
+    }
   }
 
   // Filter requests when filters change
@@ -164,19 +199,7 @@ export default function AdminRequestsPage() {
     setFilteredRequests(filtered)
   }, [selectedSection, selectedStatus, selectedRequestType, requests])
 
-  const handleUpdateRequest = async () => {
-    if (!updateModal.request) return
-
-    // Validate coin deduction if provided
-    let coinAmount: number | undefined = undefined
-    if (coinDeduction && coinDeduction.trim() !== "") {
-      coinAmount = parseInt(coinDeduction)
-      if (isNaN(coinAmount) || coinAmount < 0) {
-        setError("Coin deduction must be a positive number or empty")
-        return
-      }
-    }
-
+  const handleUpdateRequest = async (requestId: number) => {
     setIsUpdating(true)
     setError("")
 
@@ -188,27 +211,26 @@ export default function AdminRequestsPage() {
         },
         body: JSON.stringify({
           password,
-          requestId: updateModal.request.id,
+          requestId: requestId,
           status: newStatus,
           adminNotes,
-          processedBy: 'admin',
-          coinDeduction: coinAmount
+          processedBy: 'admin'
         })
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        // Reload requests and coin data
+        // Reload requests and refresh coin data for this specific student
         await loadRequests()
-        setUpdateModal({ isOpen: false, request: null })
+        const request = requests.find(r => r.id === requestId)
+        if (request) {
+          await refreshStudentCoinData(request.student_id)
+        }
+        setEditingRequest(null)
         setAdminNotes("")
         setNewStatus("")
         setCoinDeduction("")
-        // Show success message
-        if (coinAmount) {
-          alert(`Request updated successfully! ${coinAmount} coins have been deducted from the student's balance.`)
-        }
       } else {
         setError(data.error || "Failed to update request")
       }
@@ -219,10 +241,27 @@ export default function AdminRequestsPage() {
     }
   }
 
-  const openUpdateModal = (request: StudentRequest) => {
-    setUpdateModal({ isOpen: true, request })
+  const startEditing = async (request: StudentRequest) => {
+    setEditingRequest(request.id)
     setAdminNotes(request.admin_notes || "")
     setNewStatus(request.status)
+    setCoinDeduction("")
+    setError("")
+    
+    // Fetch day details for override requests
+    if (request.request_type === 'override_request' && request.day_number) {
+      const details = await getDayDetails(request.student_id, request.day_number)
+      setDayDetails(prev => ({
+        ...prev,
+        [request.id]: details
+      }))
+    }
+  }
+
+  const cancelEditing = () => {
+    setEditingRequest(null)
+    setAdminNotes("")
+    setNewStatus("")
     setCoinDeduction("")
     setError("")
   }
@@ -235,8 +274,6 @@ export default function AdminRequestsPage() {
         return <Badge className="bg-green-500 hover:bg-green-600">Approved</Badge>
       case 'rejected':
         return <Badge className="bg-red-500 hover:bg-red-600">Rejected</Badge>
-      case 'completed':
-        return <Badge className="bg-blue-500 hover:bg-blue-600">Completed</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -399,7 +436,6 @@ export default function AdminRequestsPage() {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -463,29 +499,71 @@ export default function AdminRequestsPage() {
                           <Clock className="h-4 w-4" />
                           Submitted: {formatDate(request.submitted_at)}
                         </p>
-                        {/* Coin Balance Information */}
+                        {/* Balance/Override Information */}
                         {studentCoinData[request.student_id] && (
                           <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
                             <Coins className="h-4 w-4 text-amber-600" />
                             <span className="text-sm font-medium text-amber-800">
                               Total Coins: {studentCoinData[request.student_id].totalCoinsAcrossPeriods}
-                              {coinDeduction && !isNaN(parseInt(coinDeduction)) && (
-                                <span className="text-amber-600">
-                                  {" "}→ {studentCoinData[request.student_id].totalCoinsAcrossPeriods - parseInt(coinDeduction)} after deduction
+                              {/* Show projected balance for redemption requests */}
+                              {editingRequest === request.id && 
+                               request.request_type !== 'override_request' && (
+                                <span className="text-amber-600 ml-2">
+                                  → {studentCoinData[request.student_id].totalCoinsAcrossPeriods} (coins already deducted when submitted)
                                 </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Day Details for Override Requests */}
+                        {request.request_type === 'override_request' && request.day_number && (
+                          <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                            <Calendar className="h-4 w-4 text-blue-600" />
+                            <span className="text-sm font-medium text-blue-800">
+                              Day {request.day_number} Details: 
+                              {editingRequest === request.id && dayDetails[request.id] ? (
+                                <span className="text-blue-600 ml-1">
+                                  {dayDetails[request.id].minutes} minutes, {dayDetails[request.id].topics} topics
+                                </span>
+                              ) : editingRequest === request.id ? (
+                                <span className="text-blue-600 ml-1">Loading...</span>
+                              ) : (
+                                <span className="text-blue-600 ml-1">Click 'Update Status' to view</span>
                               )}
                             </span>
                           </div>
                         )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => openUpdateModal(request)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      Update Status
-                    </Button>
+                    {editingRequest === request.id ? (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={cancelEditing}
+                          variant="outline"
+                          disabled={isUpdating}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateRequest(request.id)}
+                          disabled={isUpdating}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          {isUpdating ? "Saving..." : "Save"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => startEditing(request)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Update Status
+                      </Button>
+                    )}
                   </div>
 
                   <div className="bg-slate-50 p-4 rounded-lg space-y-3">
@@ -497,6 +575,69 @@ export default function AdminRequestsPage() {
                       <p className="text-sm font-medium text-slate-700 mb-1">Details:</p>
                       <p className="text-sm text-slate-900 whitespace-pre-wrap">{request.request_details}</p>
                     </div>
+                    
+                    {/* Inline Editing Section */}
+                    {editingRequest === request.id && (
+                      <div className="pt-3 border-t border-slate-200 space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor={`status-${request.id}`}>Status</Label>
+                          <Select value={newStatus} onValueChange={setNewStatus}>
+                            <SelectTrigger id={`status-${request.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="approved">Approved</SelectItem>
+                              <SelectItem value="rejected">Rejected</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`notes-${request.id}`}>Admin Notes</Label>
+                          <Textarea
+                            id={`notes-${request.id}`}
+                            placeholder="Add notes about this request..."
+                            value={adminNotes}
+                            onChange={(e) => setAdminNotes(e.target.value)}
+                            rows={3}
+                            className="resize-none"
+                          />
+                        </div>
+
+                        {/* Info for redemption requests */}
+                        {request.request_type !== 'override_request' && newStatus === 'approved' && (
+                          <div className="space-y-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
+                            <div className="flex items-center gap-2">
+                              <Coins className="h-4 w-4 text-amber-600" />
+                              <span className="text-amber-900 font-medium">Coin Deduction</span>
+                            </div>
+                            <p className="text-sm text-amber-700">
+                              {request.request_type === 'assignment_replacement' 
+                                ? '10 coins were automatically deducted when this request was submitted.'
+                                : request.request_type === 'quiz_replacement'
+                                ? '20 coins were automatically deducted when this request was submitted.'
+                                : 'No coins deducted for this request type.'
+                              }
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Info for override requests */}
+                        {request.request_type === 'override_request' && newStatus === 'approved' && (
+                          <div className="space-y-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <p className="text-sm text-blue-800">
+                              <strong>Approving this override will:</strong>
+                            </p>
+                            <ul className="text-sm text-blue-700 ml-4 list-disc space-y-1">
+                              <li>Mark Day {request.day_number} as qualified for this student</li>
+                              <li>Recalculate their coin balance and progress percentage</li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {request.admin_notes && (
                       <div className="pt-3 border-t border-slate-200">
                         <p className="text-sm font-medium text-slate-700 mb-1">Admin Notes:</p>
@@ -517,133 +658,11 @@ export default function AdminRequestsPage() {
           )}
         </div>
 
-        {/* Update Modal */}
-        {updateModal.isOpen && updateModal.request && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <CardHeader>
-                <CardTitle>Update Request Status</CardTitle>
-                <CardDescription>
-                  {updateModal.request.student_name} - {getRequestTypeLabel(updateModal.request.request_type)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-lg">
-                  <p className="text-sm font-medium text-slate-700 mb-2">Request Details:</p>
-                  <p className="text-sm text-slate-900 whitespace-pre-wrap">{updateModal.request.request_details}</p>
-                </div>
-
-                {/* Student Coin Balance */}
-                {studentCoinData[updateModal.request.student_id] && (
-                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                    <p className="text-sm font-medium text-amber-800 mb-2 flex items-center gap-2">
-                      <Coins className="h-4 w-4" />
-                      Student Coin Balance
-                    </p>
-                    <div className="space-y-1 text-sm text-amber-700">
-                      <p>Current Period: {studentCoinData[updateModal.request.student_id].currentCoins} coins</p>
-                      <p className="font-medium">Total Across All Periods: {studentCoinData[updateModal.request.student_id].totalCoinsAcrossPeriods} coins</p>
-                      {coinDeduction && !isNaN(parseInt(coinDeduction)) && (
-                        <p className="font-medium text-amber-600">
-                          After Deduction: {studentCoinData[updateModal.request.student_id].totalCoinsAcrossPeriods - parseInt(coinDeduction)} coins
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="new-status">Status</Label>
-                  <Select value={newStatus} onValueChange={setNewStatus}>
-                    <SelectTrigger id="new-status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="admin-notes">Admin Notes</Label>
-                  <Textarea
-                    id="admin-notes"
-                    placeholder="Add notes about this request..."
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    rows={4}
-                    className="resize-none"
-                  />
-                </div>
-
-                {/* Only show coin deduction for redemption requests, not override requests */}
-                {(newStatus === 'completed' || newStatus === 'approved') && 
-                 updateModal.request?.request_type !== 'override_request' && (
-                  <div className="space-y-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                    <Label htmlFor="coin-deduction" className="flex items-center gap-2">
-                      <Coins className="h-4 w-4 text-amber-600" />
-                      <span className="text-amber-900">Deduct Coins (Optional)</span>
-                    </Label>
-                    <Input
-                      id="coin-deduction"
-                      type="number"
-                      min="0"
-                      placeholder="e.g., 10 or 20"
-                      value={coinDeduction}
-                      onChange={(e) => setCoinDeduction(e.target.value)}
-                      disabled={isUpdating}
-                    />
-                    <p className="text-xs text-amber-700">
-                      💡 Enter the number of coins to deduct from the student's balance for fulfilling this request. 
-                      This will be logged and visible to the student. Leave empty for no deduction.
-                    </p>
-                  </div>
-                )}
-                
-                {/* Show info for override requests */}
-                {updateModal.request?.request_type === 'override_request' && newStatus === 'approved' && (
-                  <div className="space-y-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-800">
-                      <strong>Approving this override will:</strong>
-                    </p>
-                    <ul className="text-sm text-blue-700 ml-4 list-disc space-y-1">
-                      <li>Mark Day {updateModal.request?.day_number} as qualified for this student</li>
-                      <li>Recalculate their coin balance (may add 1 coin)</li>
-                      <li>Update their progress percentage</li>
-                    </ul>
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setUpdateModal({ isOpen: false, request: null })
-                      setCoinDeduction("")
-                      setError("")
-                    }}
-                    disabled={isUpdating}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleUpdateRequest}
-                    disabled={isUpdating}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  >
-                    {isUpdating ? "Updating..." : coinDeduction ? `Update & Deduct ${coinDeduction} Coins` : "Update Request"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </div>
   )
 }
+
+
+
 

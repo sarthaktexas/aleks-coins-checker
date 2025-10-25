@@ -17,6 +17,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
+    // Determine coin deduction amount for redemption requests
+    let coinDeduction = 0
+    if (requestType === 'assignment_replacement') {
+      coinDeduction = 10
+    } else if (requestType === 'quiz_replacement') {
+      coinDeduction = 20
+    }
+
     // Insert the request into the database
     const result = await sql`
       INSERT INTO student_requests (
@@ -45,6 +53,33 @@ export async function POST(request: NextRequest) {
       )
       RETURNING id, submitted_at
     `
+
+    // If this is a redemption request, deduct coins immediately
+    if (coinDeduction > 0) {
+      const periodKey = `${period}_${sectionNumber}`
+      
+      // Insert coin adjustment
+      await sql`
+        INSERT INTO coin_adjustments (
+          student_id,
+          period,
+          section_number,
+          adjustment_amount,
+          reason,
+          created_by,
+          created_at
+        )
+        VALUES (
+          ${studentId.toLowerCase().trim()},
+          ${period},
+          ${sectionNumber},
+          ${-coinDeduction},
+          ${`Pending ${requestType.replace('_', ' ')} request - ${requestDetails.substring(0, 50)}...`},
+          'system',
+          NOW()
+        )
+      `
+    }
 
     return NextResponse.json({
       success: true,

@@ -112,6 +112,7 @@ export default function StudentLookup() {
   const [studentPeriods, setStudentPeriods] = useState<PeriodInfo[]>([])
   const [coinAdjustments, setCoinAdjustments] = useState<CoinAdjustment[]>([])
   const [totalCoinsAcrossPeriods, setTotalCoinsAcrossPeriods] = useState(0)
+  const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [error, setError] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [isDemoStudent, setIsDemoStudent] = useState(false)
@@ -179,6 +180,7 @@ export default function StudentLookup() {
         setStudentPeriods(data.periods || [])
         setCoinAdjustments(data.coinAdjustments || [])
         setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins)
+        setPendingRequests(data.pendingRequests || [])
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
@@ -574,6 +576,50 @@ export default function StudentLookup() {
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Pending Requests */}
+                  {pendingRequests && pendingRequests.length > 0 && (
+                    <div className="mb-6">
+                      <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 shadow-lg">
+                        <CardContent className="p-6">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-amber-100 rounded-full">
+                              <Clock className="h-6 w-6 text-amber-600" />
+                            </div>
+                            <span className="text-lg font-semibold text-amber-800">Pending Requests</span>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            {pendingRequests.map((request: any) => (
+                              <div key={request.id} className="bg-white/60 rounded-lg p-4 border border-amber-200">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="text-sm font-medium text-amber-800">
+                                    {request.request_type === 'assignment_replacement' 
+                                      ? 'Assignment/Video Replacement' 
+                                      : request.request_type === 'quiz_replacement'
+                                      ? 'Quiz Replacement'
+                                      : 'Override Request'}
+                                  </div>
+                                  <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
+                                    Pending
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-amber-700 mb-2">{request.request_details}</p>
+                                <p className="text-xs text-amber-600">
+                                  Submitted: {new Date(request.submitted_at).toLocaleDateString()}
+                                  {request.request_type !== 'override_request' && (
+                                    <span className="ml-2">
+                                      • {request.request_type === 'assignment_replacement' ? '10' : '20'} coins deducted
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
 
                   {/* Achievement Banner - Only show at end of period */}
                   {(() => {

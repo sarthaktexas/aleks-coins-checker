@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { password, requestId, status, adminNotes, processedBy, coinDeduction } = body
+    const { password, requestId, status, adminNotes, processedBy } = body
 
     // Check admin password
     if (!password || password !== process.env.ADMIN_PASSWORD) {
@@ -121,35 +121,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // If there's a coin deduction and status is completed, create a coin adjustment
-    let adjustmentId = null
-    if (coinDeduction && coinDeduction > 0 && (status === 'completed' || status === 'approved')) {
-      // Create a coin adjustment record (negative amount to deduct)
-      const adjustmentResult = await sql`
-        INSERT INTO coin_adjustments (
-          student_id, 
-          student_name, 
-          period, 
-          section_number, 
-          adjustment_amount, 
-          reason,
-          created_by,
-          is_active
-        )
-        VALUES (
-          ${requestData.student_id}, 
-          ${requestData.student_name}, 
-          ${requestData.period}, 
-          ${requestData.section_number}, 
-          ${-coinDeduction}, 
-          ${`Request fulfilled: ${getRequestTypeLabel(requestData.request_type)}. ${adminNotes || requestData.request_details}`},
-          ${processedBy || 'admin'},
-          true
-        )
-        RETURNING id
-      `
-      adjustmentId = adjustmentResult.rows[0]?.id
-    }
+    // Note: Coins are already deducted when the request is submitted, no need to deduct again
 
     // Update the request
     const result = await sql`
@@ -170,15 +142,12 @@ export async function PUT(request: NextRequest) {
     let message = "Request updated successfully"
     if (overrideId) {
       message = "Override approved and applied to student record"
-    } else if (coinDeduction) {
-      message = `Request updated and ${coinDeduction} coins deducted`
     }
 
     return NextResponse.json({
       success: true,
       message: message,
       request: result.rows[0],
-      adjustmentId: adjustmentId,
       overrideId: overrideId
     })
   } catch (error) {

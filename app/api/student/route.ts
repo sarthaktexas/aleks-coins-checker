@@ -526,6 +526,26 @@ export async function POST(request: NextRequest) {
     const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${periodInfo?.section_number || 'default'}`
     const currentPeriodAdjustment = adjustmentsByPeriod.get(currentPeriodKey) || 0
     
+    // Get pending requests for this student
+    let pendingRequests = []
+    try {
+      const requestsResult = await sql`
+        SELECT 
+          id,
+          request_type,
+          request_details,
+          submitted_at,
+          status
+        FROM student_requests
+        WHERE student_id = ${normalizedId} AND status = 'pending'
+        ORDER BY submitted_at DESC
+      `
+      pendingRequests = requestsResult.rows
+    } catch (requestError) {
+      console.error("Error fetching pending requests:", requestError)
+      // Continue without pending requests if there's an error
+    }
+    
     // Return the student's data including all periods
     return NextResponse.json({
       success: true,
@@ -545,7 +565,8 @@ export async function POST(request: NextRequest) {
       },
       periods: periodsData,
       coinAdjustments: coinAdjustments,
-      totalCoinsAcrossPeriods: totalCoinsAcrossPeriods
+      totalCoinsAcrossPeriods: totalCoinsAcrossPeriods,
+      pendingRequests: pendingRequests
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)

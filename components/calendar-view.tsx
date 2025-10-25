@@ -51,6 +51,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     dayInfo: null
   })
 
+
   // Create a map for quick lookup
   const logMap = new Map(dailyLog.map((log) => [log.day, log]))
   const overrideMap = new Map(overrides.map((override) => [override.day_number, override]))
@@ -113,8 +114,8 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
       }
     }
 
-    // Generate all days up to periodDays
-    for (let i = 0; i < periodDays; i++) {
+    // Generate all days up to totalDays (includes exempt days)
+    for (let i = 0; i < totalDays; i++) {
       // Create date string manually
       const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
 
@@ -369,6 +370,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
             )}
           </div>
         </div>
+
       </CardContent>
 
       {/* Override Modal */}
