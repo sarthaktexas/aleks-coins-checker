@@ -101,19 +101,34 @@ export default function AdminRequestsPage() {
     
     // Get unique student IDs
     const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
+    console.log('Loading coin data for student IDs:', studentIds)
     
     // Fetch coin data for each student
     for (const studentId of studentIds) {
       try {
-        const response = await fetch(`/api/student?studentId=${encodeURIComponent(studentId)}`)
+        const response = await fetch("/api/student", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ studentId: studentId.trim() }),
+        })
         const data = await response.json()
         
-        if (response.ok && data.studentInfo) {
+        console.log(`API Response for student ${studentId}:`, {
+          ok: response.ok,
+          status: response.status,
+          data: data
+        })
+        
+        if (response.ok && data.student) {
           coinData[studentId] = {
-            currentCoins: data.studentInfo.coins || 0,
-            totalCoinsAcrossPeriods: data.studentInfo.totalCoinsAcrossPeriods || 0,
-            coinAdjustments: data.studentInfo.totalAdjustments || 0
+            currentCoins: data.student.coins || 0,
+            totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods || 0,
+            coinAdjustments: data.coinAdjustments || 0
           }
+        } else {
+          console.log(`Failed to get coin data for ${studentId}:`, data)
         }
       } catch (err) {
         console.error(`Failed to load coin data for student ${studentId}:`, err)
@@ -126,6 +141,7 @@ export default function AdminRequestsPage() {
       }
     }
     
+    console.log('Final coin data loaded:', coinData)
     setStudentCoinData(coinData)
   }
 
