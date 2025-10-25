@@ -295,8 +295,7 @@ export default function AdminRequestsPage() {
         await loadRequests()
         await refreshStudentCoinData(studentId)
         
-        // Show success message
-        alert(`Successfully approved ${data.approvedCount} requests for ${studentId}`)
+        // Success is handled by the UI refresh - no alert needed
       } else {
         setError(data.error || "Failed to fast approve requests")
       }
