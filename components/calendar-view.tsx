@@ -82,7 +82,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
   // Function to generate all days of the period with correct dates
   const generateAllDays = () => {
-    if (dailyLog.length === 0) {
+    if (dailyLog.length === 0 || periodDays === 0) {
       return []
     }
 
@@ -114,16 +114,18 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
       }
     }
 
-    // Generate all days up to totalDays (includes exempt days)
-    for (let i = 0; i < totalDays; i++) {
+    // Generate exactly periodDays number of days (working days)
+    // Note: This generates calendar days sequentially, but periodDays represents working days
+    // The actual excluded days are marked in dailyLog entries
+    for (let i = 0; i < periodDays; i++) {
       // Create date string manually
       const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
 
-      // Check if this day has data
+      // Check if this day has data in dailyLog
       const existingLog = logMap.get(dayNumber)
 
       if (existingLog) {
-        // Use existing data
+        // Use existing data from dailyLog
         allDays.push(existingLog)
       } else {
         // Create placeholder for days without data
