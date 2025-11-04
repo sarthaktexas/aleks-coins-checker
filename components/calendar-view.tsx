@@ -319,7 +319,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
                       {day.wouldHaveQualified ? "🎁 Extra credit earned" : "Exempt - Not counted in progress"}
                     </div>
                   )}
-                  {canClick && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
+                  {canClick && !(isQualified && !hasOverride) && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
                   {/* Arrow */}
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                 </div>
