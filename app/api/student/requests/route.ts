@@ -56,12 +56,11 @@ export async function POST(request: NextRequest) {
 
     // If this is a redemption request, deduct coins immediately
     if (coinDeduction > 0) {
-      const periodKey = `${period}_${sectionNumber}`
-      
       // Insert coin adjustment
       await sql`
         INSERT INTO coin_adjustments (
           student_id,
+          student_name,
           period,
           section_number,
           adjustment_amount,
@@ -71,6 +70,7 @@ export async function POST(request: NextRequest) {
         )
         VALUES (
           ${studentId.toLowerCase().trim()},
+          ${studentName},
           ${period},
           ${sectionNumber},
           ${-coinDeduction},
