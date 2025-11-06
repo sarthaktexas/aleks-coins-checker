@@ -43,7 +43,7 @@ export default function AdminRequestsPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState("")
   const [selectedSection, setSelectedSection] = useState<string>("all")
-  const [selectedStatus, setSelectedStatus] = useState<string>("all")
+  const [selectedStatus, setSelectedStatus] = useState<string>("pending")
   const [selectedRequestType, setSelectedRequestType] = useState<string>("all")
   const [editingRequest, setEditingRequest] = useState<number | null>(null)
   const [adminNotes, setAdminNotes] = useState("")
@@ -305,8 +305,6 @@ export default function AdminRequestsPage() {
       setFastApproving(null)
     }
   }
-
-
 
   const getStatusBadge = (status: string) => {
     switch (status) {
