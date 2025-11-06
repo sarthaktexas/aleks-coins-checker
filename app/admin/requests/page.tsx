@@ -532,8 +532,8 @@ export default function AdminRequestsPage() {
 
 
 
-        {/* Requests List */}
-        <div className="space-y-4">
+        {/* Requests List - Grouped by Student */}
+        <div className="space-y-6">
           {filteredRequests.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
@@ -547,214 +547,252 @@ export default function AdminRequestsPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredRequests.map((request) => (
-              <Card key={request.id} className="shadow-md hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <User className="h-5 w-5 text-blue-600" />
-                        <h3 className="text-lg font-semibold text-slate-900">{request.student_name}</h3>
-                        <Badge className={getRequestTypeBadgeColor(request.request_type)}>
-                          {getRequestTypeLabel(request.request_type)}
-                        </Badge>
-                        {getStatusBadge(request.status)}
-                      </div>
-                      <div className="space-y-1 text-sm text-slate-600 ml-8">
-                        <p className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          {request.student_email}
-                        </p>
-                        <p className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          Student ID: {request.student_id}
-                        </p>
-                        <p className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          Section {request.section_number} • {request.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </p>
-                        {request.day_number && request.override_date && (
-                          <p className="flex items-center gap-2 text-blue-600 font-medium">
-                            <Calendar className="h-4 w-4" />
-                            Day {request.day_number} ({request.override_date})
-                          </p>
-                        )}
-                        <p className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          Submitted: {formatDate(request.submitted_at)}
-                        </p>
-                        {/* Balance/Override Information */}
-                        {studentCoinData[request.student_id] && (
-                          <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
-                            <Coins className="h-4 w-4 text-amber-600" />
-                            <span className="text-sm font-medium text-amber-800">
-                              Total Coins: {studentCoinData[request.student_id].totalCoinsAcrossPeriods}
-                              {/* Show projected balance for redemption requests */}
-                              {editingRequest === request.id && 
-                               request.request_type !== 'override_request' && (
-                                <span className="text-amber-600 ml-2">
-                                  → {studentCoinData[request.student_id].totalCoinsAcrossPeriods} (coins already deducted when submitted)
-                                </span>
-                              )}
-                            </span>
+            (() => {
+              // Group requests by student_id
+              const groupedRequests = filteredRequests.reduce((acc, request) => {
+                if (!acc[request.student_id]) {
+                  acc[request.student_id] = []
+                }
+                acc[request.student_id].push(request)
+                return acc
+              }, {} as Record<string, StudentRequest[]>)
+
+              // Sort students by name
+              const studentIds = Object.keys(groupedRequests).sort((a, b) => {
+                const nameA = groupedRequests[a][0].student_name
+                const nameB = groupedRequests[b][0].student_name
+                return nameA.localeCompare(nameB)
+              })
+
+              return studentIds.map((studentId) => {
+                const studentRequests = groupedRequests[studentId]
+                const firstRequest = studentRequests[0]
+                const pendingCount = studentRequests.filter(r => r.status === 'pending').length
+                const totalCount = studentRequests.length
+
+                return (
+                  <Card key={studentId} className="shadow-md border-2">
+                    {/* Student Header */}
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <User className="h-6 w-6 text-blue-600" />
+                            <h2 className="text-xl font-bold text-slate-900">{firstRequest.student_name}</h2>
+                            <Badge variant="outline" className="bg-white">
+                              {totalCount} request{totalCount !== 1 ? 's' : ''}
+                              {pendingCount > 0 && ` (${pendingCount} pending)`}
+                            </Badge>
                           </div>
-                        )}
-                        
-                        {/* Day Details for Override Requests */}
-                        {request.request_type === 'override_request' && request.day_number && (
-                          <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
-                            <Calendar className="h-4 w-4 text-blue-600" />
-                            <span className="text-sm font-medium text-blue-800">
-                              Day {request.day_number} Details: 
-                              {editingRequest === request.id && dayDetails[request.id] ? (
-                                <span className="text-blue-600 ml-1">
-                                  {dayDetails[request.id].minutes} minutes, {dayDetails[request.id].topics} topics
+                          <div className="space-y-1 text-sm text-slate-600 ml-9">
+                            <p className="flex items-center gap-2">
+                              <Mail className="h-4 w-4" />
+                              {firstRequest.student_email}
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              Student ID: {firstRequest.student_id}
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              Section {firstRequest.section_number} • {firstRequest.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </p>
+                            {/* Balance Information */}
+                            {studentCoinData[studentId] && (
+                              <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                                <Coins className="h-4 w-4 text-amber-600" />
+                                <span className="text-sm font-medium text-amber-800">
+                                  Total Coins: {studentCoinData[studentId].totalCoinsAcrossPeriods}
                                 </span>
-                              ) : editingRequest === request.id ? (
-                                <span className="text-blue-600 ml-1">Loading...</span>
-                              ) : (
-                                <span className="text-blue-600 ml-1">Click 'Update Status' to view</span>
-                              )}
-                            </span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                    {editingRequest === request.id ? (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={cancelEditing}
-                          variant="outline"
-                          disabled={isUpdating}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleUpdateRequest(request.id)}
-                          disabled={isUpdating}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          {isUpdating ? "Saving..." : "Save"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => startEditing(request)}
-                          className="bg-blue-600 hover:bg-blue-700"
-                        >
-                          Update Status
-                        </Button>
-                        {getStudentPendingCount(request.student_id) > 1 && (
+                        </div>
+                        {pendingCount > 1 && (
                           <Button
                             size="sm"
-                            onClick={() => handleFastApproveAll(request.student_id)}
-                            disabled={fastApproving === request.student_id}
+                            onClick={() => handleFastApproveAll(studentId)}
+                            disabled={fastApproving === studentId}
                             className="bg-green-600 hover:bg-green-700"
                           >
-                            {fastApproving === request.student_id ? (
+                            {fastApproving === studentId ? (
                               "Approving..."
                             ) : (
-                              `Fast Approve All (${getStudentPendingCount(request.student_id)})`
+                              `Fast Approve All (${pendingCount})`
                             )}
                           </Button>
                         )}
                       </div>
-                    )}
-                  </div>
+                    </CardHeader>
 
-                  <div className="bg-slate-50 p-4 rounded-lg space-y-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Request Type:</p>
-                      <p className="text-sm text-slate-900">{getRequestTypeLabel(request.request_type)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Details:</p>
-                      <p className="text-sm text-slate-900 whitespace-pre-wrap">{request.request_details}</p>
-                    </div>
-                    
-                    {/* Inline Editing Section */}
-                    {editingRequest === request.id && (
-                      <div className="pt-3 border-t border-slate-200 space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor={`status-${request.id}`}>Status</Label>
-                          <Select value={newStatus} onValueChange={setNewStatus}>
-                            <SelectTrigger id={`status-${request.id}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="approved">Approved</SelectItem>
-                              <SelectItem value="rejected">Rejected</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor={`notes-${request.id}`}>Admin Notes</Label>
-                          <Textarea
-                            id={`notes-${request.id}`}
-                            placeholder="Add notes about this request..."
-                            value={adminNotes}
-                            onChange={(e) => setAdminNotes(e.target.value)}
-                            rows={3}
-                            className="resize-none"
-                          />
-                        </div>
-
-                        {/* Info for redemption requests */}
-                        {request.request_type !== 'override_request' && newStatus === 'approved' && (
-                          <div className="space-y-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                            <div className="flex items-center gap-2">
-                              <Coins className="h-4 w-4 text-amber-600" />
-                              <span className="text-amber-900 font-medium">Coin Deduction</span>
+                    {/* Student Requests */}
+                    <CardContent className="p-0">
+                      <div className="divide-y divide-slate-200">
+                        {studentRequests.map((request) => (
+                          <div key={request.id} className="p-6 hover:bg-slate-50 transition-colors">
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                  <Badge className={getRequestTypeBadgeColor(request.request_type)}>
+                                    {getRequestTypeLabel(request.request_type)}
+                                  </Badge>
+                                  {getStatusBadge(request.status)}
+                                  {request.day_number && request.override_date && (
+                                    <Badge variant="outline" className="text-blue-600 border-blue-600">
+                                      Day {request.day_number} ({request.override_date})
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="space-y-1 text-sm text-slate-600">
+                                  <p className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4" />
+                                    Submitted: {formatDate(request.submitted_at)}
+                                  </p>
+                                  
+                                  {/* Day Details for Override Requests */}
+                                  {request.request_type === 'override_request' && request.day_number && (
+                                    <div className="flex items-center gap-2 mt-2 p-2 bg-blue-50 rounded border border-blue-200">
+                                      <Calendar className="h-4 w-4 text-blue-600" />
+                                      <span className="text-sm font-medium text-blue-800">
+                                        Day {request.day_number} Details: 
+                                        {editingRequest === request.id && dayDetails[request.id] ? (
+                                          <span className="text-blue-600 ml-1">
+                                            {dayDetails[request.id].minutes} minutes, {dayDetails[request.id].topics} topics
+                                          </span>
+                                        ) : editingRequest === request.id ? (
+                                          <span className="text-blue-600 ml-1">Loading...</span>
+                                        ) : (
+                                          <span className="text-blue-600 ml-1">Click 'Update Status' to view</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {editingRequest === request.id ? (
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={cancelEditing}
+                                    variant="outline"
+                                    disabled={isUpdating}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleUpdateRequest(request.id)}
+                                    disabled={isUpdating}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    {isUpdating ? "Saving..." : "Save"}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => startEditing(request)}
+                                  className="bg-blue-600 hover:bg-blue-700"
+                                >
+                                  Update Status
+                                </Button>
+                              )}
                             </div>
-                            <p className="text-sm text-amber-700">
-                              {request.request_type === 'assignment_replacement' 
-                                ? '10 coins were automatically deducted when this request was submitted.'
-                                : request.request_type === 'quiz_replacement'
-                                ? '20 coins were automatically deducted when this request was submitted.'
-                                : 'No coins deducted for this request type.'
-                              }
-                            </p>
-                          </div>
-                        )}
-                        
-                        {/* Info for override requests */}
-                        {request.request_type === 'override_request' && newStatus === 'approved' && (
-                          <div className="space-y-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
-                            <p className="text-sm text-blue-800">
-                              <strong>Approving this override will:</strong>
-                            </p>
-                            <ul className="text-sm text-blue-700 ml-4 list-disc space-y-1">
-                              <li>Mark Day {request.day_number} as qualified for this student</li>
-                              <li>Recalculate their coin balance and progress percentage</li>
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
 
-                    {request.admin_notes && (
-                      <div className="pt-3 border-t border-slate-200">
-                        <p className="text-sm font-medium text-slate-700 mb-1">Admin Notes:</p>
-                        <p className="text-sm text-slate-900 whitespace-pre-wrap">{request.admin_notes}</p>
+                            <div className="bg-slate-50 p-4 rounded-lg space-y-3">
+                              <div>
+                                <p className="text-sm font-medium text-slate-700 mb-1">Request Type:</p>
+                                <p className="text-sm text-slate-900">{getRequestTypeLabel(request.request_type)}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-700 mb-1">Details:</p>
+                                <p className="text-sm text-slate-900 whitespace-pre-wrap">{request.request_details}</p>
+                              </div>
+                              
+                              {/* Inline Editing Section */}
+                              {editingRequest === request.id && (
+                                <div className="pt-3 border-t border-slate-200 space-y-4">
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`status-${request.id}`}>Status</Label>
+                                    <Select value={newStatus} onValueChange={setNewStatus}>
+                                      <SelectTrigger id={`status-${request.id}`}>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="pending">Pending</SelectItem>
+                                        <SelectItem value="approved">Approved</SelectItem>
+                                        <SelectItem value="rejected">Rejected</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`notes-${request.id}`}>Admin Notes</Label>
+                                    <Textarea
+                                      id={`notes-${request.id}`}
+                                      placeholder="Add notes about this request..."
+                                      value={adminNotes}
+                                      onChange={(e) => setAdminNotes(e.target.value)}
+                                      rows={3}
+                                      className="resize-none"
+                                    />
+                                  </div>
+
+                                  {/* Info for redemption requests */}
+                                  {request.request_type !== 'override_request' && newStatus === 'approved' && (
+                                    <div className="space-y-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
+                                      <div className="flex items-center gap-2">
+                                        <Coins className="h-4 w-4 text-amber-600" />
+                                        <span className="text-amber-900 font-medium">Coin Deduction</span>
+                                      </div>
+                                      <p className="text-sm text-amber-700">
+                                        {request.request_type === 'assignment_replacement' 
+                                          ? '10 coins were automatically deducted when this request was submitted.'
+                                          : request.request_type === 'quiz_replacement'
+                                          ? '20 coins were automatically deducted when this request was submitted.'
+                                          : 'No coins deducted for this request type.'
+                                        }
+                                      </p>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Info for override requests */}
+                                  {request.request_type === 'override_request' && newStatus === 'approved' && (
+                                    <div className="space-y-2 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                      <p className="text-sm text-blue-800">
+                                        <strong>Approving this override will:</strong>
+                                      </p>
+                                      <ul className="text-sm text-blue-700 ml-4 list-disc space-y-1">
+                                        <li>Mark Day {request.day_number} as qualified for this student</li>
+                                        <li>Recalculate their coin balance and progress percentage</li>
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {request.admin_notes && (
+                                <div className="pt-3 border-t border-slate-200">
+                                  <p className="text-sm font-medium text-slate-700 mb-1">Admin Notes:</p>
+                                  <p className="text-sm text-slate-900 whitespace-pre-wrap">{request.admin_notes}</p>
+                                </div>
+                              )}
+                              {request.processed_at && (
+                                <div className="pt-3 border-t border-slate-200">
+                                  <p className="text-xs text-slate-500">
+                                    Processed: {formatDate(request.processed_at)} by {request.processed_by || 'admin'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    {request.processed_at && (
-                      <div className="pt-3 border-t border-slate-200">
-                        <p className="text-xs text-slate-500">
-                          Processed: {formatDate(request.processed_at)} by {request.processed_by || 'admin'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                    </CardContent>
+                  </Card>
+                )
+              })
+            })()
           )}
         </div>
 
