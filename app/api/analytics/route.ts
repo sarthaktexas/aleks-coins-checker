@@ -65,20 +65,22 @@ type MergedPeriodStats = {
 
 async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
   try {
-    // Get all overrides (now student-specific only)
+    // Get all overrides including date field to match by date instead of day_number
+    // This ensures overrides from one period don't apply to another period
     const overridesResult = await sql`
-      SELECT student_id, day_number, override_type, reason
+      SELECT student_id, day_number, date, override_type, reason
       FROM student_day_overrides
     `
 
-    const overridesMap = new Map<string, Map<number, any>>()
+    // Group overrides by student_id and date (not day_number, since day numbers are period-specific)
+    const overridesMap = new Map<string, Map<string, any>>()
     
-    // Group overrides by student_id
     overridesResult.rows.forEach(override => {
       if (!overridesMap.has(override.student_id)) {
         overridesMap.set(override.student_id, new Map())
       }
-      overridesMap.get(override.student_id)!.set(override.day_number, override)
+      // Use date as the key instead of day_number to match the correct period
+      overridesMap.get(override.student_id)!.set(override.date, override)
     })
 
     // Apply overrides to each student's daily log
@@ -89,9 +91,9 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
       const studentOverrides = overridesMap.get(studentId)
       
       if (studentOverrides && student.dailyLog) {
-        // Apply overrides to daily log
+        // Apply overrides to daily log by matching date (not day_number)
         student.dailyLog = student.dailyLog.map(day => {
-          const override = studentOverrides.get(day.day)
+          const override = studentOverrides.get(day.date)
           if (override) {
             return {
               ...day,

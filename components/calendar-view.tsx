@@ -54,7 +54,34 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
   // Create a map for quick lookup
   const logMap = new Map(dailyLog.map((log) => [log.day, log]))
-  const overrideMap = new Map(overrides.map((override) => [override.day_number, override]))
+  
+  // Filter overrides by date range to match only this period's dates
+  // Get the date range from dailyLog (using string comparison to avoid timezone issues)
+  const periodDateStrings = dailyLog.length > 0 
+    ? dailyLog.map(log => log.date).sort()
+    : []
+  
+  const minDate = periodDateStrings.length > 0 ? periodDateStrings[0] : null
+  const maxDate = periodDateStrings.length > 0 ? periodDateStrings[periodDateStrings.length - 1] : null
+  
+  // Filter overrides to only include those whose dates fall within this period's date range
+  // Use string comparison since dates are stored as 'YYYY-MM-DD' strings
+  const filteredOverrides = minDate && maxDate
+    ? overrides.filter(override => {
+        return override.date >= minDate && override.date <= maxDate
+      })
+    : []
+  
+  // Create override map using day_number from the filtered overrides
+  // Match by date to ensure we're using the right override for this period
+  const overrideMap = new Map<number, DayOverride>()
+  filteredOverrides.forEach(override => {
+    // Find the day in dailyLog that matches this override's date
+    const matchingDay = dailyLog.find(log => log.date === override.date)
+    if (matchingDay) {
+      overrideMap.set(matchingDay.day, override)
+    }
+  })
 
   // Load overrides when studentInfo is available
   useEffect(() => {
