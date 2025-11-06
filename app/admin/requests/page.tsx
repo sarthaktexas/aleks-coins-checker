@@ -54,6 +54,7 @@ export default function AdminRequestsPage() {
   const [coinDataKey, setCoinDataKey] = useState(0) // For triggering SWR revalidation
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
+  const [isLoadingCoinData, setIsLoadingCoinData] = useState(false) // Track if coin data is currently loading
 
   // Function to get coin data for a specific student
   const getStudentCoinData = async (studentId: string): Promise<StudentCoinData> => {
@@ -127,18 +128,44 @@ export default function AdminRequestsPage() {
     }
   }
 
-  const loadStudentCoinData = async (requests: StudentRequest[]) => {
-    const coinData: Record<string, StudentCoinData> = {}
-    
-    // Get unique student IDs
-    const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
-    
-    // Fetch coin data for each student
-    for (const studentId of studentIds) {
-      coinData[studentId] = await getStudentCoinData(studentId)
+  const loadStudentCoinData = async (requests: StudentRequest[], forceRefresh = false) => {
+    // Prevent duplicate concurrent requests
+    if (isLoadingCoinData) {
+      return
     }
     
-    setStudentCoinData(coinData)
+    setIsLoadingCoinData(true)
+    
+    try {
+      const coinData: Record<string, StudentCoinData> = forceRefresh ? {} : { ...studentCoinData }
+      
+      // Get unique student IDs
+      const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
+      
+      // Only fetch data for students we don't already have (unless force refresh)
+      const studentsToFetch = forceRefresh 
+        ? studentIds 
+        : studentIds.filter(id => !coinData[id])
+      
+      if (studentsToFetch.length > 0) {
+        // Fetch coin data for all students in parallel instead of sequentially
+        const coinDataPromises = studentsToFetch.map(async (studentId) => {
+          const data = await getStudentCoinData(studentId)
+          return { studentId, data }
+        })
+        
+        const results = await Promise.all(coinDataPromises)
+        
+        // Merge new results into existing coin data
+        results.forEach(({ studentId, data }) => {
+          coinData[studentId] = data
+        })
+      }
+      
+      setStudentCoinData(coinData)
+    } finally {
+      setIsLoadingCoinData(false)
+    }
   }
 
   // Function to refresh coin data for a specific student
@@ -486,8 +513,8 @@ export default function AdminRequestsPage() {
             </div>
 
             <div className="flex items-end">
-              <Button onClick={loadRequests} variant="outline">
-                Refresh
+              <Button onClick={() => loadRequests()} variant="outline" disabled={isLoadingCoinData}>
+                {isLoadingCoinData ? "Loading..." : "Refresh"}
               </Button>
             </div>
           </div>
