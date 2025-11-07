@@ -124,6 +124,7 @@ export default function StudentLookup() {
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false)
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null)
   const [activePeriods, setActivePeriods] = useState<string[]>([])
+  const [selectedPeriodHistory, setSelectedPeriodHistory] = useState<number | null>(null)
 
   // Load analytics on component mount
   useEffect(() => {
@@ -167,6 +168,7 @@ export default function StudentLookup() {
     setIsSearching(true)
     setError("")
     setStudentInfo(null)
+    setSelectedPeriodHistory(null)
 
     try {
 
@@ -190,7 +192,10 @@ export default function StudentLookup() {
 
       if (data.success && data.student) {
         setStudentInfo(data.student)
-        setStudentPeriods(data.periods || [])
+        const periods = data.periods || []
+        setStudentPeriods(periods)
+        // Always set the default selected period history to the latest (index 0) when new data is loaded
+        setSelectedPeriodHistory(periods.length > 0 ? 0 : null)
         setCoinAdjustments(data.coinAdjustments || [])
         setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins)
         setPendingRequests(data.pendingRequests || [])
@@ -826,10 +831,35 @@ export default function StudentLookup() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 space-y-6">
-                  {studentPeriods.map((periodData, index) => {
-                    const isLatest = index === 0
+                  {/* Period Selection Buttons */}
+                  {studentPeriods.length > 0 && (
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {studentPeriods.slice(0, 3).map((periodData, index) => (
+                        <Button
+                          key={`${periodData.period}-${periodData.section}`}
+                          onClick={() => setSelectedPeriodHistory(index)}
+                          variant={selectedPeriodHistory === index ? "default" : "outline"}
+                          className={
+                            selectedPeriodHistory === index
+                              ? "bg-purple-600 hover:bg-purple-700 text-white"
+                              : "border-purple-200 text-purple-700 hover:bg-purple-50"
+                          }
+                        >
+                          {periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {index === 0 && (
+                            <span className="ml-2 px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Latest</span>
+                          )}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Selected Period Details */}
+                  {selectedPeriodHistory !== null && studentPeriods[selectedPeriodHistory] && (() => {
+                    const periodData = studentPeriods[selectedPeriodHistory]
+                    const isLatest = selectedPeriodHistory === 0
                     return (
-                      <div key={`${periodData.period}-${periodData.section}`} className="space-y-4">
+                      <div className="space-y-4">
                         {/* Period Header */}
                         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
                           <div>
@@ -925,14 +955,9 @@ export default function StudentLookup() {
                             }}
                           />
                         </div>
-
-                        {/* Divider between periods */}
-                        {index < studentPeriods.length - 1 && (
-                          <hr className="my-6 border-purple-200" />
-                        )}
                       </div>
                     )
-                  })}
+                  })()}
                 </CardContent>
               </Card>
             )}
