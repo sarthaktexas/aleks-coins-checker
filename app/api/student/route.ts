@@ -535,8 +535,14 @@ export async function POST(request: NextRequest) {
     const totalCoinsFromPeriods = periodsData.reduce((sum, p) => sum + p.totalCoins, 0)
     const totalCoinsAcrossPeriods = totalCoinsFromPeriods + globalAdjustments
     
+    // Get the student's section number from their actual period data
+    // Use the most recent period's section (first in allPeriods since it's sorted by upload date)
+    const studentSectionNumber = allPeriods.length > 0 
+      ? allPeriods[0].section 
+      : (periodInfo?.section_number || 'default')
+    
     // Get current period adjustment
-    const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${periodInfo?.section_number || 'default'}`
+    const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${studentSectionNumber}`
     const currentPeriodAdjustment = adjustmentsByPeriod.get(currentPeriodKey) || 0
     
     // Get pending requests for this student
@@ -600,7 +606,7 @@ export async function POST(request: NextRequest) {
         percentComplete: student.percentComplete,
         dailyLog: student.dailyLog,
         period: periodInfo?.period || 'Unknown',
-        sectionNumber: periodInfo?.section_number || 'default',
+        sectionNumber: studentSectionNumber,
         exemptDayCredits: student.exemptDayCredits
       },
       periods: periodsData,
