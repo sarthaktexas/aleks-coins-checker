@@ -176,6 +176,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
   const allDays = generateAllDays()
 
+  // Find the latest day with data (not "No data available")
+  const daysWithData = dailyLog
+    .filter(day => day.reason !== "⏳ No data available" && !day.isExcluded)
+    .map(day => day.day)
+  const latestDayWithData = daysWithData.length > 0 ? Math.max(...daysWithData) : 0
+
   const getDayColor = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
     
@@ -264,6 +270,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
     const override = overrideMap.get(day.day)
     const isQualified = override ? override.override_type === "qualified" : day.qualified
+    const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     
     // Don't allow clicking on already qualified days (unless they have an override)
     if (isQualified && !override) {
@@ -276,7 +283,8 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
         dayNumber: day.day,
         date: day.date,
         currentQualified: isQualified,
-        currentReason: override ? override.reason || day.reason : day.reason
+        currentReason: override ? override.reason || day.reason : day.reason,
+        isLatestDay: isLatestDay
       }
     })
   }
@@ -303,6 +311,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
             const hasOverride = !!override
             const isQualified = override ? override.override_type === "qualified" : day.qualified
             const currentReason = override ? override.reason || day.reason : day.reason
+            const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
             const canClick = studentInfo && !day.isExcluded && day.reason !== "⏳ No data available"
             
             
