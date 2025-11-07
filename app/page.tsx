@@ -27,6 +27,7 @@ import {
 import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
 import { CompletionChart } from "@/components/completion-chart"
+import { RequestHistory } from "@/components/request-history"
 
 type DailyLog = {
   day: number
@@ -113,6 +114,8 @@ export default function StudentLookup() {
   const [coinAdjustments, setCoinAdjustments] = useState<CoinAdjustment[]>([])
   const [totalCoinsAcrossPeriods, setTotalCoinsAcrossPeriods] = useState(0)
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
+  const [approvedRequests, setApprovedRequests] = useState<any[]>([])
+  const [rejectedRequests, setRejectedRequests] = useState<any[]>([])
   const [error, setError] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [isDemoStudent, setIsDemoStudent] = useState(false)
@@ -199,6 +202,8 @@ export default function StudentLookup() {
         setCoinAdjustments(data.coinAdjustments || [])
         setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins)
         setPendingRequests(data.pendingRequests || [])
+        setApprovedRequests(data.approvedRequests || [])
+        setRejectedRequests(data.rejectedRequests || [])
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
@@ -636,6 +641,16 @@ export default function StudentLookup() {
                           </div>
                         </CardContent>
                       </Card>
+                    </div>
+                  )}
+
+                  {/* Request History - Approved and Rejected */}
+                  {(approvedRequests.length > 0 || rejectedRequests.length > 0) && (
+                    <div className="mb-6">
+                      <RequestHistory 
+                        approvedRequests={approvedRequests}
+                        rejectedRequests={rejectedRequests}
+                      />
                     </div>
                   )}
 

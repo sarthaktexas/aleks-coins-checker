@@ -559,6 +559,33 @@ export async function POST(request: NextRequest) {
       // Continue without pending requests if there's an error
     }
     
+    // Get approved and rejected requests for this student
+    let approvedRequests = []
+    let rejectedRequests = []
+    try {
+      const allRequestsResult = await sql`
+        SELECT 
+          id,
+          request_type,
+          request_details,
+          submitted_at,
+          status,
+          admin_notes,
+          processed_at,
+          processed_by,
+          period,
+          section_number
+        FROM student_requests
+        WHERE student_id = ${normalizedId} AND status IN ('approved', 'rejected')
+        ORDER BY submitted_at DESC
+      `
+      approvedRequests = allRequestsResult.rows.filter(r => r.status === 'approved')
+      rejectedRequests = allRequestsResult.rows.filter(r => r.status === 'rejected')
+    } catch (requestError) {
+      console.error("Error fetching approved/rejected requests:", requestError)
+      // Continue without approved/rejected requests if there's an error
+    }
+    
     // Return the student's data including all periods
     return NextResponse.json({
       success: true,
@@ -579,7 +606,9 @@ export async function POST(request: NextRequest) {
       periods: periodsData,
       coinAdjustments: coinAdjustments,
       totalCoinsAcrossPeriods: totalCoinsAcrossPeriods,
-      pendingRequests: pendingRequests
+      pendingRequests: pendingRequests,
+      approvedRequests: approvedRequests,
+      rejectedRequests: rejectedRequests
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)
