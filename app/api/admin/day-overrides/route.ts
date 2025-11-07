@@ -152,7 +152,9 @@ export async function GET(request: NextRequest) {
       const studentNameMap = new Map<string, string>()
       
       if (studentIds.length > 0) {
-        // Get all student data to check across all datasets
+        // Optimize: Only query student_data records, but we still need to check all records
+        // since student data is stored as JSON. However, we can stop early once we find all names.
+        // For now, we'll load all but process efficiently
         const studentDataResult = await sql`
           SELECT data
           FROM student_data
@@ -160,6 +162,7 @@ export async function GET(request: NextRequest) {
         `
         
         // Check each dataset until we find names for all students
+        // This is still necessary since data is JSON, but we stop early when all names are found
         for (const row of studentDataResult.rows) {
           const studentData = row.data
           let parsedData
@@ -177,7 +180,7 @@ export async function GET(request: NextRequest) {
             }
           })
           
-          // If we found all student names, we can stop
+          // If we found all student names, we can stop early - this is an optimization
           if (studentNameMap.size === studentIds.length) {
             break
           }

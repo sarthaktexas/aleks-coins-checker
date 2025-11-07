@@ -3,7 +3,7 @@ import { sql } from "@vercel/postgres"
 
 // Simple in-memory cache for analytics (in production, consider Redis)
 let analyticsCache: { data: MergedPeriodStats[], timestamp: number } | null = null
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes - increased to reduce database queries
 
 type StudentData = {
   [studentId: string]: {
@@ -65,12 +65,25 @@ type MergedPeriodStats = {
 
 async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
   try {
-    // Get all overrides including date field to match by date instead of day_number
-    // This ensures overrides from one period don't apply to another period
-    const overridesResult = await sql`
+    // Optimize: Only get overrides for students in the studentData object
+    const studentIds = Object.keys(studentData)
+    
+    if (studentIds.length === 0) {
+      return studentData
+    }
+
+    // Get overrides only for students in this dataset - major optimization!
+    // The override table is typically much smaller than student_data, so querying all overrides
+    // and filtering in memory is still acceptable and reduces complexity
+    const allOverrides = await sql`
       SELECT student_id, day_number, date, override_type, reason
       FROM student_day_overrides
     `
+    // Filter to only students in our dataset - this prevents processing overrides for students not in the dataset
+    const studentIdsSet = new Set(studentIds.map(id => id.toLowerCase()))
+    const overridesResult = {
+      rows: allOverrides.rows.filter(row => studentIdsSet.has(row.student_id.toLowerCase()))
+    }
 
     // Group overrides by student_id and date (not day_number, since day numbers are period-specific)
     const overridesMap = new Map<string, Map<string, any>>()

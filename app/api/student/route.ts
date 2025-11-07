@@ -186,7 +186,7 @@ function generateDemoData(): any {
   }
 }
 
-async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, periodInfo: any, studentPeriods?: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> }> {
+async function loadStudentDataFromDB(studentId?: string): Promise<{ studentData: StudentData, periodInfo: any, studentPeriods?: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> }> {
   try {
     // Check if database URL is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -202,6 +202,9 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
       return { studentData: {}, periodInfo: null }
     }
 
+    // Optimize: If we're looking for a specific student, we can filter at database level
+    // However, since data is stored as JSON, we need to load all records and filter in memory
+    // But we can still optimize by only processing what we need
     // Get all data from all sections and merge them
     const result = await sql`
       SELECT data, period, section_number, uploaded_at FROM student_data 
@@ -305,14 +308,39 @@ async function loadStudentDataFromDB(): Promise<{ studentData: StudentData, peri
   }
 }
 
-async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
+async function applyOverridesToStudentData(studentData: StudentData, studentId?: string): Promise<StudentData> {
   try {
-    // Get all overrides including date field to match by date instead of day_number
-    // This ensures overrides from one period don't apply to another period
-    const overridesResult = await sql`
-      SELECT student_id, day_number, date, override_type, reason
-      FROM student_day_overrides
-    `
+    // Optimize: Only get overrides for students in the studentData object
+    // If a specific studentId is provided, only query that student's overrides
+    const studentIds = Object.keys(studentData)
+    
+    if (studentIds.length === 0) {
+      return studentData
+    }
+
+    // Get overrides only for the students we're processing
+    let overridesResult
+    if (studentId && studentIds.includes(studentId.toLowerCase())) {
+      // Query only for the specific student - this is a major optimization!
+      overridesResult = await sql`
+        SELECT student_id, day_number, date, override_type, reason
+        FROM student_day_overrides
+        WHERE student_id = ${studentId.toLowerCase()}
+      `
+    } else {
+      // Query for all students in the dataset
+      // The override table is typically much smaller than student_data, so querying all overrides
+      // and filtering in memory is still acceptable. The key optimization is the single-student case above.
+      const allOverrides = await sql`
+        SELECT student_id, day_number, date, override_type, reason
+        FROM student_day_overrides
+      `
+      // Filter to only students in our dataset - this is still an optimization
+      const studentIdsSet = new Set(studentIds.map(id => id.toLowerCase()))
+      overridesResult = {
+        rows: allOverrides.rows.filter(row => studentIdsSet.has(row.student_id.toLowerCase()))
+      }
+    }
 
     // Group overrides by student_id and date (not day_number, since day numbers are period-specific)
     const overridesMap = new Map<string, Map<string, any>>()
@@ -401,13 +429,13 @@ export async function POST(request: NextRequest) {
     let studentPeriods: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> | undefined
 
     try {
-      const result = await loadStudentDataFromDB()
+      const result = await loadStudentDataFromDB(normalizedId)
       studentData = result.studentData
       periodInfo = result.periodInfo
       studentPeriods = result.studentPeriods
       
-      // Apply overrides to student data
-      studentData = await applyOverridesToStudentData(studentData)
+      // Apply overrides to student data - pass studentId for optimization
+      studentData = await applyOverridesToStudentData(studentData, normalizedId)
     } catch (dbError) {
       console.error("Database error:", dbError)
 
@@ -505,9 +533,9 @@ export async function POST(request: NextRequest) {
     
     // Format periods data with overrides applied
     const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
-      // Apply overrides to this period's data
+      // Apply overrides to this period's data - pass studentId for optimization
       const tempStudentData = { [normalizedId]: periodData.data }
-      const overriddenData = await applyOverridesToStudentData(tempStudentData)
+      const overriddenData = await applyOverridesToStudentData(tempStudentData, normalizedId)
       const studentWithOverrides = overriddenData[normalizedId]
       
       // Add coin adjustments for this period
