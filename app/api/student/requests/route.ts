@@ -55,8 +55,10 @@ export async function POST(request: NextRequest) {
     `
 
     // If this is a redemption request, deduct coins immediately
+    // Redemptions deduct from total coins, not from a specific period
+    // So we set period to "__GLOBAL__" to indicate it's a global adjustment
     if (coinDeduction > 0) {
-      // Insert coin adjustment
+      // Insert coin adjustment with "__GLOBAL__" period for global (total) deduction
       await sql`
         INSERT INTO coin_adjustments (
           student_id,
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
         VALUES (
           ${studentId.toLowerCase().trim()},
           ${studentName},
-          ${period},
+          '__GLOBAL__',
           ${sectionNumber},
           ${-coinDeduction},
           ${`Pending ${requestType.replace('_', ' ')} request - ${requestDetails.substring(0, 50)}...`},

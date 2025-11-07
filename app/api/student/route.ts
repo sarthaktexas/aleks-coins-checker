@@ -484,14 +484,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a map of adjustments by period and section
+    // Separate global adjustments (redemptions with NULL period) from period-specific adjustments
     const adjustmentsByPeriod = new Map<string, number>()
+    let globalAdjustments = 0 // Redemptions that deduct from total, not specific periods
     let totalAdjustments = 0
     
     coinAdjustments.forEach(adj => {
-      const key = `${adj.period}_${adj.section_number}`
-      const current = adjustmentsByPeriod.get(key) || 0
-      adjustmentsByPeriod.set(key, current + adj.adjustment_amount)
-      totalAdjustments += adj.adjustment_amount
+      // If period is '__GLOBAL__', it's a global adjustment (redemption) that affects total only
+      if (adj.period === '__GLOBAL__' || adj.period === null || adj.period === undefined) {
+        globalAdjustments += adj.adjustment_amount
+        totalAdjustments += adj.adjustment_amount
+      } else {
+        // Period-specific adjustment
+        const key = `${adj.period}_${adj.section_number}`
+        const current = adjustmentsByPeriod.get(key) || 0
+        adjustmentsByPeriod.set(key, current + adj.adjustment_amount)
+        totalAdjustments += adj.adjustment_amount
+      }
     })
     
     // Format periods data with overrides applied
@@ -521,8 +530,10 @@ export async function POST(request: NextRequest) {
       }
     }))
 
-    // Calculate total coins across all periods with adjustments
-    const totalCoinsAcrossPeriods = periodsData.reduce((sum, p) => sum + p.totalCoins, 0)
+    // Calculate total coins across all periods with period-specific adjustments
+    // Then add global adjustments (redemptions) which deduct from the total, not individual periods
+    const totalCoinsFromPeriods = periodsData.reduce((sum, p) => sum + p.totalCoins, 0)
+    const totalCoinsAcrossPeriods = totalCoinsFromPeriods + globalAdjustments
     
     // Get current period adjustment
     const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${periodInfo?.section_number || 'default'}`

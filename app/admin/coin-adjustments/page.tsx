@@ -502,7 +502,9 @@ export default function AdminCoinAdjustmentsPage() {
                           </p>
                           <p className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            Section {adjustment.section_number} • {adjustment.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            Section {adjustment.section_number} • {adjustment.period === '__GLOBAL__' || !adjustment.period
+                              ? 'Total (Global - affects all periods)'
+                              : adjustment.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
                           <p className="text-xs text-slate-500">
                             Created: {formatDate(adjustment.created_at)} by {adjustment.created_by}

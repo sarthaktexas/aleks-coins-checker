@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
           SELECT 1
           FROM coin_adjustments ca
           WHERE ca.student_id = sr.student_id
-            AND ca.period = sr.period
+            AND ca.period = '__GLOBAL__'
             AND ca.section_number = sr.section_number
             AND ca.created_by = 'system'
             AND (

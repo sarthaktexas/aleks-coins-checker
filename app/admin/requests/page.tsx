@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft, Coins } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft, Coins, Wrench } from "lucide-react"
 
 type StudentRequest = {
   id: number
@@ -55,6 +56,15 @@ export default function AdminRequestsPage() {
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
   const [isLoadingCoinData, setIsLoadingCoinData] = useState(false) // Track if coin data is currently loading
+  const [isFixingRedemptions, setIsFixingRedemptions] = useState(false) // Track if fixing redemptions
+  const [fixRedemptionsResult, setFixRedemptionsResult] = useState<{
+    success: boolean
+    message: string
+    updatedCount: number
+    failedCount: number
+    adjustments: any[]
+  } | null>(null)
+  const [showFixDialog, setShowFixDialog] = useState(false)
 
   // Function to get coin data for a specific student
   const getStudentCoinData = async (studentId: string): Promise<StudentCoinData> => {
@@ -294,6 +304,42 @@ export default function AdminRequestsPage() {
     setError("")
   }
 
+  const handleFixRedemptions = async () => {
+    if (!confirm('This will update all redemption coin adjustments to use "__GLOBAL__" period (global deduction). Continue?')) {
+      return
+    }
+
+    setIsFixingRedemptions(true)
+    setError("")
+
+    try {
+      const response = await fetch('/api/admin/fix-redemptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          password
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setFixRedemptionsResult(data)
+        setShowFixDialog(true)
+        // Refresh coin data for all students
+        await loadStudentCoinData(requests, true)
+      } else {
+        setError(data.error || "Failed to fix redemption adjustments")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+    } finally {
+      setIsFixingRedemptions(false)
+    }
+  }
+
   const handleFastApproveAll = async (studentId: string) => {
     if (!confirm(`Are you sure you want to approve ALL pending requests for ${studentId}? This action cannot be undone.`)) {
       return
@@ -512,7 +558,16 @@ export default function AdminRequestsPage() {
               </Select>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
+              <Button 
+                onClick={handleFixRedemptions} 
+                variant="outline" 
+                disabled={isFixingRedemptions || !isAuthenticated}
+                className="bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-700"
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                {isFixingRedemptions ? "Fixing..." : "Fix Redemption Adjustments"}
+              </Button>
               <Button onClick={() => loadRequests()} variant="outline" disabled={isLoadingCoinData}>
                 {isLoadingCoinData ? "Loading..." : "Refresh"}
               </Button>
@@ -747,9 +802,9 @@ export default function AdminRequestsPage() {
                                       </div>
                                       <p className="text-sm text-amber-700">
                                         {request.request_type === 'assignment_replacement' 
-                                          ? '10 coins were automatically deducted when this request was submitted.'
+                                          ? '10 coins were automatically deducted from the total coin amount when this request was submitted.'
                                           : request.request_type === 'quiz_replacement'
-                                          ? '20 coins were automatically deducted when this request was submitted.'
+                                          ? '20 coins were automatically deducted from the total coin amount when this request was submitted.'
                                           : 'No coins deducted for this request type.'
                                         }
                                       </p>
@@ -795,6 +850,83 @@ export default function AdminRequestsPage() {
             })()
           )}
         </div>
+
+        {/* Fix Redemptions Results Dialog */}
+        <Dialog open={showFixDialog} onOpenChange={setShowFixDialog}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-amber-600" />
+                Fix Redemption Adjustments Results
+              </DialogTitle>
+              <DialogDescription>
+                {fixRedemptionsResult?.message || "Results of the redemption adjustments fix"}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {fixRedemptionsResult && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-sm font-medium text-green-800">Successfully Updated</div>
+                    <div className="text-2xl font-bold text-green-900">{fixRedemptionsResult.updatedCount}</div>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                    <div className="text-sm font-medium text-red-800">Failed</div>
+                    <div className="text-2xl font-bold text-red-900">{fixRedemptionsResult.failedCount}</div>
+                  </div>
+                </div>
+
+                {fixRedemptionsResult.adjustments.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-slate-900">Updated Adjustments:</h4>
+                    <div className="max-h-64 overflow-y-auto space-y-2">
+                      {fixRedemptionsResult.adjustments.map((adj, index) => (
+                        <div 
+                          key={index} 
+                          className={`p-3 rounded-lg border ${
+                            adj.success 
+                              ? 'bg-green-50 border-green-200' 
+                              : 'bg-red-50 border-red-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900">{adj.studentName}</div>
+                              <div className="text-sm text-slate-600">ID: {adj.studentId}</div>
+                              <div className="text-sm text-slate-600">
+                                Adjustment ID: {adj.adjustmentId}
+                              </div>
+                              {adj.success ? (
+                                <div className="text-sm text-green-700 mt-1">
+                                  Period: "{adj.oldPeriod}" → "__GLOBAL__" (global)
+                                </div>
+                              ) : (
+                                <div className="text-sm text-red-700 mt-1">
+                                  Error: {adj.error}
+                                </div>
+                              )}
+                            </div>
+                            {adj.success && (
+                              <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                            )}
+                            {!adj.success && (
+                              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button onClick={() => setShowFixDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </div>
