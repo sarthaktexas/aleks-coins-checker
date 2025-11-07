@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft, Coins } from "lucide-react"
+import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft } from "lucide-react"
 
 type StudentRequest = {
   id: number
@@ -28,13 +28,6 @@ type StudentRequest = {
   processed_by?: string
 }
 
-type StudentCoinData = {
-  currentCoins: number
-  totalCoinsAcrossPeriods: number
-  coinAdjustments: number
-}
-
-
 export default function AdminRequestsPage() {
   const [password, setPassword] = useState("")
   const [requests, setRequests] = useState<StudentRequest[]>([])
@@ -48,43 +41,9 @@ export default function AdminRequestsPage() {
   const [editingRequest, setEditingRequest] = useState<number | null>(null)
   const [adminNotes, setAdminNotes] = useState("")
   const [newStatus, setNewStatus] = useState("")
-  const [coinDeduction, setCoinDeduction] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
-  const [studentCoinData, setStudentCoinData] = useState<Record<string, StudentCoinData>>({})
-  const [coinDataKey, setCoinDataKey] = useState(0) // For triggering SWR revalidation
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
-  const [isLoadingCoinData, setIsLoadingCoinData] = useState(false) // Track if coin data is currently loading
-
-  // Function to get coin data for a specific student
-  const getStudentCoinData = async (studentId: string): Promise<StudentCoinData> => {
-    try {
-      const response = await fetch("/api/student", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ studentId: studentId.trim() }),
-      })
-      const data = await response.json()
-      
-      if (response.ok && data.student) {
-        return {
-          currentCoins: data.student.coins || 0,
-          totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods || 0,
-          coinAdjustments: data.coinAdjustments || 0
-        }
-      }
-    } catch (err) {
-      // Return default values if fetch fails
-    }
-    
-    return {
-      currentCoins: 0,
-      totalCoinsAcrossPeriods: 0,
-      coinAdjustments: 0
-    }
-  }
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -113,9 +72,6 @@ export default function AdminRequestsPage() {
         setIsAuthenticated(true)
         // Save password
         localStorage.setItem('adminPassword', password)
-        
-        // Load coin data for all students
-        await loadStudentCoinData(data.requests || [])
       } else {
         setError(data.error || "Failed to load requests")
         setIsAuthenticated(false)
@@ -126,55 +82,6 @@ export default function AdminRequestsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const loadStudentCoinData = async (requests: StudentRequest[], forceRefresh = false) => {
-    // Prevent duplicate concurrent requests
-    if (isLoadingCoinData) {
-      return
-    }
-    
-    setIsLoadingCoinData(true)
-    
-    try {
-      const coinData: Record<string, StudentCoinData> = forceRefresh ? {} : { ...studentCoinData }
-      
-      // Get unique student IDs
-      const studentIds = Array.from(new Set(requests.map(r => r.student_id)))
-      
-      // Only fetch data for students we don't already have (unless force refresh)
-      const studentsToFetch = forceRefresh 
-        ? studentIds 
-        : studentIds.filter(id => !coinData[id])
-      
-      if (studentsToFetch.length > 0) {
-        // Fetch coin data for all students in parallel instead of sequentially
-        const coinDataPromises = studentsToFetch.map(async (studentId) => {
-          const data = await getStudentCoinData(studentId)
-          return { studentId, data }
-        })
-        
-        const results = await Promise.all(coinDataPromises)
-        
-        // Merge new results into existing coin data
-        results.forEach(({ studentId, data }) => {
-          coinData[studentId] = data
-        })
-      }
-      
-      setStudentCoinData(coinData)
-    } finally {
-      setIsLoadingCoinData(false)
-    }
-  }
-
-  // Function to refresh coin data for a specific student
-  const refreshStudentCoinData = async (studentId: string) => {
-    const newCoinData = await getStudentCoinData(studentId)
-    setStudentCoinData(prev => ({
-      ...prev,
-      [studentId]: newCoinData
-    }))
   }
 
   // Function to get day details for override requests
@@ -249,16 +156,11 @@ export default function AdminRequestsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Reload requests and refresh coin data for this specific student
+        // Reload requests
         await loadRequests()
-        const request = requests.find(r => r.id === requestId)
-        if (request) {
-          await refreshStudentCoinData(request.student_id)
-        }
         setEditingRequest(null)
         setAdminNotes("")
         setNewStatus("")
-        setCoinDeduction("")
       } else {
         setError(data.error || "Failed to update request")
       }
@@ -273,7 +175,6 @@ export default function AdminRequestsPage() {
     setEditingRequest(request.id)
     setAdminNotes(request.admin_notes || "")
     setNewStatus(request.status)
-    setCoinDeduction("")
     setError("")
     
     // Fetch day details for override requests
@@ -290,7 +191,6 @@ export default function AdminRequestsPage() {
     setEditingRequest(null)
     setAdminNotes("")
     setNewStatus("")
-    setCoinDeduction("")
     setError("")
   }
 
@@ -318,9 +218,8 @@ export default function AdminRequestsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Reload requests and refresh coin data for this specific student
+        // Reload requests
         await loadRequests()
-        await refreshStudentCoinData(studentId)
         
         // Success is handled by the UI refresh - no alert needed
       } else {
@@ -513,8 +412,8 @@ export default function AdminRequestsPage() {
             </div>
 
             <div className="flex items-end">
-              <Button onClick={() => loadRequests()} variant="outline" disabled={isLoadingCoinData}>
-                {isLoadingCoinData ? "Loading..." : "Refresh"}
+              <Button onClick={() => loadRequests()} variant="outline" disabled={isLoading}>
+                {isLoading ? "Loading..." : "Refresh"}
               </Button>
             </div>
           </div>
@@ -597,15 +496,6 @@ export default function AdminRequestsPage() {
                               <Calendar className="h-4 w-4" />
                               Section {firstRequest.section_number} • {firstRequest.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                             </p>
-                            {/* Balance Information */}
-                            {studentCoinData[studentId] && (
-                              <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 rounded border border-amber-200">
-                                <Coins className="h-4 w-4 text-amber-600" />
-                                <span className="text-sm font-medium text-amber-800">
-                                  Total Coins: {studentCoinData[studentId].totalCoinsAcrossPeriods}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
                         {pendingCount > 1 && (
@@ -737,24 +627,6 @@ export default function AdminRequestsPage() {
                                       className="resize-none"
                                     />
                                   </div>
-
-                                  {/* Info for redemption requests */}
-                                  {request.request_type !== 'override_request' && newStatus === 'approved' && (
-                                    <div className="space-y-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                                      <div className="flex items-center gap-2">
-                                        <Coins className="h-4 w-4 text-amber-600" />
-                                        <span className="text-amber-900 font-medium">Coin Deduction</span>
-                                      </div>
-                                      <p className="text-sm text-amber-700">
-                                        {request.request_type === 'assignment_replacement' 
-                                          ? '10 coins were automatically deducted from the total coin amount when this request was submitted.'
-                                          : request.request_type === 'quiz_replacement'
-                                          ? '20 coins were automatically deducted from the total coin amount when this request was submitted.'
-                                          : 'No coins deducted for this request type.'
-                                        }
-                                      </p>
-                                    </div>
-                                  )}
                                   
                                   {/* Info for override requests */}
                                   {request.request_type === 'override_request' && newStatus === 'approved' && (
