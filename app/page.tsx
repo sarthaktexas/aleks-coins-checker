@@ -21,6 +21,7 @@ import {
   Target,
   Lock,
   BarChart3,
+  Trophy,
 } from "lucide-react"
 import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
@@ -121,6 +122,12 @@ export default function StudentLookup() {
     type: "assignment" | "quiz"
   }>({ isOpen: false, type: "assignment" })
   const [selectedPeriodHistory, setSelectedPeriodHistory] = useState<number | null>(null)
+  const [leaderboardData, setLeaderboardData] = useState<{
+    rank: number | null
+    topStudentCoins: number
+    totalStudents: number
+  } | null>(null)
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
 
   const handleSearch = async () => {
     if (!studentId.trim()) {
@@ -129,9 +136,10 @@ export default function StudentLookup() {
     }
 
     setIsSearching(true)
-    setError("")
-    setStudentInfo(null)
-    setSelectedPeriodHistory(null)
+      setError("")
+      setStudentInfo(null)
+      setSelectedPeriodHistory(null)
+      setLeaderboardData(null)
 
     try {
 
@@ -165,6 +173,11 @@ export default function StudentLookup() {
         setApprovedRequests(data.approvedRequests || [])
         setRejectedRequests(data.rejectedRequests || [])
         setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
+        
+        // Fetch leaderboard data for current period
+        if (data.student.period && data.student.sectionNumber) {
+          loadLeaderboardData(studentId.trim(), data.student.period, data.student.sectionNumber)
+        }
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
       }
@@ -190,6 +203,41 @@ export default function StudentLookup() {
       handleSearch()
     }
   }
+
+  const loadLeaderboardData = async (studentId: string, period: string, sectionNumber: string) => {
+    setLeaderboardLoading(true)
+    try {
+      const response = await fetch(
+        `/api/student/leaderboard?studentId=${encodeURIComponent(studentId)}&period=${encodeURIComponent(period)}&sectionNumber=${encodeURIComponent(sectionNumber)}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setLeaderboardData({
+            rank: data.rank,
+            topStudentCoins: data.topStudentCoins,
+            totalStudents: data.totalStudents
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error loading leaderboard data:", error)
+      // Silently fail - leaderboard is not critical
+    } finally {
+      setLeaderboardLoading(false)
+    }
+  }
+
+  // Load leaderboard data when period selection changes
+  useEffect(() => {
+    if (selectedPeriodHistory !== null && studentPeriods.length > 0 && studentId) {
+      const periodData = studentPeriods[selectedPeriodHistory]
+      if (periodData && periodData.period && periodData.section) {
+        loadLeaderboardData(studentId, periodData.period, periodData.section)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriodHistory])
 
 
   const getProgressColor = (percent: number) => {
@@ -466,6 +514,31 @@ export default function StudentLookup() {
                             <p className="text-xs text-blue-800 font-medium">
                               ⭐ {studentInfo.coinAdjustment > 0 ? '+' : ''}{studentInfo.coinAdjustment} adjustment coin{Math.abs(studentInfo.coinAdjustment) !== 1 ? 's' : ''}
                             </p>
+                          </div>
+                        )}
+                        {/* Leaderboard Rank */}
+                        {leaderboardData && leaderboardData.rank !== null && (
+                          <div className="mt-4 p-3 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center justify-center gap-2 mb-2">
+                              <Trophy className="h-4 w-4 text-purple-600" />
+                              <span className="text-sm font-semibold text-purple-800">Your Rank</span>
+                            </div>
+                            <p className="text-2xl font-bold text-purple-900 mb-1">
+                              #{leaderboardData.rank}
+                            </p>
+                            <p className="text-xs text-purple-700">
+                              out of {leaderboardData.totalStudents} students
+                            </p>
+                            {leaderboardData.topStudentCoins > 0 && (
+                              <p className="text-xs text-purple-600 mt-2">
+                                #1 has {leaderboardData.topStudentCoins} coin{leaderboardData.topStudentCoins !== 1 ? 's' : ''}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {leaderboardLoading && (
+                          <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <p className="text-xs text-gray-600">Loading rank...</p>
                           </div>
                         )}
                       </CardContent>
@@ -858,6 +931,20 @@ export default function StudentLookup() {
                               <p className="text-xs text-blue-600 mt-1">
                                 {periodData.coinAdjustment > 0 ? '+' : ''}{periodData.coinAdjustment} adjustment
                               </p>
+                            )}
+                            {/* Leaderboard Rank for this period */}
+                            {leaderboardData && leaderboardData.rank !== null && (
+                              <div className="mt-2 pt-2 border-t border-purple-200">
+                                <div className="flex items-center justify-end gap-1 mb-1">
+                                  <Trophy className="h-3 w-3 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-800">Rank #{leaderboardData.rank}</span>
+                                </div>
+                                {leaderboardData.topStudentCoins > 0 && (
+                                  <p className="text-xs text-purple-600">
+                                    #1: {leaderboardData.topStudentCoins} coins
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>

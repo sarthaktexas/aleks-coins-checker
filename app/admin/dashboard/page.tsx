@@ -21,7 +21,8 @@ import {
   Coins,
   MessageSquare,
   Clock,
-  Gift
+  Gift,
+  Trophy
 } from "lucide-react"
 import Link from "next/link"
 
@@ -236,6 +237,15 @@ export default function AdminDashboard() {
       color: "bg-amber-500 hover:bg-amber-600",
       iconColor: "text-amber-600",
       bgColor: "bg-amber-50",
+    },
+    {
+      title: "Leaderboard",
+      description: "View student rankings by period and section with pagination",
+      icon: Trophy,
+      href: "/admin/leaderboard",
+      color: "bg-yellow-500 hover:bg-yellow-600",
+      iconColor: "text-yellow-600",
+      bgColor: "bg-yellow-50",
     },
   ]
 
