@@ -44,6 +44,7 @@ export default function AdminRequestsPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
+  const [magicApproving, setMagicApproving] = useState<string | null>(null) // Track which student is being magic approved
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -229,6 +230,49 @@ export default function AdminRequestsPage() {
       setError("Network error. Please try again.")
     } finally {
       setFastApproving(null)
+    }
+  }
+
+  const handleMagicApprove = async (studentId: string) => {
+    if (!confirm(`Are you sure you want to magic approve day overrides with 31+ minutes and "review" in reason for ${studentId}? Only day overrides with 31+ logged minutes and "review" in the reason will be approved.`)) {
+      return
+    }
+
+    setMagicApproving(studentId)
+    setError("")
+
+    try {
+      const response = await fetch('/api/admin/requests/magic-approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          password,
+          studentId: studentId,
+          adminNotes: 'Magic approved: 31+ minutes logged'
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Reload requests
+        await loadRequests()
+        
+        // Show success message
+        if (data.approvedCount > 0) {
+          alert(`Magic approved ${data.approvedCount} day override(s) with 31+ minutes and "review" in reason.${data.skippedCount > 0 ? ` Skipped ${data.skippedCount} request(s) that didn't meet criteria.` : ''}`)
+        } else {
+          alert(data.message || "No day overrides met the criteria (31+ minutes and 'review' in reason).")
+        }
+      } else {
+        setError(data.error || "Failed to magic approve requests")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+    } finally {
+      setMagicApproving(null)
     }
   }
 
@@ -467,6 +511,7 @@ export default function AdminRequestsPage() {
                 const studentRequests = groupedRequests[studentId]
                 const firstRequest = studentRequests[0]
                 const pendingCount = studentRequests.filter(r => r.status === 'pending').length
+                const pendingDayOverrides = studentRequests.filter(r => r.status === 'pending' && r.request_type === 'override_request').length
                 const totalCount = studentRequests.length
 
                 return (
@@ -498,20 +543,36 @@ export default function AdminRequestsPage() {
                             </p>
                           </div>
                         </div>
-                        {pendingCount > 1 && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleFastApproveAll(studentId)}
-                            disabled={fastApproving === studentId}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {fastApproving === studentId ? (
-                              "Approving..."
-                            ) : (
-                              `Fast Approve All (${pendingCount})`
-                            )}
-                          </Button>
-                        )}
+                        <div className="flex gap-2">
+                          {pendingDayOverrides > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleMagicApprove(studentId)}
+                              disabled={magicApproving === studentId || fastApproving === studentId}
+                              className="bg-purple-600 hover:bg-purple-700"
+                            >
+                              {magicApproving === studentId ? (
+                                "Approving..."
+                              ) : (
+                                `✨ Magic Approve (${pendingDayOverrides})`
+                              )}
+                            </Button>
+                          )}
+                          {pendingCount > 1 && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleFastApproveAll(studentId)}
+                              disabled={fastApproving === studentId || magicApproving === studentId}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {fastApproving === studentId ? (
+                                "Approving..."
+                              ) : (
+                                `Fast Approve All (${pendingCount})`
+                              )}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
 
