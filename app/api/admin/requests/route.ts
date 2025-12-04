@@ -76,9 +76,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    // Get the request details first (we need student info, current status, and submitted_at for matching adjustments)
+    // Get the request details first (we need student info and current status)
     const requestResult = await sql`
-      SELECT student_id, student_name, period, section_number, request_type, request_details, day_number, override_date, status, submitted_at
+      SELECT student_id, student_name, period, section_number, request_type, request_details, day_number, override_date, status
       FROM student_requests
       WHERE id = ${requestId}
     `
@@ -149,32 +149,6 @@ export async function PUT(request: NextRequest) {
         
         if (adjustmentResult.rows.length > 0) {
           adjustmentDeactivated = true
-        } else {
-          console.warn(`No coin adjustment found to deactivate for request ${requestId}. Trying fallback lookup...`)
-          
-          // Fallback: If request_id column doesn't exist yet or adjustment wasn't linked, try fuzzy matching
-          // This handles cases where adjustments were created before the migration
-          const reasonPattern = requestData.request_type === 'assignment_replacement' 
-            ? 'Pending assignment replacement%'
-            : 'Pending quiz replacement%'
-          
-          const fallbackResult = await sql`
-            UPDATE coin_adjustments
-            SET is_active = false
-            WHERE student_id = ${requestData.student_id}
-              AND period = '__GLOBAL__'
-              AND section_number = ${requestData.section_number}
-              AND created_by = 'system'
-              AND is_active = true
-              AND reason LIKE ${reasonPattern}
-              AND created_at >= ${requestData.submitted_at} - INTERVAL '1 minute'
-              AND created_at <= ${requestData.submitted_at} + INTERVAL '5 minutes'
-            RETURNING id
-          `
-          
-          if (fallbackResult.rows.length > 0) {
-            adjustmentDeactivated = true
-          }
         }
       } catch (deactivateError) {
         console.error(`Error deactivating coin adjustment for request ${requestId}:`, deactivateError)
