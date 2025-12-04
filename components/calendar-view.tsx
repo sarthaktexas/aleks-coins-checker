@@ -117,6 +117,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     const firstDay = dailyLog[0]
     const [startYear, startMonth, startDay] = firstDay.date.split('-').map(Number)
     
+    // Find the maximum day number from dailyLog to include all days (including exempt days)
+    const maxDayNumber = Math.max(...dailyLog.map(log => log.day), totalDays || 0)
+    // Use the maximum of periodDays and maxDayNumber to ensure we show all days
+    const daysToGenerate = Math.max(periodDays, maxDayNumber)
+    
     const allDays: DailyLog[] = []
 
     // Create current date object manually
@@ -141,10 +146,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
       }
     }
 
-    // Generate exactly periodDays number of days (working days)
-    // Note: This generates calendar days sequentially, but periodDays represents working days
-    // The actual excluded days are marked in dailyLog entries
-    for (let i = 0; i < periodDays; i++) {
+    // Generate days up to the maximum day number found in dailyLog
+    // This includes all days (working days + exempt days)
+    for (let i = 0; i < daysToGenerate; i++) {
       // Create date string manually
       const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
 
