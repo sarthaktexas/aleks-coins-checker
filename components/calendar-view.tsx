@@ -185,6 +185,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     .filter(day => day.reason !== "⏳ No data available" && !day.isExcluded)
     .map(day => day.day)
   const latestDayWithData = daysWithData.length > 0 ? Math.max(...daysWithData) : 0
+  
+  // Find the last day of the period
+  const lastDayOfPeriod = allDays.length > 0 ? allDays[allDays.length - 1].day : 0
 
   const getDayColor = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
@@ -217,7 +220,13 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     // Regular days with data (no overrides)
     if (isQualified) {
       const baseColor = "bg-green-100 border-green-300 text-green-800"
-      // Already qualified days are not clickable
+      // Already qualified days are not clickable, unless it's the latest day that's also the last day
+      const isLatestDay = dayNumber === latestDayWithData && latestDayWithData > 0
+      const isLastDay = dayNumber === lastDayOfPeriod && lastDayOfPeriod > 0
+      if (isLatestDay && isLastDay && studentInfo) {
+        const hoverColor = "hover:bg-green-200"
+        return `${baseColor} ${hoverColor} cursor-pointer`
+      }
       return `${baseColor} cursor-default`
     } else {
       const baseColor = "bg-red-100 border-red-300 text-red-800"
@@ -275,9 +284,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     const override = overrideMap.get(day.day)
     const isQualified = override ? override.override_type === "qualified" : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
+    const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
     
-    // Don't allow clicking on already qualified days (unless they have an override)
-    if (isQualified && !override) {
+    // Don't allow clicking on already qualified days (unless they have an override or it's the latest day that's also the last day)
+    if (isQualified && !override && !(isLatestDay && isLastDay)) {
       return
     }
     
@@ -316,7 +326,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
             const isQualified = override ? override.override_type === "qualified" : day.qualified
             const currentReason = override ? override.reason || day.reason : day.reason
             const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
+            const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
             const canClick = studentInfo && !day.isExcluded && day.reason !== "⏳ No data available"
+            const canClickOnQualified = canClick && (isLatestDay && isLastDay)
             
             
             return (
@@ -359,7 +371,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
                       {day.wouldHaveQualified ? "🎁 Extra credit earned" : "Exempt - Not counted in progress"}
                     </div>
                   )}
-                  {canClick && !(isQualified && !hasOverride) && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
+                  {canClick && (!(isQualified && !hasOverride) || canClickOnQualified) && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
                   {/* Arrow */}
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                 </div>
