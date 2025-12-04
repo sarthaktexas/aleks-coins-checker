@@ -112,7 +112,8 @@ CREATE TABLE coin_adjustments (
   reason TEXT,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   created_by VARCHAR(255),
-  is_active BOOLEAN DEFAULT true
+  is_active BOOLEAN DEFAULT true,
+  request_id INTEGER REFERENCES student_requests(id) ON DELETE SET NULL  -- Links to redemption request (nullable)
 );
 
 -- Per-student day overrides

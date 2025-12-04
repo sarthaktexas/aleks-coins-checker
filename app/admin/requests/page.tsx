@@ -455,7 +455,7 @@ export default function AdminRequestsPage() {
               </Select>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <Button onClick={() => loadRequests()} variant="outline" disabled={isLoading}>
                 {isLoading ? "Loading..." : "Refresh"}
               </Button>

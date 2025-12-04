@@ -76,9 +76,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    // Get the request details first (we need student info for coin deduction)
+    // Get the request details first (we need student info, current status, and submitted_at for matching adjustments)
     const requestResult = await sql`
-      SELECT student_id, student_name, period, section_number, request_type, request_details, day_number, override_date
+      SELECT student_id, student_name, period, section_number, request_type, request_details, day_number, override_date, status, submitted_at
       FROM student_requests
       WHERE id = ${requestId}
     `
@@ -131,7 +131,56 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Note: Coins are already deducted when the request is submitted, no need to deduct again
+    // Note: Coins are already deducted when the request is submitted
+    // If rejecting a redemption request, deactivate the original coin adjustment (only if not already rejected)
+    let adjustmentDeactivated = false
+    const wasAlreadyRejected = requestData.status === 'rejected'
+    if (status === 'rejected' && !wasAlreadyRejected && (requestData.request_type === 'assignment_replacement' || requestData.request_type === 'quiz_replacement')) {
+      try {
+        // Find and deactivate the coin adjustment linked to this request
+        // Use request_id for direct, reliable lookup
+        const adjustmentResult = await sql`
+          UPDATE coin_adjustments
+          SET is_active = false
+          WHERE request_id = ${requestId}
+            AND is_active = true
+          RETURNING id
+        `
+        
+        if (adjustmentResult.rows.length > 0) {
+          adjustmentDeactivated = true
+        } else {
+          console.warn(`No coin adjustment found to deactivate for request ${requestId}. Trying fallback lookup...`)
+          
+          // Fallback: If request_id column doesn't exist yet or adjustment wasn't linked, try fuzzy matching
+          // This handles cases where adjustments were created before the migration
+          const reasonPattern = requestData.request_type === 'assignment_replacement' 
+            ? 'Pending assignment replacement%'
+            : 'Pending quiz replacement%'
+          
+          const fallbackResult = await sql`
+            UPDATE coin_adjustments
+            SET is_active = false
+            WHERE student_id = ${requestData.student_id}
+              AND period = '__GLOBAL__'
+              AND section_number = ${requestData.section_number}
+              AND created_by = 'system'
+              AND is_active = true
+              AND reason LIKE ${reasonPattern}
+              AND created_at >= ${requestData.submitted_at} - INTERVAL '1 minute'
+              AND created_at <= ${requestData.submitted_at} + INTERVAL '5 minutes'
+            RETURNING id
+          `
+          
+          if (fallbackResult.rows.length > 0) {
+            adjustmentDeactivated = true
+          }
+        }
+      } catch (deactivateError) {
+        console.error(`Error deactivating coin adjustment for request ${requestId}:`, deactivateError)
+        // Continue with rejection even if deactivation fails, but log the error
+      }
+    }
 
     // Update the request
     const result = await sql`
@@ -152,13 +201,18 @@ export async function PUT(request: NextRequest) {
     let message = "Request updated successfully"
     if (overrideId) {
       message = "Override approved and applied to student record"
+    } else if (adjustmentDeactivated) {
+      message = "Request rejected and coin deduction cancelled"
+    } else if (status === 'rejected') {
+      message = "Request rejected successfully"
     }
 
     return NextResponse.json({
       success: true,
       message: message,
       request: result.rows[0],
-      overrideId: overrideId
+      overrideId: overrideId,
+      adjustmentDeactivated: adjustmentDeactivated
     })
   } catch (error) {
     console.error("Error updating student request:", error)

@@ -58,7 +58,30 @@ export async function POST(request: NextRequest) {
     // Redemptions deduct from total coins, not from a specific period
     // So we set period to "__GLOBAL__" to indicate it's a global adjustment
     if (coinDeduction > 0) {
+      const requestId = result.rows[0].id
+      
+      // Ensure the coin_adjustments table has the request_id column
+      try {
+        const columnCheck = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'coin_adjustments' AND column_name = 'request_id'
+        `
+        
+        if (columnCheck.rows.length === 0) {
+          // Add the request_id column (nullable, as not all adjustments are linked to requests)
+          await sql`
+            ALTER TABLE coin_adjustments 
+            ADD COLUMN request_id INTEGER REFERENCES student_requests(id) ON DELETE SET NULL
+          `
+        }
+      } catch (migrationError) {
+        console.error("Error checking/adding request_id column:", migrationError)
+        // Continue anyway - the column might already exist or this might be a non-critical error
+      }
+      
       // Insert coin adjustment with "__GLOBAL__" period for global (total) deduction
+      // Link it to the request via request_id
       await sql`
         INSERT INTO coin_adjustments (
           student_id,
@@ -68,7 +91,8 @@ export async function POST(request: NextRequest) {
           adjustment_amount,
           reason,
           created_by,
-          created_at
+          created_at,
+          request_id
         )
         VALUES (
           ${studentId.toLowerCase().trim()},
@@ -78,7 +102,8 @@ export async function POST(request: NextRequest) {
           ${-coinDeduction},
           ${`Pending ${requestType.replace('_', ' ')} request - ${requestDetails.substring(0, 50)}...`},
           'system',
-          NOW()
+          NOW(),
+          ${requestId}
         )
       `
     }
