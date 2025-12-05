@@ -669,12 +669,12 @@ Total: ${extraCreditStudents.length} students`
                           stroke="currentColor"
                           strokeWidth="3"
                           fill="none"
-                          strokeDasharray={`${data.percentComplete}, 100`}
+                          strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
                           d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xs font-bold text-slate-700">{data.percentComplete}%</span>
+                        <span className="text-xs font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
                       </div>
                     </div>
 

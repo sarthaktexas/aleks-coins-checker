@@ -203,12 +203,13 @@ function processExcelFile(filePath, examPeriod = "summer2025") {
         })
       })
 
-      // Calculate completion percentage based only on working days
+      // Calculate completion percentage based on working days, including exempt day credits for extra credit
       const workingDayLogs = dailyLog.filter((d) => !d.isExcluded)
       const completedWorkingDays = workingDayLogs.length
       const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+      // Include exempt day credits in percentage to allow over 100% for extra credit
       const percentComplete =
-        completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
+        completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
 
       processedData[studentId] = {
         name,

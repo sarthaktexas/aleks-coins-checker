@@ -103,28 +103,32 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
       const student = updatedStudentData[studentId]
       const studentOverrides = overridesMap.get(studentId)
       
-      if (studentOverrides && student.dailyLog) {
-        // Apply overrides to daily log by matching date (not day_number)
-        student.dailyLog = student.dailyLog.map(day => {
-          const override = studentOverrides.get(day.date)
-          if (override) {
-            return {
-              ...day,
-              qualified: override.override_type === "qualified",
-              reason: override.reason || day.reason
+      if (student.dailyLog) {
+        // Apply overrides to daily log by matching date (not day_number) if they exist
+        if (studentOverrides) {
+          student.dailyLog = student.dailyLog.map(day => {
+            const override = studentOverrides.get(day.date)
+            if (override) {
+              return {
+                ...day,
+                qualified: override.override_type === "qualified",
+                reason: override.reason || day.reason
+              }
             }
-          }
-          return day
-        })
+            return day
+          })
+        }
 
-        // Recalculate totals based on updated daily log
+        // Always recalculate totals based on daily log (with or without overrides)
         const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
         const completedWorkingDays = workingDayLogs.length
         const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-        const percentComplete = completedWorkingDays > 0 ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10 : 0
         
         // Calculate exempt day credits (from days that would have qualified on exempt days)
         const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
+        
+        // Include exempt day credits in percentage to allow over 100% for extra credit
+        const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
         
         student.percentComplete = percentComplete
         student.coins = qualifiedWorkingDays + exemptDayCredits

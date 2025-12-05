@@ -269,23 +269,32 @@ export default function StudentLookup() {
     const workingDays = dailyLog.filter((d) => !d.isExcluded)
     const workingDaysWithData = workingDays.filter((d) => d.day <= totalDays)
     const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
+    
+    // Calculate exempt day credits (from days that would have qualified on exempt days)
+    const exemptDayCredits = dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= totalDays).length
+    
     const daysMissed = workingDaysWithData.length - qualifiedDaysWithData
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
-    const qualificationPercentage = workingDaysWithData.length > 0 ? (qualifiedDaysWithData / workingDaysWithData.length) * 100 : 0
+    // Include exempt day credits in percentage to allow over 100% for extra credit
+    const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
 
     // Check if student has qualified for extra credit (>=90% days qualified)
     if (qualificationPercentage >= 90) {
-      const isProgressComplete = (qualifiedDaysWithData / workingDaysWithData.length) * 100 >= 100
+      const isProgressComplete = ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 >= 100
       
       if (isProgressComplete) {
+        const totalQualified = qualifiedDaysWithData + exemptDayCredits
+        const completionText = qualificationPercentage > 100 
+          ? `${qualificationPercentage.toFixed(1)}% completion (with ${exemptDayCredits} exempt day credit${exemptDayCredits !== 1 ? 's' : ''})`
+          : "100% completion"
         return {
           status: "qualified",
           message: "Extra credit qualified",
           icon: CheckCircle,
           color: "text-emerald-600",
           bgColor: "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300",
-          detail: `You've completed ${qualifiedDaysWithData}/${workingDaysWithData.length} days (100% completion) and qualified for extra credit.`,
+          detail: `You've completed ${totalQualified}/${workingDaysWithData.length} days (${completionText}) and qualified for extra credit.`,
         }
       } else {
         return {
@@ -294,7 +303,7 @@ export default function StudentLookup() {
           icon: CheckCircle,
           color: "text-emerald-600",
           bgColor: "bg-emerald-50 border-emerald-200",
-          detail: `You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% completion (${qualifiedDaysWithData}/${workingDaysWithData.length} qualified days).`,
+          detail: `You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% completion (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt = ${qualifiedDaysWithData + exemptDayCredits}/${workingDaysWithData.length} qualified days).`,
         }
       }
     } else if (daysMissed <= maxMissableDays - 1) {
@@ -692,7 +701,10 @@ export default function StudentLookup() {
                     const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
                     const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
                     const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
-                    const qualificationPercentage = workingDaysWithData.length > 0 ? (qualifiedDaysWithData / workingDaysWithData.length) * 100 : 0
+                    // Calculate exempt day credits (from days that would have qualified on exempt days)
+                    const exemptDayCredits = studentInfo.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= studentInfo.totalDays).length
+                    // Include exempt day credits in percentage to allow over 100% for extra credit
+                    const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
                     const isProgressComplete = studentInfo.percentComplete >= 100
                     const isExtraCreditQualified = qualificationPercentage >= 90
                     const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
@@ -746,7 +758,8 @@ export default function StudentLookup() {
                           Period Complete
                         </h3>
                         <p className="text-sm text-slate-700 font-medium">
-                          You completed {qualificationPercentage.toFixed(1)}% of the period.
+                          You completed {qualificationPercentage.toFixed(1)}% of the period
+                          {exemptDayCredits > 0 && ` (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt day credit${exemptDayCredits !== 1 ? 's' : ''})`}.
                         </p>
                       </div>
                     )
@@ -812,7 +825,7 @@ export default function StudentLookup() {
                           </div>
 
                           <p className="text-xs sm:text-sm text-slate-600 text-center font-medium">
-                            {studentInfo.percentComplete}% of days completed in extra credit period
+                            {studentInfo.percentComplete.toFixed(1)}% of days completed in extra credit period
                           </p>
                         </div>
                       </>
@@ -837,7 +850,7 @@ export default function StudentLookup() {
                         <div className="w-full bg-slate-200 rounded-full h-2">
                           <div
                             className={`h-full rounded-full ${getProgressColor(studentInfo.percentComplete)}`}
-                            style={{ width: `${studentInfo.percentComplete}%` }}
+                            style={{ width: `${Math.min(studentInfo.percentComplete, 100)}%` }}
                           />
                         </div>
                         <p className="text-xs text-slate-600 mt-2">
