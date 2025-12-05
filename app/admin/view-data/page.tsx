@@ -65,6 +65,7 @@ export default function ViewDataPage() {
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState("")
   const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -86,6 +87,26 @@ export default function ViewDataPage() {
       loadUploadRecords()
     }
   }, [isAuthenticated])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showExportDropdown) {
+        const target = event.target as HTMLElement
+        if (!target.closest('.export-dropdown-container')) {
+          setShowExportDropdown(false)
+        }
+      }
+    }
+
+    if (showExportDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showExportDropdown])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -208,7 +229,22 @@ export default function ViewDataPage() {
     }
   }
 
-  const exportExtraCreditStudents = async () => {
+  const getExtraCreditStudents = () => {
+    // Get extra credit students (≥90% completion)
+    const extraCreditStudents = Object.entries(studentData)
+      .filter(([_, data]) => data.percentComplete >= 90)
+      .map(([studentId, data]) => ({
+        name: data.name,
+        email: data.email,
+        studentId: studentId,
+        percentComplete: data.percentComplete
+      }))
+      .sort((a, b) => b.percentComplete - a.percentComplete) // Sort by completion percentage
+
+    return extraCreditStudents
+  }
+
+  const exportExtraCreditToCSV = async () => {
     if (!password) {
       setError("Please enter the admin password")
       return
@@ -216,17 +252,68 @@ export default function ViewDataPage() {
 
     setIsExporting(true)
     setError("")
+    setShowExportDropdown(false)
 
     try {
-      // Get extra credit students (≥90% completion)
-      const extraCreditStudents = Object.entries(studentData)
-        .filter(([_, data]) => data.percentComplete >= 90)
-        .map(([studentId, data]) => ({
-          name: data.name,
-          studentId: studentId,
-          percentComplete: data.percentComplete
-        }))
-        .sort((a, b) => b.percentComplete - a.percentComplete) // Sort by completion percentage
+      const extraCreditStudents = getExtraCreditStudents()
+
+      if (extraCreditStudents.length === 0) {
+        setError("No students qualify for extra credit (≥90% completion)")
+        return
+      }
+
+      // Create CSV format
+      const headers = ["Student ID", "Name", "Email", "Percent Complete"]
+      const csvRows = [
+        headers.join(","),
+        ...extraCreditStudents.map((student) => [
+          student.studentId,
+          `"${student.name}"`,
+          `"${student.email}"`,
+          student.percentComplete.toFixed(1)
+        ].join(","))
+      ]
+
+      const csvContent = csvRows.join("\n")
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: "text/csv" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `extra-credit-students-${selectedPeriod}-${selectedSection}-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      // Show toast notification
+      setToastMessage("Extra credit list exported as CSV! 🎉")
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 3000)
+
+      // Clear any previous errors
+      setError("")
+
+    } catch (error) {
+      setError("Failed to export CSV. Please try again.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const copyExtraCreditToClipboard = async () => {
+    if (!password) {
+      setError("Please enter the admin password")
+      return
+    }
+
+    setIsExporting(true)
+    setError("")
+    setShowExportDropdown(false)
+
+    try {
+      const extraCreditStudents = getExtraCreditStudents()
 
       if (extraCreditStudents.length === 0) {
         setError("No students qualify for extra credit (≥90% completion)")
@@ -558,23 +645,48 @@ Total: ${extraCreditStudents.length} students`
                 
                 {/* Export Button - Only show when period is complete */}
                 {isPeriodComplete && (
-                  <Button
-                    onClick={exportExtraCreditStudents}
-                    disabled={isExporting || !password}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    {isExporting ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Exporting...
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Copy className="h-4 w-4" />
-                        Export Extra Credit
+                  <div className="relative export-dropdown-container">
+                    <Button
+                      onClick={() => setShowExportDropdown(!showExportDropdown)}
+                      disabled={isExporting || !password}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {isExporting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Exporting...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Download className="h-4 w-4" />
+                          Export Extra Credit
+                          <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      )}
+                    </Button>
+                    {showExportDropdown && !isExporting && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-50">
+                        <div className="py-1">
+                          <button
+                            onClick={exportExtraCreditToCSV}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Export as CSV
+                          </button>
+                          <button
+                            onClick={copyExtraCreditToClipboard}
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copy to Clipboard
+                          </button>
+                        </div>
                       </div>
                     )}
-                  </Button>
+                  </div>
                 )}
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={handleExport}>
