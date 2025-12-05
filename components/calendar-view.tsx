@@ -195,7 +195,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     // Exempt days - special styling for those that would have qualified
     if (day.isExcluded) {
       if (day.wouldHaveQualified) {
-        return "bg-amber-100 border-amber-300 text-amber-800 cursor-default ring-1 ring-amber-300"
+        // Extra credit days are clickable for override requests
+        const baseColor = "bg-amber-100 border-amber-300 text-amber-800 ring-1 ring-amber-300"
+        const hoverColor = studentInfo ? "hover:bg-amber-200" : ""
+        const clickable = studentInfo ? "cursor-pointer" : "cursor-default"
+        return `${baseColor} ${hoverColor} ${clickable}`
       }
       return "bg-gray-200 border-gray-300 text-gray-500 cursor-default"
     }
@@ -277,17 +281,25 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
   }
 
   const handleDayClick = (day: DailyLog) => {
-    if (!studentInfo || day.isExcluded || day.reason === "⏳ No data available") {
-      return // Don't allow clicking on exempt or no data days
+    if (!studentInfo || day.reason === "⏳ No data available") {
+      return // Don't allow clicking on no data days
+    }
+
+    // Allow clicking on extra credit days (exempt days that would have qualified)
+    // but not on regular exempt days
+    if (day.isExcluded && !day.wouldHaveQualified) {
+      return // Don't allow clicking on regular exempt days (only extra credit days)
     }
 
     const override = overrideMap.get(day.day)
-    const isQualified = override ? override.override_type === "qualified" : day.qualified
+    // For extra credit days, they're considered "qualified" for override purposes
+    const isQualified = override ? override.override_type === "qualified" : (day.qualified || day.wouldHaveQualified)
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
     
     // Don't allow clicking on already qualified days (unless they have an override or it's the latest day that's also the last day)
-    if (isQualified && !override && !(isLatestDay && isLastDay)) {
+    // Exception: extra credit days can always be clicked
+    if (isQualified && !override && !(isLatestDay && isLastDay) && !day.wouldHaveQualified) {
       return
     }
     
@@ -324,12 +336,14 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
           {allDays.map((day) => {
             const override = overrideMap.get(day.day)
             const hasOverride = !!override
-            const isQualified = override ? override.override_type === "qualified" : day.qualified
+            // For extra credit days, they're considered "qualified" for override purposes
+            const isQualified = override ? override.override_type === "qualified" : (day.qualified || day.wouldHaveQualified)
             const currentReason = override ? override.reason || day.reason : day.reason
             const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
             const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
-            const canClick = studentInfo && !day.isExcluded && day.reason !== "⏳ No data available"
-            const canClickOnQualified = canClick && (isLatestDay && isLastDay)
+            // Allow clicking on extra credit days (exempt days that would have qualified)
+            const canClick = studentInfo && (day.reason !== "⏳ No data available") && (!day.isExcluded || day.wouldHaveQualified)
+            const canClickOnQualified = canClick && ((isLatestDay && isLastDay) || day.wouldHaveQualified)
             
             
             return (
@@ -372,7 +386,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
                       {day.wouldHaveQualified ? "🎁 Extra credit earned" : "Exempt - Not counted in progress"}
                     </div>
                   )}
-                  {canClick && (!(isQualified && !hasOverride) || canClickOnQualified) && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
+                  {canClick && (!(isQualified && !hasOverride) || canClickOnQualified) && <div className="text-gray-300 text-xs mt-1">{day.wouldHaveQualified ? "Click to request override" : "Click to override"}</div>}
                   {/* Arrow */}
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                 </div>
