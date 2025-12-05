@@ -27,6 +27,7 @@ type DayOverrideModalProps = {
     currentQualified: boolean
     currentReason: string
     isLatestDay?: boolean
+    isLastDay?: boolean
   }
   studentInfo: {
     studentId: string
@@ -52,8 +53,8 @@ export function DayOverrideModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Prevent submission if this is the latest day
-    if (dayInfo.isLatestDay) {
+    // Prevent submission if this is the latest day but NOT the last day
+    if (dayInfo.isLatestDay && !dayInfo.isLastDay) {
       setError("Override requests are disabled for the latest day. Data may not be accurate based on when it was uploaded.")
       return
     }
@@ -172,8 +173,8 @@ export function DayOverrideModal({
             )}
           </div>
 
-          {/* Warning for latest day */}
-          {dayInfo.isLatestDay && (
+          {/* Warning for latest day (but not last day) */}
+          {dayInfo.isLatestDay && !dayInfo.isLastDay && (
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
@@ -227,7 +228,7 @@ export function DayOverrideModal({
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || !reason.trim() || dayInfo.isLatestDay}
+              disabled={isLoading || !reason.trim() || (dayInfo.isLatestDay && !dayInfo.isLastDay)}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {isLoading ? (

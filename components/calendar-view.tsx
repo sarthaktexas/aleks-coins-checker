@@ -298,7 +298,8 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
         date: day.date,
         currentQualified: isQualified,
         currentReason: override ? override.reason || day.reason : day.reason,
-        isLatestDay: isLatestDay
+        isLatestDay: isLatestDay,
+        isLastDay: isLastDay
       }
     })
   }
