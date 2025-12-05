@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail, Coins } from "lucide-react"
+import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail, Coins, Settings } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 
 type ExamPeriodData = {
@@ -33,6 +34,10 @@ export default function AdminPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [overridesEnabled, setOverridesEnabled] = useState(true)
+  const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false)
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -83,7 +88,86 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadPeriods()
+    loadSettings()
   }, [])
+
+  // Load admin settings
+  const loadSettings = async () => {
+    if (!password) return
+    
+    setIsLoadingSettings(true)
+    try {
+      const response = await fetch(`/api/admin/settings?password=${encodeURIComponent(password)}`)
+      const data = await response.json()
+      
+      if (response.ok && data.success) {
+        setOverridesEnabled(data.settings.overridesEnabled)
+        setRedemptionRequestsEnabled(data.settings.redemptionRequestsEnabled)
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error)
+    } finally {
+      setIsLoadingSettings(false)
+    }
+  }
+
+  // Update settings
+  const updateSettings = async (setting: 'overrides' | 'redemption', value: boolean) => {
+    if (!password) {
+      setMessage({ type: "error", text: "Please enter the admin password" })
+      return
+    }
+
+    setIsSavingSettings(true)
+    try {
+      const updates: { overridesEnabled?: boolean; redemptionRequestsEnabled?: boolean } = {}
+      if (setting === 'overrides') {
+        updates.overridesEnabled = value
+        setOverridesEnabled(value)
+      } else {
+        updates.redemptionRequestsEnabled = value
+        setRedemptionRequestsEnabled(value)
+      }
+
+      const response = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          password,
+          ...updates,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage({
+          type: "success",
+          text: `Settings updated successfully`,
+        })
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to update settings" })
+        // Revert the state on error
+        if (setting === 'overrides') {
+          setOverridesEnabled(!value)
+        } else {
+          setRedemptionRequestsEnabled(!value)
+        }
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "Network error. Please try again." })
+      // Revert the state on error
+      if (setting === 'overrides') {
+        setOverridesEnabled(!value)
+      } else {
+        setRedemptionRequestsEnabled(!value)
+      }
+    } finally {
+      setIsSavingSettings(false)
+    }
+  }
 
   const handleFileChange = (selectedFile: File) => {
     if (selectedFile && (selectedFile.name.endsWith(".xlsx") || selectedFile.name.endsWith(".xls"))) {
@@ -565,6 +649,76 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* System Settings */}
+        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm mx-2 sm:mx-0">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+            <CardTitle className="flex items-center gap-3 text-xl text-blue-900">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Settings className="h-5 w-5 text-blue-600" />
+              </div>
+              System Settings
+            </CardTitle>
+            <CardDescription>
+              Control system-wide features. When disabled, these features will be unavailable to all users.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="p-6">
+            <div className="space-y-6">
+              {/* Overrides Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Calendar className="h-4 w-4 text-slate-600" />
+                    <Label htmlFor="overrides-toggle" className="text-base font-semibold text-slate-900 cursor-pointer">
+                      Day Overrides
+                    </Label>
+                  </div>
+                  <p className="text-sm text-slate-600 ml-6">
+                    Allow students and admins to create day overrides. When disabled, no overrides can be created.
+                  </p>
+                </div>
+                <Switch
+                  id="overrides-toggle"
+                  checked={overridesEnabled}
+                  onCheckedChange={(checked) => updateSettings('overrides', checked)}
+                  disabled={isSavingSettings || isLoadingSettings || !password}
+                />
+              </div>
+
+              {/* Redemption Requests Toggle */}
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Coins className="h-4 w-4 text-slate-600" />
+                    <Label htmlFor="redemption-toggle" className="text-base font-semibold text-slate-900 cursor-pointer">
+                      Redemption Requests
+                    </Label>
+                  </div>
+                  <p className="text-sm text-slate-600 ml-6">
+                    Allow students to submit redemption requests (assignment/quiz replacements). When disabled, no redemption requests can be submitted.
+                  </p>
+                </div>
+                <Switch
+                  id="redemption-toggle"
+                  checked={redemptionRequestsEnabled}
+                  onCheckedChange={(checked) => updateSettings('redemption', checked)}
+                  disabled={isSavingSettings || isLoadingSettings || !password}
+                />
+              </div>
+
+              {!password && (
+                <Alert className="border-amber-200 bg-amber-50">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    Please enter the admin password above to manage system settings.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           </CardContent>
         </Card>
 

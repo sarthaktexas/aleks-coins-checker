@@ -17,6 +17,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
+    // Check if the request type is allowed based on settings
+    try {
+      if (requestType === 'override_request') {
+        const settingsResult = await sql`
+          SELECT setting_value
+          FROM admin_settings
+          WHERE setting_key = 'overrides_enabled'
+        `
+        const overridesEnabled = settingsResult.rows.length > 0 
+          ? settingsResult.rows[0].setting_value 
+          : true // Default to enabled if setting doesn't exist
+        
+        if (!overridesEnabled) {
+          return NextResponse.json({ 
+            error: "Day override requests are currently disabled. Please contact your instructor." 
+          }, { status: 403 })
+        }
+      } else if (requestType === 'assignment_replacement' || requestType === 'quiz_replacement') {
+        const settingsResult = await sql`
+          SELECT setting_value
+          FROM admin_settings
+          WHERE setting_key = 'redemption_requests_enabled'
+        `
+        const redemptionEnabled = settingsResult.rows.length > 0 
+          ? settingsResult.rows[0].setting_value 
+          : true // Default to enabled if setting doesn't exist
+        
+        if (!redemptionEnabled) {
+          return NextResponse.json({ 
+            error: "Redemption requests are currently disabled. Please contact your instructor." 
+          }, { status: 403 })
+        }
+      }
+    } catch (settingsError) {
+      // If settings table doesn't exist yet, allow the operation (backward compatibility)
+      console.log("Settings check skipped (table may not exist):", settingsError)
+    }
+
     // Determine coin deduction amount for redemption requests
     let coinDeduction = 0
     if (requestType === 'assignment_replacement') {

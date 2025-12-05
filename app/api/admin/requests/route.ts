@@ -92,6 +92,26 @@ export async function PUT(request: NextRequest) {
     // If this is an override request and approved, create the override
     let overrideId = null
     if (requestData.request_type === 'override_request' && status === 'approved' && requestData.day_number && requestData.override_date) {
+      // Check if overrides are enabled
+      try {
+        const settingsResult = await sql`
+          SELECT setting_value
+          FROM admin_settings
+          WHERE setting_key = 'overrides_enabled'
+        `
+        const overridesEnabled = settingsResult.rows.length > 0 
+          ? settingsResult.rows[0].setting_value 
+          : true // Default to enabled if setting doesn't exist
+        
+        if (!overridesEnabled) {
+          return NextResponse.json({ 
+            error: "Day overrides are currently disabled. Cannot approve override requests." 
+          }, { status: 403 })
+        }
+      } catch (settingsError) {
+        // If settings table doesn't exist yet, allow the operation (backward compatibility)
+        console.log("Settings check skipped (table may not exist):", settingsError)
+      }
       try {
         // Extract just the reason part from request_details
         let reasonText = adminNotes || ''
@@ -240,11 +260,31 @@ export async function POST(request: NextRequest) {
     let approvedCount = 0
     const createdOverrides = []
 
+    // Check if overrides are enabled before processing
+    let overridesEnabled = true
+    try {
+      const settingsResult = await sql`
+        SELECT setting_value
+        FROM admin_settings
+        WHERE setting_key = 'overrides_enabled'
+      `
+      overridesEnabled = settingsResult.rows.length > 0 
+        ? settingsResult.rows[0].setting_value 
+        : true // Default to enabled if setting doesn't exist
+    } catch (settingsError) {
+      // If settings table doesn't exist yet, allow the operation (backward compatibility)
+      console.log("Settings check skipped (table may not exist):", settingsError)
+    }
+
     // Process each pending request
     for (const requestData of pendingRequests) {
       try {
         // If this is an override request, create the override
         if (requestData.request_type === 'override_request' && requestData.day_number && requestData.override_date) {
+          if (!overridesEnabled) {
+            // Skip override requests if disabled
+            continue
+          }
           // Extract just the reason part from request_details
           let reasonText = adminNotes || ''
           if (!reasonText && requestData.request_details) {

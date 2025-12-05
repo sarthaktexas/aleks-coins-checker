@@ -58,6 +58,28 @@ export async function POST(request: NextRequest) {
 
     const normalizedStudentId = studentId.toLowerCase().trim()
 
+    // Check if overrides are enabled
+    let overridesEnabled = true
+    try {
+      const settingsResult = await sql`
+        SELECT setting_value
+        FROM admin_settings
+        WHERE setting_key = 'overrides_enabled'
+      `
+      overridesEnabled = settingsResult.rows.length > 0 
+        ? settingsResult.rows[0].setting_value 
+        : true // Default to enabled if setting doesn't exist
+      
+      if (!overridesEnabled) {
+        return NextResponse.json({ 
+          error: "Day overrides are currently disabled. Cannot approve override requests." 
+        }, { status: 403 })
+      }
+    } catch (settingsError) {
+      // If settings table doesn't exist yet, allow the operation (backward compatibility)
+      console.log("Settings check skipped (table may not exist):", settingsError)
+    }
+
     // Get all pending day override requests for this student
     const pendingRequestsResult = await sql`
       SELECT id, request_type, request_details, day_number, override_date

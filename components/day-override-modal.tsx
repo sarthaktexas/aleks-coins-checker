@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +49,28 @@ export function DayOverrideModal({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [overridesEnabled, setOverridesEnabled] = useState(true)
+  const [isCheckingSettings, setIsCheckingSettings] = useState(false)
+
+  // Check if overrides are enabled when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsCheckingSettings(true)
+      fetch("/api/settings")
+        .then((res) => res.json())
+        .then((data) => {
+          setOverridesEnabled(data.overridesEnabled ?? true)
+        })
+        .catch((err) => {
+          console.error("Error checking settings:", err)
+          // Default to enabled on error
+          setOverridesEnabled(true)
+        })
+        .finally(() => {
+          setIsCheckingSettings(false)
+        })
+    }
+  }, [isOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -183,6 +205,16 @@ export function DayOverrideModal({
             </Alert>
           )}
 
+          {/* Warning if overrides are disabled */}
+          {!overridesEnabled && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Day override requests are currently disabled. Please contact your instructor if you need assistance.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Info about what student is requesting */}
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="text-sm text-blue-800">
@@ -228,7 +260,7 @@ export function DayOverrideModal({
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || !reason.trim() || (dayInfo.isLatestDay && !dayInfo.isLastDay)}
+              disabled={isLoading || !reason.trim() || (dayInfo.isLatestDay && !dayInfo.isLastDay) || !overridesEnabled || isCheckingSettings}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {isLoading ? (

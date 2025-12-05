@@ -176,8 +176,8 @@ export default function AdminDashboard() {
 
   const adminTools = [
     {
-      title: "Upload Student Data",
-      description: "Upload Excel files with student ALEKS data and process them into the database",
+      title: "Upload & Settings",
+      description: "Upload Excel files with student data, manage system settings, and configure exam periods",
       icon: Upload,
       href: "/admin",
       color: "bg-blue-500 hover:bg-blue-600",

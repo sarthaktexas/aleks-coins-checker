@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,7 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Gift, Mail, User, FileText, HelpCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Gift, Mail, User, FileText, HelpCircle, AlertTriangle } from "lucide-react"
 
 type RedemptionModalProps = {
   isOpen: boolean
@@ -37,6 +38,28 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [error, setError] = useState("")
+  const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
+  const [isCheckingSettings, setIsCheckingSettings] = useState(false)
+
+  // Check if redemption requests are enabled when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsCheckingSettings(true)
+      fetch("/api/settings")
+        .then((res) => res.json())
+        .then((data) => {
+          setRedemptionRequestsEnabled(data.redemptionRequestsEnabled ?? true)
+        })
+        .catch((err) => {
+          console.error("Error checking settings:", err)
+          // Default to enabled on error
+          setRedemptionRequestsEnabled(true)
+        })
+        .finally(() => {
+          setIsCheckingSettings(false)
+        })
+    }
+  }, [isOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -190,6 +213,16 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
             </div>
           </div>
 
+          {/* Warning if redemption requests are disabled */}
+          {!redemptionRequestsEnabled && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                Redemption requests are currently disabled. Please contact your instructor if you need assistance.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-red-800 text-sm">{error}</p>
@@ -200,7 +233,7 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+            <Button type="submit" disabled={isSubmitting || !redemptionRequestsEnabled || isCheckingSettings} className="bg-green-600 hover:bg-green-700">
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

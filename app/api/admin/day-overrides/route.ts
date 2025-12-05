@@ -33,6 +33,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
+    // Check if overrides are enabled
+    try {
+      const settingsResult = await sql`
+        SELECT setting_value
+        FROM admin_settings
+        WHERE setting_key = 'overrides_enabled'
+      `
+      const overridesEnabled = settingsResult.rows.length > 0 
+        ? settingsResult.rows[0].setting_value 
+        : true // Default to enabled if setting doesn't exist
+      
+      if (!overridesEnabled) {
+        return NextResponse.json({ 
+          error: "Day overrides are currently disabled. Please contact an administrator." 
+        }, { status: 403 })
+      }
+    } catch (settingsError) {
+      // If settings table doesn't exist yet, allow the operation (backward compatibility)
+      console.log("Settings check skipped (table may not exist):", settingsError)
+    }
+
     // Ensure the overrides table exists
     try {
       await sql`
