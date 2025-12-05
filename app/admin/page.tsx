@@ -88,8 +88,14 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadPeriods()
-    loadSettings()
   }, [])
+
+  // Load admin settings when password is available
+  useEffect(() => {
+    if (password) {
+      loadSettings()
+    }
+  }, [password])
 
   // Load admin settings
   const loadSettings = async () => {
@@ -123,10 +129,8 @@ export default function AdminPage() {
       const updates: { overridesEnabled?: boolean; redemptionRequestsEnabled?: boolean } = {}
       if (setting === 'overrides') {
         updates.overridesEnabled = value
-        setOverridesEnabled(value)
       } else {
         updates.redemptionRequestsEnabled = value
-        setRedemptionRequestsEnabled(value)
       }
 
       const response = await fetch("/api/admin/settings", {
@@ -142,28 +146,20 @@ export default function AdminPage() {
 
       const result = await response.json()
 
-      if (response.ok) {
+      if (response.ok && result.success) {
+        // Update state from the API response to ensure we have the correct values
+        setOverridesEnabled(result.settings.overridesEnabled)
+        setRedemptionRequestsEnabled(result.settings.redemptionRequestsEnabled)
         setMessage({
           type: "success",
           text: `Settings updated successfully`,
         })
       } else {
         setMessage({ type: "error", text: result.error || "Failed to update settings" })
-        // Revert the state on error
-        if (setting === 'overrides') {
-          setOverridesEnabled(!value)
-        } else {
-          setRedemptionRequestsEnabled(!value)
-        }
       }
     } catch (error) {
+      console.error("Error updating settings:", error)
       setMessage({ type: "error", text: "Network error. Please try again." })
-      // Revert the state on error
-      if (setting === 'overrides') {
-        setOverridesEnabled(!value)
-      } else {
-        setRedemptionRequestsEnabled(!value)
-      }
     } finally {
       setIsSavingSettings(false)
     }
