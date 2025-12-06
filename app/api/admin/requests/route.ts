@@ -123,6 +123,24 @@ export async function PUT(request: NextRequest) {
           }
         }
         
+        // Normalize student_id to ensure consistency with how overrides are queried
+        const normalizedStudentId = (requestData.student_id || '').toLowerCase().trim()
+        
+        // Normalize date to ensure it matches the format used in dailyLog (YYYY-MM-DD)
+        // Remove any whitespace and ensure proper format
+        const normalizedDate = (requestData.override_date || '').trim()
+        
+        // First, check if there's already an override for this (student_id, date)
+        // The calendar matches by date, not day_number, so we should prioritize date matching
+        const existingByDate = await sql`
+          SELECT id, day_number
+          FROM student_day_overrides
+          WHERE student_id = ${normalizedStudentId}
+            AND date = ${normalizedDate}
+        `
+        
+        // Use ON CONFLICT to handle the new (student_id, date) constraint
+        // This ensures the override is created or updated correctly
         const overrideResult = await sql`
           INSERT INTO student_day_overrides (
             student_id, 
@@ -132,22 +150,34 @@ export async function PUT(request: NextRequest) {
             reason
           )
           VALUES (
-            ${requestData.student_id}, 
+            ${normalizedStudentId}, 
             ${requestData.day_number}, 
-            ${requestData.override_date}, 
+            ${normalizedDate}, 
             'qualified',
             ${reasonText || 'Override approved'}
           )
-          ON CONFLICT (student_id, day_number)
+          ON CONFLICT (student_id, date)
           DO UPDATE SET
-            override_type = 'qualified',
+            day_number = EXCLUDED.day_number,
+            override_type = EXCLUDED.override_type,
             reason = EXCLUDED.reason,
             updated_at = NOW()
           RETURNING id
         `
-        overrideId = overrideResult.rows[0]?.id
+        
+        if (overrideResult.rows.length === 0 || !overrideResult.rows[0]?.id) {
+          throw new Error("Override insert did not return an ID")
+        }
+        
+        overrideId = overrideResult.rows[0].id
       } catch (overrideError) {
         console.error("Error creating override:", overrideError)
+        // If override creation fails, we should not approve the request
+        // Return an error so the admin knows the override wasn't created
+        return NextResponse.json({ 
+          error: "Failed to create day override. Request was not approved.",
+          details: process.env.NODE_ENV === "development" ? (overrideError as Error).message : undefined
+        }, { status: 500 })
       }
     }
 
@@ -295,6 +325,10 @@ export async function POST(request: NextRequest) {
             }
           }
           
+          // Normalize date to ensure it matches the format used in dailyLog (YYYY-MM-DD)
+          const normalizedDate = (requestData.override_date || '').trim()
+          
+          // Use ON CONFLICT to handle the new (student_id, date) constraint
           const overrideResult = await sql`
             INSERT INTO student_day_overrides (
               student_id, 
@@ -306,18 +340,22 @@ export async function POST(request: NextRequest) {
             VALUES (
               ${studentId.toLowerCase().trim()}, 
               ${requestData.day_number}, 
-              ${requestData.override_date}, 
+              ${normalizedDate}, 
               'qualified',
               ${reasonText || 'Override approved via fast approve'}
             )
-            ON CONFLICT (student_id, day_number)
+            ON CONFLICT (student_id, date)
             DO UPDATE SET
-              override_type = 'qualified',
+              day_number = EXCLUDED.day_number,
+              override_type = EXCLUDED.override_type,
               reason = EXCLUDED.reason,
               updated_at = NOW()
             RETURNING id
           `
-          createdOverrides.push(overrideResult.rows[0]?.id)
+          
+          if (overrideResult.rows.length > 0 && overrideResult.rows[0]?.id) {
+            createdOverrides.push(overrideResult.rows[0].id)
+          }
         }
 
         // Update the request status

@@ -142,7 +142,10 @@ export async function POST(request: NextRequest) {
           // Use adminNotes if provided, otherwise use the extracted reason
           const finalReasonText = adminNotes || reasonText || `Magic approved: ${minutes} minutes logged`
           
-          // Create the override
+          // Normalize date to ensure it matches the format used in dailyLog (YYYY-MM-DD)
+          const normalizedDate = (requestData.override_date || '').trim()
+          
+          // Use ON CONFLICT to handle the new (student_id, date) constraint
           const overrideResult = await sql`
             INSERT INTO student_day_overrides (
               student_id, 
@@ -154,18 +157,22 @@ export async function POST(request: NextRequest) {
             VALUES (
               ${normalizedStudentId}, 
               ${requestData.day_number}, 
-              ${requestData.override_date}, 
+              ${normalizedDate}, 
               'qualified',
               ${finalReasonText}
             )
-            ON CONFLICT (student_id, day_number)
+            ON CONFLICT (student_id, date)
             DO UPDATE SET
-              override_type = 'qualified',
+              day_number = EXCLUDED.day_number,
+              override_type = EXCLUDED.override_type,
               reason = EXCLUDED.reason,
               updated_at = NOW()
             RETURNING id
           `
-          createdOverrides.push(overrideResult.rows[0]?.id)
+          
+          if (overrideResult.rows.length > 0 && overrideResult.rows[0]?.id) {
+            createdOverrides.push(overrideResult.rows[0].id)
+          }
 
           // Update the request status
           await sql`

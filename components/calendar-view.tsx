@@ -83,12 +83,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
     }
   })
 
-  // Load overrides when studentInfo is available
+  // Load overrides when studentInfo is available or when dailyLog changes
   useEffect(() => {
     if (studentInfo?.studentId) {
       loadOverrides()
     }
-  }, [studentInfo])
+  }, [studentInfo, dailyLog.length]) // Reload when dailyLog changes (e.g., period switch)
 
   const loadOverrides = async () => {
     if (!studentInfo) return

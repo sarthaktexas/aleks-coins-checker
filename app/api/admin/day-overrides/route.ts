@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
           admin_password_hash VARCHAR(255),
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          UNIQUE(student_id, day_number)
+          UNIQUE(student_id, date)
         )
       `
     } catch (tableError) {
@@ -78,24 +78,64 @@ export async function POST(request: NextRequest) {
     // Create a simple hash of the admin password for audit trail (not for security)
     const adminPasswordHash = crypto.createHash('sha256').update(adminPassword).digest('hex').substring(0, 16)
 
-    // Insert or update the override
-    const result = await sql`
-      INSERT INTO student_day_overrides (
-        student_id, day_number, date, 
-        override_type, reason, admin_password_hash
-      )
-      VALUES (
-        ${studentId}, ${dayNumber}, ${date},
-        ${overrideType}, ${reason || null}, ${adminPasswordHash}
-      )
-      ON CONFLICT (student_id, day_number)
-      DO UPDATE SET
-        override_type = EXCLUDED.override_type,
-        reason = EXCLUDED.reason,
-        admin_password_hash = EXCLUDED.admin_password_hash,
-        updated_at = NOW()
-      RETURNING id, created_at, updated_at
+    // Normalize student_id to ensure consistency with how overrides are queried
+    const normalizedStudentId = (studentId || '').toLowerCase().trim()
+    
+    // Normalize date to ensure it matches the format used in dailyLog (YYYY-MM-DD)
+    const normalizedDate = (date || '').trim()
+
+    // Check if there's already an override for this (student_id, date)
+    // The calendar matches by date, so we should prioritize date matching
+    const existingByDate = await sql`
+      SELECT id, day_number
+      FROM student_day_overrides
+      WHERE student_id = ${normalizedStudentId}
+        AND date = ${normalizedDate}
     `
+    
+    let result
+    if (existingByDate.rows.length > 0) {
+      // Update existing override for this date
+      result = await sql`
+        UPDATE student_day_overrides
+        SET day_number = ${dayNumber},
+            override_type = ${overrideType},
+            reason = ${reason || null},
+            admin_password_hash = ${adminPasswordHash},
+            updated_at = NOW()
+        WHERE id = ${existingByDate.rows[0].id}
+        RETURNING id, created_at, updated_at
+      `
+    } else {
+      // Check if there's an override for this (student_id, day_number) with a different date
+      const existingByDayNumber = await sql`
+        SELECT id, date
+        FROM student_day_overrides
+        WHERE student_id = ${normalizedStudentId}
+          AND day_number = ${dayNumber}
+      `
+      
+      if (existingByDayNumber.rows.length > 0) {
+        // Delete the old override with different date
+        await sql`
+          DELETE FROM student_day_overrides
+          WHERE id = ${existingByDayNumber.rows[0].id}
+        `
+      }
+      
+      // Insert the new override
+      result = await sql`
+        INSERT INTO student_day_overrides (
+          student_id, day_number, date, 
+          override_type, reason, admin_password_hash
+        )
+        VALUES (
+          ${normalizedStudentId}, ${dayNumber}, ${normalizedDate},
+          ${overrideType}, ${reason || null}, ${adminPasswordHash}
+        )
+        RETURNING id, created_at, updated_at
+      `
+    }
 
     return NextResponse.json({
       success: true,
@@ -146,13 +186,16 @@ export async function GET(request: NextRequest) {
     let overrides = []
 
     if (studentId) {
+      // Normalize student_id to ensure consistency with how overrides are stored
+      const normalizedStudentId = studentId.toLowerCase().trim()
+      
       // Get overrides for specific student
       const result = await sql`
         SELECT 
           id, student_id, day_number, date,
           override_type, reason, created_at, updated_at
         FROM student_day_overrides
-        WHERE student_id = ${studentId}
+        WHERE student_id = ${normalizedStudentId}
         ORDER BY day_number ASC
       `
       overrides = result.rows
@@ -260,10 +303,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
+    // Normalize student_id to ensure consistency with how overrides are stored
+    const normalizedStudentId = (studentId || '').toLowerCase().trim()
+
     // Delete the override
     const result = await sql`
       DELETE FROM student_day_overrides
-      WHERE student_id = ${studentId}
+      WHERE student_id = ${normalizedStudentId}
       AND day_number = ${dayNumber}
       RETURNING id
     `
