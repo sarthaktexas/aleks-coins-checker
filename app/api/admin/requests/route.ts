@@ -99,9 +99,12 @@ export async function PUT(request: NextRequest) {
           FROM admin_settings
           WHERE setting_key = 'overrides_enabled'
         `
-        const overridesEnabled = settingsResult.rows.length > 0 
-          ? settingsResult.rows[0].setting_value 
-          : true // Default to enabled if setting doesn't exist
+        let overridesEnabled = true // Default to enabled if setting doesn't exist
+        if (settingsResult.rows.length > 0) {
+          const value = settingsResult.rows[0].setting_value
+          // Ensure boolean values are properly converted (PostgreSQL might return as string or boolean)
+          overridesEnabled = typeof value === 'boolean' ? value : value === true || value === 'true' || value === 't' || value === 1
+        }
         
         if (!overridesEnabled) {
           return NextResponse.json({ 
@@ -298,9 +301,12 @@ export async function POST(request: NextRequest) {
         FROM admin_settings
         WHERE setting_key = 'overrides_enabled'
       `
-      overridesEnabled = settingsResult.rows.length > 0 
-        ? settingsResult.rows[0].setting_value 
-        : true // Default to enabled if setting doesn't exist
+      overridesEnabled = true // Default to enabled if setting doesn't exist
+      if (settingsResult.rows.length > 0) {
+        const value = settingsResult.rows[0].setting_value
+        // Ensure boolean values are properly converted (PostgreSQL might return as string or boolean)
+        overridesEnabled = typeof value === 'boolean' ? value : value === true || value === 'true' || value === 't' || value === 1
+      }
     } catch (settingsError) {
       // If settings table doesn't exist yet, allow the operation (backward compatibility)
       console.log("Settings check skipped (table may not exist):", settingsError)

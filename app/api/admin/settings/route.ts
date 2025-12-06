@@ -40,7 +40,10 @@ export async function GET(request: NextRequest) {
 
     const settingsMap = new Map<string, boolean>()
     result.rows.forEach((row) => {
-      settingsMap.set(row.setting_key, row.setting_value)
+      // Ensure boolean values are properly converted (PostgreSQL might return as string or boolean)
+      const value = row.setting_value
+      const boolValue = typeof value === 'boolean' ? value : value === true || value === 'true' || value === 't' || value === 1
+      settingsMap.set(row.setting_key, boolValue)
     })
 
     // Return settings with defaults
@@ -130,7 +133,10 @@ export async function PUT(request: NextRequest) {
 
     const settingsMap = new Map<string, boolean>()
     result.rows.forEach((row) => {
-      settingsMap.set(row.setting_key, row.setting_value)
+      // Ensure boolean values are properly converted (PostgreSQL might return as string or boolean)
+      const value = row.setting_value
+      const boolValue = typeof value === 'boolean' ? value : value === true || value === 'true' || value === 't' || value === 1
+      settingsMap.set(row.setting_key, boolValue)
     })
 
     return NextResponse.json({
