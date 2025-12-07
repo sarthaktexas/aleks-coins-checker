@@ -169,7 +169,7 @@ export default function StudentLookup() {
         // Always set the default selected period history to the latest (index 0) when new data is loaded
         setSelectedPeriodHistory(periods.length > 0 ? 0 : null)
         setCoinAdjustments(data.coinAdjustments || [])
-        setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins)
+        setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods ?? data.student.totalCoins ?? data.student.coins ?? 0)
         setPendingRequests(data.pendingRequests || [])
         setApprovedRequests(data.approvedRequests || [])
         setRejectedRequests(data.rejectedRequests || [])
@@ -591,7 +591,7 @@ export default function StudentLookup() {
                         ) : (
                           (() => {
                             // Use total coins across all periods for redemption calculations
-                            const coinsForRedemption = totalCoinsAcrossPeriods || studentInfo.totalCoins || studentInfo.coins
+                            const coinsForRedemption = totalCoinsAcrossPeriods ?? studentInfo.totalCoins ?? studentInfo.coins ?? 0
                             const redemptionInfo = getRedemptionInfo(coinsForRedemption)
 
                             return (
@@ -1140,6 +1140,7 @@ export default function StudentLookup() {
           <RedemptionModal
             isOpen={redemptionModal.isOpen}
             onClose={() => setRedemptionModal({ ...redemptionModal, isOpen: false })}
+            onSuccess={handleSearch}
             redemptionType={redemptionModal.type}
             studentName={studentInfo.name}
             studentEmail={studentInfo.email}

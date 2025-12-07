@@ -216,20 +216,7 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        // Apply overrides to each period's data and calculate coins
-        let totalCoinsFromPeriods = 0
-        for (const periodData of studentPeriods) {
-          // Apply overrides to this period's data
-          const tempStudentData: StudentData = { [normalizedStudentId]: periodData.data }
-          const overriddenData = await applyOverridesToStudentData(tempStudentData, normalizedStudentId)
-          const studentWithOverrides = overriddenData[normalizedStudentId]
-          
-          if (studentWithOverrides) {
-            totalCoinsFromPeriods += studentWithOverrides.coins || 0
-          }
-        }
-        
-        // Get active coin adjustments
+        // Get active coin adjustments first (same as student route)
         const adjustmentsResult = await sql`
           SELECT 
             period,
@@ -239,25 +226,44 @@ export async function POST(request: NextRequest) {
           WHERE student_id = ${normalizedStudentId} AND is_active = true
         `
         
-        let periodAdjustments = 0
+        // Create a map of adjustments by period (same as student route)
+        const adjustmentsByPeriod = new Map<string, number>()
         let globalAdjustments = 0
         
         adjustmentsResult.rows.forEach(adj => {
           if (adj.period === '__GLOBAL__' || adj.period === null || adj.period === undefined) {
             globalAdjustments += adj.adjustment_amount
           } else {
-            // Match period-specific adjustments to the correct period
-            const periodKey = `${adj.period}_${adj.section_number || 'default'}`
-            if (processedPeriods.has(periodKey)) {
-              periodAdjustments += adj.adjustment_amount
-            }
+            // Period-specific adjustment
+            const key = `${adj.period}_${adj.section_number || 'default'}`
+            const current = adjustmentsByPeriod.get(key) || 0
+            adjustmentsByPeriod.set(key, current + adj.adjustment_amount)
           }
         })
         
+        // Apply overrides to each period's data and calculate coins (same logic as student route)
+        // For each period: totalCoins = coins + periodAdjustment, then sum all periods
+        let totalCoinsFromPeriods = 0
+        for (const periodData of studentPeriods) {
+          // Apply overrides to this period's data
+          const tempStudentData: StudentData = { [normalizedStudentId]: periodData.data }
+          const overriddenData = await applyOverridesToStudentData(tempStudentData, normalizedStudentId)
+          const studentWithOverrides = overriddenData[normalizedStudentId]
+          
+          if (studentWithOverrides) {
+            // Get period-specific adjustment for this period (same as student route)
+            const periodKey = `${periodData.period}_${periodData.section}`
+            const periodAdjustment = adjustmentsByPeriod.get(periodKey) || 0
+            
+            // Calculate total coins for this period: coins + period adjustment (same as student route)
+            const periodTotalCoins = (studentWithOverrides.coins || 0) + periodAdjustment
+            totalCoinsFromPeriods += periodTotalCoins
+          }
+        }
+        
         // Calculate current total (before this redemption)
-        // Same formula as student route: (sum of period coins + period adjustments) + global adjustments
-        const totalCoinsWithPeriodAdjustments = totalCoinsFromPeriods + periodAdjustments
-        const currentTotal = Math.max(0, totalCoinsWithPeriodAdjustments + globalAdjustments)
+        // Same formula as student route: sum of (period coins + period adjustments) + global adjustments
+        const currentTotal = Math.max(0, totalCoinsFromPeriods + globalAdjustments)
         
         // Check if student has enough coins
         if (currentTotal < coinDeduction) {

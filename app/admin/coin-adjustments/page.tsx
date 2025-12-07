@@ -195,7 +195,7 @@ export default function AdminCoinAdjustmentsPage() {
         // Add totalCoinsAcrossPeriods to student data for display
         const enrichedStudentData = {
           ...data.student,
-          totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods || data.student.totalCoins || data.student.coins
+          totalCoinsAcrossPeriods: data.totalCoinsAcrossPeriods ?? data.student.totalCoins ?? data.student.coins ?? 0
         }
         setStudentData(enrichedStudentData)
         setStudentName(data.student.name)
@@ -385,7 +385,7 @@ export default function AdminCoinAdjustmentsPage() {
                       <div className="space-y-1 text-sm text-blue-800">
                         <p><strong>Name:</strong> {studentData.name}</p>
                         <p><strong>Email:</strong> {studentData.email}</p>
-                        <p><strong>Total Coins (All Periods):</strong> {studentData.totalCoinsAcrossPeriods || studentData.totalCoins || studentData.coins}</p>
+                        <p><strong>Total Coins (All Periods):</strong> {studentData.totalCoinsAcrossPeriods ?? studentData.totalCoins ?? studentData.coins ?? 0}</p>
                         <p><strong>Current Period:</strong> {studentData.period?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
                         <p><strong>Section:</strong> {studentData.sectionNumber}</p>
                       </div>

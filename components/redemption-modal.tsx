@@ -22,6 +22,7 @@ import { Gift, Mail, User, FileText, HelpCircle, AlertTriangle } from "lucide-re
 type RedemptionModalProps = {
   isOpen: boolean
   onClose: () => void
+  onSuccess?: () => void // Callback to refresh student data after successful redemption
   redemptionType: "assignment" | "quiz"
   studentName: string
   studentEmail: string
@@ -30,7 +31,7 @@ type RedemptionModalProps = {
   sectionNumber?: string
 }
 
-export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, studentEmail, studentId, period, sectionNumber }: RedemptionModalProps) {
+export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, studentName, studentEmail, studentId, period, sectionNumber }: RedemptionModalProps) {
   const [formData, setFormData] = useState({
     assignmentName: "",
     additionalNotes: "",
@@ -91,6 +92,13 @@ export function RedemptionModal({ isOpen, onClose, redemptionType, studentName, 
 
       if (response.ok) {
         setIsSubmitted(true)
+        // Trigger refresh callback if provided
+        if (onSuccess) {
+          // Small delay to ensure database transaction is committed
+          setTimeout(() => {
+            onSuccess()
+          }, 500)
+        }
         // Reset form after a delay
         setTimeout(() => {
           setIsSubmitted(false)
