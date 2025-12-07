@@ -1,6 +1,113 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
+type DailyLog = {
+  day: number
+  date: string
+  qualified: boolean
+  minutes: number
+  topics: number
+  reason: string
+  isExcluded?: boolean
+  wouldHaveQualified?: boolean
+}
+
+type StudentData = {
+  [key: string]: {
+    name: string
+    email: string
+    coins: number
+    totalDays: number
+    periodDays: number
+    percentComplete: number
+    dailyLog: DailyLog[]
+    exemptDayCredits?: number
+  }
+}
+
+// Apply day overrides to student data (same logic as student route)
+async function applyOverridesToStudentData(studentData: StudentData, studentId?: string): Promise<StudentData> {
+  try {
+    const studentIds = Object.keys(studentData)
+    
+    if (studentIds.length === 0) {
+      return studentData
+    }
+
+    // Get overrides only for the students we're processing
+    let overridesResult
+    if (studentId && studentIds.includes(studentId.toLowerCase())) {
+      overridesResult = await sql`
+        SELECT student_id, day_number, date, override_type, reason
+        FROM student_day_overrides
+        WHERE student_id = ${studentId.toLowerCase()}
+      `
+    } else {
+      const allOverrides = await sql`
+        SELECT student_id, day_number, date, override_type, reason
+        FROM student_day_overrides
+      `
+      const studentIdsSet = new Set(studentIds.map(id => id.toLowerCase()))
+      overridesResult = {
+        rows: allOverrides.rows.filter(row => studentIdsSet.has(row.student_id.toLowerCase()))
+      }
+    }
+
+    // Group overrides by student_id and date
+    const overridesMap = new Map<string, Map<string, any>>()
+    
+    overridesResult.rows.forEach(override => {
+      if (!overridesMap.has(override.student_id)) {
+        overridesMap.set(override.student_id, new Map())
+      }
+      overridesMap.get(override.student_id)!.set(override.date, override)
+    })
+
+    // Apply overrides to each student's daily log
+    const updatedStudentData = { ...studentData }
+    
+    Object.keys(updatedStudentData).forEach(studentId => {
+      const student = updatedStudentData[studentId]
+      const studentOverrides = overridesMap.get(studentId)
+      
+      if (student.dailyLog) {
+        // Apply overrides to daily log by matching date
+        if (studentOverrides) {
+          student.dailyLog = student.dailyLog.map(day => {
+            const override = studentOverrides.get(day.date)
+            if (override) {
+              return {
+                ...day,
+                qualified: override.override_type === "qualified",
+                reason: override.reason || day.reason
+              }
+            }
+            return day
+          })
+        }
+
+        // Recalculate totals based on daily log (with or without overrides)
+        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
+        const completedWorkingDays = workingDayLogs.length
+        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+        
+        const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
+        
+        const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
+        
+        student.percentComplete = percentComplete
+        student.coins = qualifiedWorkingDays + exemptDayCredits
+        student.exemptDayCredits = exemptDayCredits
+      }
+    })
+
+    return updatedStudentData
+  } catch (error) {
+    console.error("Error applying overrides:", error)
+    return studentData // Return original data if override application fails
+  }
+}
+
 // POST - Submit a new student request
 export async function POST(request: NextRequest) {
   try {
@@ -75,14 +182,15 @@ export async function POST(request: NextRequest) {
         const normalizedStudentId = studentId.toLowerCase().trim()
         
         // Get student's current total coins across all periods
-        // First, get all periods for this student
+        // Use the same approach as the student route to ensure consistency
         const studentDataResult = await sql`
-          SELECT data, period, section_number
+          SELECT data, period, section_number, uploaded_at
           FROM student_data
           ORDER BY uploaded_at DESC
         `
         
-        let baseCoins = 0
+        // Track all periods for this student (same logic as student route)
+        const studentPeriods: Array<{ period: string, section: string, data: any }> = []
         const processedPeriods = new Set<string>()
         
         for (const row of studentDataResult.rows) {
@@ -96,10 +204,28 @@ export async function POST(request: NextRequest) {
           const student = rowData[normalizedStudentId]
           if (student) {
             const periodKey = `${row.period}_${row.section_number || 'default'}`
+            // Only process the latest upload for each period/section combination
             if (!processedPeriods.has(periodKey)) {
-              baseCoins += student.coins || 0
+              studentPeriods.push({
+                period: row.period,
+                section: row.section_number || 'default',
+                data: student
+              })
               processedPeriods.add(periodKey)
             }
+          }
+        }
+        
+        // Apply overrides to each period's data and calculate coins
+        let totalCoinsFromPeriods = 0
+        for (const periodData of studentPeriods) {
+          // Apply overrides to this period's data
+          const tempStudentData: StudentData = { [normalizedStudentId]: periodData.data }
+          const overriddenData = await applyOverridesToStudentData(tempStudentData, normalizedStudentId)
+          const studentWithOverrides = overriddenData[normalizedStudentId]
+          
+          if (studentWithOverrides) {
+            totalCoinsFromPeriods += studentWithOverrides.coins || 0
           }
         }
         
@@ -120,12 +246,18 @@ export async function POST(request: NextRequest) {
           if (adj.period === '__GLOBAL__' || adj.period === null || adj.period === undefined) {
             globalAdjustments += adj.adjustment_amount
           } else {
-            periodAdjustments += adj.adjustment_amount
+            // Match period-specific adjustments to the correct period
+            const periodKey = `${adj.period}_${adj.section_number || 'default'}`
+            if (processedPeriods.has(periodKey)) {
+              periodAdjustments += adj.adjustment_amount
+            }
           }
         })
         
         // Calculate current total (before this redemption)
-        const currentTotal = Math.max(0, baseCoins + periodAdjustments + globalAdjustments)
+        // Same formula as student route: (sum of period coins + period adjustments) + global adjustments
+        const totalCoinsWithPeriodAdjustments = totalCoinsFromPeriods + periodAdjustments
+        const currentTotal = Math.max(0, totalCoinsWithPeriodAdjustments + globalAdjustments)
         
         // Check if student has enough coins
         if (currentTotal < coinDeduction) {
