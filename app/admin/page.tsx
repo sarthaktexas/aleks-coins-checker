@@ -124,6 +124,13 @@ export default function AdminPage() {
       return
     }
 
+    // Optimistically update the UI state immediately
+    if (setting === 'overrides') {
+      setOverridesEnabled(value)
+    } else {
+      setRedemptionRequestsEnabled(value)
+    }
+
     setIsSavingSettings(true)
     try {
       const updates: { overridesEnabled?: boolean; redemptionRequestsEnabled?: boolean } = {}
@@ -155,10 +162,22 @@ export default function AdminPage() {
           text: `Settings updated successfully`,
         })
       } else {
+        // Revert the optimistic update on error
+        if (setting === 'overrides') {
+          setOverridesEnabled(!value)
+        } else {
+          setRedemptionRequestsEnabled(!value)
+        }
         setMessage({ type: "error", text: result.error || "Failed to update settings" })
       }
     } catch (error) {
       console.error("Error updating settings:", error)
+      // Revert the optimistic update on error
+      if (setting === 'overrides') {
+        setOverridesEnabled(!value)
+      } else {
+        setRedemptionRequestsEnabled(!value)
+      }
       setMessage({ type: "error", text: "Network error. Please try again." })
     } finally {
       setIsSavingSettings(false)

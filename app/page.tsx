@@ -128,6 +128,7 @@ export default function StudentLookup() {
     totalStudents: number
   } | null>(null)
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+  const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
 
   const handleSearch = async () => {
     if (!studentId.trim()) {
@@ -238,6 +239,20 @@ export default function StudentLookup() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriodHistory])
+
+  // Load redemption settings when component mounts
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        setRedemptionRequestsEnabled(data.redemptionRequestsEnabled ?? true)
+      })
+      .catch((err) => {
+        console.error("Error loading redemption settings:", err)
+        // Default to enabled on error
+        setRedemptionRequestsEnabled(true)
+      })
+  }, [])
 
 
   const getProgressColor = (percent: number) => {
@@ -563,81 +578,93 @@ export default function StudentLookup() {
                           <span className="text-lg font-semibold text-green-800">Redemption Options</span>
                         </div>
 
-                        {(() => {
-                          // Use total coins across all periods for redemption calculations
-                          const coinsForRedemption = totalCoinsAcrossPeriods || studentInfo.totalCoins || studentInfo.coins
-                          const redemptionInfo = getRedemptionInfo(coinsForRedemption)
-
-                          return (
-                            <div className="space-y-4">
-                              {/* Assignment Redemption */}
-                              <div className="bg-white/60 rounded-lg p-4 border border-green-200">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-sm font-medium text-green-800">Assignment/Video Replacement</div>
-                                  <Badge variant="outline" className="text-xs">
-                                    10 coins
-                                  </Badge>
-                                </div>
-                                {redemptionInfo.assignmentRedemptions > 0 ? (
-                                  <div className="space-y-2">
-                                    <p className="text-sm text-green-700">
-                                      Available: <strong>{redemptionInfo.assignmentRedemptions}</strong> redemption
-                                      {redemptionInfo.assignmentRedemptions !== 1 ? "s" : ""}
-                                    </p>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => setRedemptionModal({ isOpen: true, type: "assignment" })}
-                                      className="w-full bg-green-600 hover:bg-green-700"
-                                    >
-                                      Redeem Assignment
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <Target className="h-4 w-4 text-green-600" />
-                                    <p className="text-sm text-green-700">
-                                      {redemptionInfo.coinsToNextAssignment} more coin
-                                      {redemptionInfo.coinsToNextAssignment !== 1 ? "s" : ""} needed
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Quiz Redemption */}
-                              <div className="bg-white/60 rounded-lg p-4 border border-green-200">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-sm font-medium text-green-800">Attendance Quiz Replacement</div>
-                                  <Badge variant="outline" className="text-xs">
-                                    20 coins
-                                  </Badge>
-                                </div>
-                                {redemptionInfo.quizRedemptions > 0 ? (
-                                  <div className="space-y-2">
-                                    <p className="text-sm text-green-700">
-                                      Available: <strong>{redemptionInfo.quizRedemptions}</strong> redemption
-                                      {redemptionInfo.quizRedemptions !== 1 ? "s" : ""}
-                                    </p>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => setRedemptionModal({ isOpen: true, type: "quiz" })}
-                                      className="w-full bg-green-600 hover:bg-green-700"
-                                    >
-                                      Redeem Quiz
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <Target className="h-4 w-4 text-green-600" />
-                                    <p className="text-sm text-green-700">
-                                      {redemptionInfo.coinsToNextQuiz} more coin
-                                      {redemptionInfo.coinsToNextQuiz !== 1 ? "s" : ""} needed
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
+                        {!redemptionRequestsEnabled ? (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-2">
+                              <AlertTriangle className="h-4 w-4 text-amber-600" />
+                              <p className="text-sm font-medium text-amber-800">Redemption Requests Disabled</p>
                             </div>
-                          )
-                        })()}
+                            <p className="text-xs text-amber-700">
+                              Redemption requests are currently disabled. Please contact your instructor if you need assistance.
+                            </p>
+                          </div>
+                        ) : (
+                          (() => {
+                            // Use total coins across all periods for redemption calculations
+                            const coinsForRedemption = totalCoinsAcrossPeriods || studentInfo.totalCoins || studentInfo.coins
+                            const redemptionInfo = getRedemptionInfo(coinsForRedemption)
+
+                            return (
+                              <div className="space-y-4">
+                                {/* Assignment Redemption */}
+                                <div className="bg-white/60 rounded-lg p-4 border border-green-200">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-medium text-green-800">Assignment/Video Replacement</div>
+                                    <Badge variant="outline" className="text-xs">
+                                      10 coins
+                                    </Badge>
+                                  </div>
+                                  {redemptionInfo.assignmentRedemptions > 0 ? (
+                                    <div className="space-y-2">
+                                      <p className="text-sm text-green-700">
+                                        Available: <strong>{redemptionInfo.assignmentRedemptions}</strong> redemption
+                                        {redemptionInfo.assignmentRedemptions !== 1 ? "s" : ""}
+                                      </p>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => setRedemptionModal({ isOpen: true, type: "assignment" })}
+                                        className="w-full bg-green-600 hover:bg-green-700"
+                                      >
+                                        Redeem Assignment
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Target className="h-4 w-4 text-green-600" />
+                                      <p className="text-sm text-green-700">
+                                        {redemptionInfo.coinsToNextAssignment} more coin
+                                        {redemptionInfo.coinsToNextAssignment !== 1 ? "s" : ""} needed
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Quiz Redemption */}
+                                <div className="bg-white/60 rounded-lg p-4 border border-green-200">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-medium text-green-800">Attendance Quiz Replacement</div>
+                                    <Badge variant="outline" className="text-xs">
+                                      20 coins
+                                    </Badge>
+                                  </div>
+                                  {redemptionInfo.quizRedemptions > 0 ? (
+                                    <div className="space-y-2">
+                                      <p className="text-sm text-green-700">
+                                        Available: <strong>{redemptionInfo.quizRedemptions}</strong> redemption
+                                        {redemptionInfo.quizRedemptions !== 1 ? "s" : ""}
+                                      </p>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => setRedemptionModal({ isOpen: true, type: "quiz" })}
+                                        className="w-full bg-green-600 hover:bg-green-700"
+                                      >
+                                        Redeem Quiz
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Target className="h-4 w-4 text-green-600" />
+                                      <p className="text-sm text-green-700">
+                                        {redemptionInfo.coinsToNextQuiz} more coin
+                                        {redemptionInfo.coinsToNextQuiz !== 1 ? "s" : ""} needed
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()
+                        )}
                       </CardContent>
                     </Card>
                   </div>
