@@ -565,7 +565,8 @@ export async function POST(request: NextRequest) {
     // Calculate total coins across all periods with period-specific adjustments
     // Then add global adjustments (redemptions) which deduct from the total, not individual periods
     const totalCoinsFromPeriods = periodsData.reduce((sum, p) => sum + p.totalCoins, 0)
-    const totalCoinsAcrossPeriods = totalCoinsFromPeriods + globalAdjustments
+    // Clamp to 0 minimum - students can't have negative coins
+    const totalCoinsAcrossPeriods = Math.max(0, totalCoinsFromPeriods + globalAdjustments)
     
     // Get the student's section number from their actual period data
     // Use the most recent period's section (first in allPeriods since it's sorted by upload date)

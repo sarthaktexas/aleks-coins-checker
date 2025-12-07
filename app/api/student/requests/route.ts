@@ -69,6 +69,77 @@ export async function POST(request: NextRequest) {
       coinDeduction = 20
     }
 
+    // Validate that student has enough coins for redemption requests
+    if (coinDeduction > 0) {
+      try {
+        const normalizedStudentId = studentId.toLowerCase().trim()
+        
+        // Get student's current total coins across all periods
+        // First, get all periods for this student
+        const studentDataResult = await sql`
+          SELECT data, period, section_number
+          FROM student_data
+          ORDER BY uploaded_at DESC
+        `
+        
+        let baseCoins = 0
+        const processedPeriods = new Set<string>()
+        
+        for (const row of studentDataResult.rows) {
+          let rowData: any
+          if (typeof row.data === "string") {
+            rowData = JSON.parse(row.data)
+          } else {
+            rowData = row.data
+          }
+          
+          const student = rowData[normalizedStudentId]
+          if (student) {
+            const periodKey = `${row.period}_${row.section_number || 'default'}`
+            if (!processedPeriods.has(periodKey)) {
+              baseCoins += student.coins || 0
+              processedPeriods.add(periodKey)
+            }
+          }
+        }
+        
+        // Get active coin adjustments
+        const adjustmentsResult = await sql`
+          SELECT 
+            period,
+            section_number,
+            adjustment_amount
+          FROM coin_adjustments
+          WHERE student_id = ${normalizedStudentId} AND is_active = true
+        `
+        
+        let periodAdjustments = 0
+        let globalAdjustments = 0
+        
+        adjustmentsResult.rows.forEach(adj => {
+          if (adj.period === '__GLOBAL__' || adj.period === null || adj.period === undefined) {
+            globalAdjustments += adj.adjustment_amount
+          } else {
+            periodAdjustments += adj.adjustment_amount
+          }
+        })
+        
+        // Calculate current total (before this redemption)
+        const currentTotal = Math.max(0, baseCoins + periodAdjustments + globalAdjustments)
+        
+        // Check if student has enough coins
+        if (currentTotal < coinDeduction) {
+          return NextResponse.json({ 
+            error: `Insufficient coins. You have ${currentTotal} coin${currentTotal !== 1 ? 's' : ''} but need ${coinDeduction} coins for this redemption.` 
+          }, { status: 400 })
+        }
+      } catch (validationError) {
+        // If validation fails, log but allow the request (better to allow than block if there's an error)
+        console.error("Error validating coin balance:", validationError)
+        // Continue with request submission
+      }
+    }
+
     // Insert the request into the database
     const result = await sql`
       INSERT INTO student_requests (
@@ -126,30 +197,47 @@ export async function POST(request: NextRequest) {
       
       // Insert coin adjustment with "__GLOBAL__" period for global (total) deduction
       // Link it to the request via request_id
-      await sql`
-        INSERT INTO coin_adjustments (
-          student_id,
-          student_name,
-          period,
-          section_number,
-          adjustment_amount,
-          reason,
-          created_by,
-          created_at,
-          request_id
-        )
-        VALUES (
-          ${studentId.toLowerCase().trim()},
-          ${studentName},
-          '__GLOBAL__',
-          ${sectionNumber},
-          ${-coinDeduction},
-          ${`Pending ${requestType.replace('_', ' ')} request - ${requestDetails.substring(0, 50)}...`},
-          'system',
-          NOW(),
-          ${requestId}
-        )
-      `
+      // Wrap in try-catch to handle failures gracefully and log for diagnosis
+      try {
+        const adjustmentResult = await sql`
+          INSERT INTO coin_adjustments (
+            student_id,
+            student_name,
+            period,
+            section_number,
+            adjustment_amount,
+            reason,
+            created_by,
+            created_at,
+            request_id
+          )
+          VALUES (
+            ${studentId.toLowerCase().trim()},
+            ${studentName},
+            '__GLOBAL__',
+            ${sectionNumber},
+            ${-coinDeduction},
+            ${`Pending ${requestType.replace('_', ' ')} request - ${requestDetails.substring(0, 50)}...`},
+            'system',
+            NOW(),
+            ${requestId}
+          )
+          RETURNING id
+        `
+        
+        // Verify the adjustment was created successfully
+        if (!adjustmentResult.rows || adjustmentResult.rows.length === 0) {
+          console.error(`Failed to create coin adjustment for request ${requestId}. Request created but adjustment failed.`)
+          // Note: We don't delete the request here as it might be useful for diagnosis
+          // The reject-failed endpoint can be used to clean these up
+        }
+      } catch (adjustmentError) {
+        // Log the error but don't fail the request submission
+        // The request will be created but marked as failed by the reject-failed endpoint
+        console.error(`Error creating coin adjustment for request ${requestId}:`, adjustmentError)
+        console.error(`Request was created (id: ${requestId}) but coin adjustment failed. Student: ${studentId}, Deduction: ${coinDeduction}`)
+        // Don't throw - let the request be created so admin can see it in the reject-failed list
+      }
     }
 
     return NextResponse.json({
