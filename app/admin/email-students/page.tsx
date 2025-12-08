@@ -32,6 +32,7 @@ type StudentData = {
       wouldHaveQualified?: boolean
     }>
     exemptDayCredits?: number
+    totalBalance?: number // Total balance across all periods including adjustments
   }
 }
 
@@ -237,18 +238,51 @@ export default function EmailStudentsPage() {
 
   // Load students when period/section changes
   const loadStudents = async () => {
-    if (!selectedPeriod || !sectionNumber.trim()) return
+    if (!selectedPeriod) return
 
     setIsLoadingStudents(true)
     setMessage(null)
 
     try {
-      const response = await fetch(`/api/admin/student-data?period=${selectedPeriod}&sectionNumber=${sectionNumber}`)
+      const url = sectionNumber.trim() 
+        ? `/api/admin/student-data?period=${selectedPeriod}&sectionNumber=${sectionNumber}`
+        : `/api/admin/student-data?period=${selectedPeriod}`
+      const response = await fetch(url)
       const data = await response.json()
 
       if (response.ok) {
-        setStudentData(data.studentData || {})
-        setMessage({ type: "success", text: `Loaded ${Object.keys(data.studentData || {}).length} students` })
+        const loadedStudentData = data.studentData || {}
+        setStudentData(loadedStudentData)
+        
+        // Fetch total balances for all students
+        const studentIds = Object.keys(loadedStudentData)
+        if (studentIds.length > 0) {
+          try {
+            const balancesResponse = await fetch('/api/admin/student-balances', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ studentIds })
+            })
+            const balancesData = await balancesResponse.json()
+            
+            if (balancesResponse.ok && balancesData.balances) {
+              // Update student data with total balances
+              const updatedStudentData = { ...loadedStudentData }
+              Object.keys(updatedStudentData).forEach(studentId => {
+                const normalizedId = studentId.toLowerCase()
+                if (balancesData.balances[normalizedId] !== undefined) {
+                  updatedStudentData[studentId].totalBalance = balancesData.balances[normalizedId]
+                }
+              })
+              setStudentData(updatedStudentData)
+            }
+          } catch (balanceError) {
+            console.error("Error fetching balances:", balanceError)
+            // Continue without balances if there's an error
+          }
+        }
+        
+        setMessage({ type: "success", text: `Loaded ${studentIds.length} students` })
       } else {
         setMessage({ type: "error", text: data.error || "Failed to load students" })
         setStudentData({})
@@ -262,7 +296,7 @@ export default function EmailStudentsPage() {
   }
 
   useEffect(() => {
-    if (selectedPeriod && sectionNumber.trim()) {
+    if (selectedPeriod) {
       loadStudents()
     }
   }, [selectedPeriod, sectionNumber])
@@ -280,10 +314,10 @@ export default function EmailStudentsPage() {
       filtered = filtered.filter(s => (s.data.percentComplete || 0) <= filterCriteria.maxProgress!)
     }
     if (filterCriteria.minCoins !== undefined) {
-      filtered = filtered.filter(s => (s.data.coins || 0) >= filterCriteria.minCoins!)
+      filtered = filtered.filter(s => ((s.data.totalBalance ?? s.data.coins) || 0) >= filterCriteria.minCoins!)
     }
     if (filterCriteria.maxCoins !== undefined) {
-      filtered = filtered.filter(s => (s.data.coins || 0) <= filterCriteria.maxCoins!)
+      filtered = filtered.filter(s => ((s.data.totalBalance ?? s.data.coins) || 0) <= filterCriteria.maxCoins!)
     }
     if (filterCriteria.hasProgress) {
       filtered = filtered.filter(s => (s.data.percentComplete || 0) > 0)
@@ -332,10 +366,12 @@ export default function EmailStudentsPage() {
     }
 
     // Replace placeholders
+    // Use totalBalance if available (includes adjustments), otherwise fall back to coins
+    const coinBalance = (student.data.totalBalance ?? student.data.coins) || 0
     const replacements = {
       "{{name}}": getFirstName(student.data.name),
       "{{percentComplete}}": student.data.percentComplete || 0,
-      "{{coins}}": student.data.coins || 0,
+      "{{coins}}": coinBalance,
       "{{totalDays}}": student.data.totalDays || 0,
       "{{periodDays}}": student.data.periodDays || 0
     }
@@ -419,7 +455,7 @@ export default function EmailStudentsPage() {
   }
 
   const copyEmailsToClipboard = () => {
-    const emails = filteredStudents.map(s => s.data.email).join(", ")
+    const emails = filteredStudents.map(s => s.data.email).join("\n")
     navigator.clipboard.writeText(emails)
     setCopiedEmails(true)
     setTimeout(() => setCopiedEmails(false), 2000)
@@ -462,7 +498,7 @@ export default function EmailStudentsPage() {
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Target className="h-5 w-5 text-blue-600" />
                   </div>
-                  Select Period & Section
+                  Select Period & Section (Optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6 space-y-4">
@@ -491,21 +527,24 @@ export default function EmailStudentsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="sectionNumber" className="text-sm font-medium text-slate-700">
-                    Section Number
+                    Section Number (Optional)
                   </Label>
                   <Input
                     id="sectionNumber"
                     type="text"
-                    placeholder="e.g., 003, 006"
+                    placeholder="e.g., 003, 006 (leave empty for all sections)"
                     value={sectionNumber}
                     onChange={(e) => setSectionNumber(e.target.value)}
                     className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                   />
+                  <p className="text-xs text-slate-500">
+                    Leave empty to load students from all sections for the selected period
+                  </p>
                 </div>
 
                 <Button 
                   onClick={loadStudents}
-                  disabled={!selectedPeriod || !sectionNumber.trim() || isLoadingStudents}
+                  disabled={!selectedPeriod || isLoadingStudents}
                   className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                 >
                   {isLoadingStudents ? (

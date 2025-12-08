@@ -150,8 +150,8 @@ export async function GET(request: NextRequest) {
 
     let studentData = {}
 
-    // If a specific period and section are requested, get that data
-    if (period && sectionNumber) {
+    // If a period is requested, get that data (section is optional)
+    if (period) {
       let result
       try {
         // Check if section_number column exists first
@@ -162,18 +162,29 @@ export async function GET(request: NextRequest) {
         `
         
         if (columnCheck.rows.length > 0) {
-          // Column exists, use it
-          result = await sql`
-            SELECT data, uploaded_at 
-            FROM student_data 
-            WHERE period = ${period} AND COALESCE(section_number, 'default') = ${sectionNumber}
-            ORDER BY uploaded_at DESC 
-            LIMIT 1
-          `
+          // Column exists
+          if (sectionNumber) {
+            // Specific section requested
+            result = await sql`
+              SELECT data, uploaded_at, section_number
+              FROM student_data 
+              WHERE period = ${period} AND COALESCE(section_number, 'default') = ${sectionNumber}
+              ORDER BY uploaded_at DESC 
+              LIMIT 1
+            `
+          } else {
+            // All sections requested - get latest upload for each section and merge
+            result = await sql`
+              SELECT data, uploaded_at, section_number
+              FROM student_data 
+              WHERE period = ${period}
+              ORDER BY uploaded_at DESC
+            `
+          }
         } else {
           // Column doesn't exist, use fallback
           result = await sql`
-            SELECT data, uploaded_at 
+            SELECT data, uploaded_at, 'default' as section_number
             FROM student_data 
             WHERE period = ${period}
             ORDER BY uploaded_at DESC 
@@ -184,7 +195,7 @@ export async function GET(request: NextRequest) {
         console.error("Error querying student data:", error)
         // Final fallback
         result = await sql`
-          SELECT data, uploaded_at 
+          SELECT data, uploaded_at, 'default' as section_number
           FROM student_data 
           WHERE period = ${period}
           ORDER BY uploaded_at DESC 
@@ -193,11 +204,43 @@ export async function GET(request: NextRequest) {
       }
 
       if (result.rows.length > 0) {
-        const row = result.rows[0]
-        if (typeof row.data === "string") {
-          studentData = JSON.parse(row.data)
+        if (sectionNumber) {
+          // Single section - use first result
+          const row = result.rows[0]
+          if (typeof row.data === "string") {
+            studentData = JSON.parse(row.data)
+          } else {
+            studentData = row.data
+          }
         } else {
-          studentData = row.data
+          // Multiple sections - merge data, keeping most recent for each student
+          const studentDataMap = new Map<string, { data: any, uploadedAt: string }>()
+          
+          for (const row of result.rows) {
+            let rowData: any
+            if (typeof row.data === "string") {
+              rowData = JSON.parse(row.data)
+            } else {
+              rowData = row.data
+            }
+            
+            // For each student in this section's data, keep the most recent upload
+            Object.keys(rowData).forEach(studentId => {
+              const existing = studentDataMap.get(studentId)
+              if (!existing || new Date(row.uploaded_at) > new Date(existing.uploadedAt)) {
+                studentDataMap.set(studentId, {
+                  data: rowData[studentId],
+                  uploadedAt: row.uploaded_at
+                })
+              }
+            })
+          }
+          
+          // Convert map back to object
+          studentData = {}
+          studentDataMap.forEach((value, studentId) => {
+            studentData[studentId] = value.data
+          })
         }
         
         // Apply overrides to student data to match what students see
