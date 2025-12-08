@@ -176,7 +176,7 @@ type FilterCriteria = {
 
 export default function EmailStudentsPage() {
   const [password, setPassword] = useState("")
-  const [selectedPeriod, setSelectedPeriod] = useState("")
+  const [selectedPeriod, setSelectedPeriod] = useState("__ALL__")
   const [sectionNumber, setSectionNumber] = useState("")
   const [periods, setPeriods] = useState<Record<string, any>>({})
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true)
@@ -213,20 +213,12 @@ export default function EmailStudentsPage() {
       
       if (response.ok) {
         setPeriods(data.periods || {})
-        if (!selectedPeriod && Object.keys(data.periods || {}).length > 0) {
-          setSelectedPeriod(Object.keys(data.periods)[0])
-        }
+        // Don't auto-select a period - let user choose or use "All Periods"
       } else {
         setPeriods(EXAM_PERIODS)
-        if (!selectedPeriod) {
-          setSelectedPeriod("summer2025_exam2")
-        }
       }
     } catch (error) {
       setPeriods(EXAM_PERIODS)
-      if (!selectedPeriod) {
-        setSelectedPeriod("summer2025_exam2")
-      }
     } finally {
       setIsLoadingPeriods(false)
     }
@@ -238,23 +230,30 @@ export default function EmailStudentsPage() {
 
   // Load students when period/section changes
   const loadStudents = async () => {
-    if (!selectedPeriod) return
-
     setIsLoadingStudents(true)
     setMessage(null)
 
     try {
-      const url = sectionNumber.trim() 
-        ? `/api/admin/student-data?period=${selectedPeriod}&sectionNumber=${sectionNumber}`
-        : `/api/admin/student-data?period=${selectedPeriod}`
+      // Build URL based on what's selected
+      let url = '/api/admin/student-data'
+      const params = new URLSearchParams()
+      if (selectedPeriod && selectedPeriod !== '__ALL__') {
+        params.append('period', selectedPeriod)
+      }
+      if (sectionNumber.trim()) {
+        params.append('sectionNumber', sectionNumber)
+      }
+      if (params.toString()) {
+        url += '?' + params.toString()
+      }
+      
       const response = await fetch(url)
       const data = await response.json()
 
       if (response.ok) {
         const loadedStudentData = data.studentData || {}
-        setStudentData(loadedStudentData)
         
-        // Fetch total balances for all students
+        // Always fetch total balances for all students (needed for "All Periods" view and for accurate totals)
         const studentIds = Object.keys(loadedStudentData)
         if (studentIds.length > 0) {
           try {
@@ -270,16 +269,34 @@ export default function EmailStudentsPage() {
               const updatedStudentData = { ...loadedStudentData }
               Object.keys(updatedStudentData).forEach(studentId => {
                 const normalizedId = studentId.toLowerCase()
+                // Look up balance using normalized ID
                 if (balancesData.balances[normalizedId] !== undefined) {
                   updatedStudentData[studentId].totalBalance = balancesData.balances[normalizedId]
+                } else {
+                  // If balance not found, try to calculate a fallback or set to 0
+                  // This shouldn't happen if the API is working correctly
+                  console.warn(`Balance not found for student ${studentId}, using 0`)
+                  updatedStudentData[studentId].totalBalance = 0
                 }
+              })
+              setStudentData(updatedStudentData)
+            } else {
+              // If balance fetch fails, still set the data but log the error
+              console.error("Failed to fetch balances:", balancesData)
+              // Set totalBalance to 0 for all students if balance fetch fails
+              const updatedStudentData = { ...loadedStudentData }
+              Object.keys(updatedStudentData).forEach(studentId => {
+                updatedStudentData[studentId].totalBalance = 0
               })
               setStudentData(updatedStudentData)
             }
           } catch (balanceError) {
             console.error("Error fetching balances:", balanceError)
-            // Continue without balances if there's an error
+            // Continue without balances if there's an error, but set data
+            setStudentData(loadedStudentData)
           }
+        } else {
+          setStudentData(loadedStudentData)
         }
         
         setMessage({ type: "success", text: `Loaded ${studentIds.length} students` })
@@ -296,9 +313,7 @@ export default function EmailStudentsPage() {
   }
 
   useEffect(() => {
-    if (selectedPeriod) {
-      loadStudents()
-    }
+    loadStudents()
   }, [selectedPeriod, sectionNumber])
 
   // Apply filters to students
@@ -498,19 +513,20 @@ export default function EmailStudentsPage() {
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Target className="h-5 w-5 text-blue-600" />
                   </div>
-                  Select Period & Section (Optional)
+                  Select Period (Optional) & Section (Optional)
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6 space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="period" className="text-sm font-medium text-slate-700">
-                    Exam Period ({CURRENT_YEAR})
+                    Exam Period (Optional)
                   </Label>
-                  <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={isLoadingPeriods}>
+                  <Select value={selectedPeriod || "__ALL__"} onValueChange={setSelectedPeriod} disabled={isLoadingPeriods}>
                     <SelectTrigger className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500 text-left">
                       <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__ALL__">All Periods</SelectItem>
                       {Object.entries(periods).map(([key, period]) => (
                         <SelectItem key={key} value={key}>
                           <div className="flex flex-col">
@@ -523,6 +539,9 @@ export default function EmailStudentsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-slate-500">
+                    Select "All Periods" to load students from all periods
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -544,7 +563,7 @@ export default function EmailStudentsPage() {
 
                 <Button 
                   onClick={loadStudents}
-                  disabled={!selectedPeriod || isLoadingStudents}
+                  disabled={isLoadingStudents}
                   className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                 >
                   {isLoadingStudents ? (
@@ -744,13 +763,36 @@ export default function EmailStudentsPage() {
                         <Users className="h-4 w-4 text-blue-600" />
                         <span className="font-medium text-blue-900">Recipients ({filteredStudents.length})</span>
                       </div>
-                      <div className="text-sm text-blue-800 max-h-32 overflow-y-auto">
-                        {filteredStudents.map((student, index) => (
-                          <div key={student.id} className="flex items-center justify-between py-1">
-                            <span>{student.data.name} ({student.data.email})</span>
-                            {getStatusBadge(student.data.percentComplete)}
-                          </div>
-                        ))}
+                      <div className="text-sm text-blue-800 max-h-64 overflow-y-auto">
+                        <table className="w-full">
+                          <thead className="text-left border-b border-blue-300">
+                            <tr>
+                              <th className="pb-2 pr-4">Student ID</th>
+                              <th className="pb-2 pr-4">Name</th>
+                              <th className="pb-2 pr-4">Email</th>
+                              <th className="pb-2 pr-4 text-right">Coins</th>
+                              <th className="pb-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredStudents.map((student, index) => {
+                              // Show period coins if period is selected, otherwise show total balance (includes all adjustments)
+                              // totalBalance includes: sum of (period coins + period adjustments) + global adjustments (redemptions)
+                              const coins = (selectedPeriod && selectedPeriod !== '__ALL__')
+                                ? (student.data.coins || 0)
+                                : (student.data.totalBalance !== undefined ? student.data.totalBalance : 0)
+                              return (
+                                <tr key={student.id} className="border-b border-blue-200">
+                                  <td className="py-2 pr-4 font-mono text-xs">{student.id}</td>
+                                  <td className="py-2 pr-4">{student.data.name}</td>
+                                  <td className="py-2 pr-4">{student.data.email}</td>
+                                  <td className="py-2 pr-4 text-right font-medium">{coins}</td>
+                                  <td className="py-2">{getStatusBadge(student.data.percentComplete)}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 

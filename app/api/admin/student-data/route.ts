@@ -151,6 +151,7 @@ export async function GET(request: NextRequest) {
     let studentData = {}
 
     // If a period is requested, get that data (section is optional)
+    // If no period is requested, get all students from all periods
     if (period) {
       let result
       try {
@@ -244,6 +245,84 @@ export async function GET(request: NextRequest) {
         }
         
         // Apply overrides to student data to match what students see
+        studentData = await applyOverridesToStudentData(studentData)
+      }
+    } else {
+      // No period specified - load all students from all periods
+      // Get latest upload for each period/section combination and merge
+      let result
+      try {
+        const columnCheck = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'student_data' AND column_name = 'section_number'
+        `
+        
+        if (columnCheck.rows.length > 0) {
+          if (sectionNumber) {
+            // Specific section across all periods
+            result = await sql`
+              SELECT data, uploaded_at, section_number, period
+              FROM student_data 
+              WHERE COALESCE(section_number, 'default') = ${sectionNumber}
+              ORDER BY uploaded_at DESC
+            `
+          } else {
+            // All sections across all periods
+            result = await sql`
+              SELECT data, uploaded_at, section_number, period
+              FROM student_data 
+              ORDER BY uploaded_at DESC
+            `
+          }
+        } else {
+          // Column doesn't exist
+          result = await sql`
+            SELECT data, uploaded_at, 'default' as section_number, period
+            FROM student_data 
+            ORDER BY uploaded_at DESC
+          `
+        }
+      } catch (error) {
+        console.error("Error querying all student data:", error)
+        result = await sql`
+          SELECT data, uploaded_at, 'default' as section_number, period
+          FROM student_data 
+          ORDER BY uploaded_at DESC
+        `
+      }
+
+      if (result.rows.length > 0) {
+        // Merge data from all periods, keeping most recent for each student
+        const studentDataMap = new Map<string, { data: any, uploadedAt: string }>()
+        
+        for (const row of result.rows) {
+          let rowData: any
+          if (typeof row.data === "string") {
+            rowData = JSON.parse(row.data)
+          } else {
+            rowData = row.data
+          }
+          
+          // For each student, keep the most recent upload
+          Object.keys(rowData).forEach(studentId => {
+            const existing = studentDataMap.get(studentId)
+            if (!existing || new Date(row.uploaded_at) > new Date(existing.uploadedAt)) {
+              studentDataMap.set(studentId, {
+                data: rowData[studentId],
+                uploadedAt: row.uploaded_at
+              })
+            }
+          })
+        }
+        
+        // Convert map back to object
+        studentData = {}
+        studentDataMap.forEach((value, studentId) => {
+          studentData[studentId] = value.data
+        })
+        
+        // Apply overrides to student data
         studentData = await applyOverridesToStudentData(studentData)
       }
     }
