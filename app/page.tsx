@@ -56,6 +56,7 @@ type StudentInfo = {
 type PeriodInfo = {
   period: string
   section: string
+  periodName?: string  // Display name from exam_periods; falls back to formatted period key
   name: string
   email: string
   coins: number
@@ -933,7 +934,7 @@ export default function StudentLookup() {
                               : "border-purple-200 text-purple-700 hover:bg-purple-50"
                           }
                         >
-                          {periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {periodData.periodName ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           {index === 0 && (
                             <span className="ml-2 px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Latest</span>
                           )}
@@ -952,7 +953,7 @@ export default function StudentLookup() {
                         <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
                           <div>
                             <h3 className="font-semibold text-purple-900 flex items-center gap-2">
-                              {periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              {periodData.periodName ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                               {isLatest && (
                                 <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">Latest</span>
                               )}

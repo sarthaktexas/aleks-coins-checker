@@ -31,6 +31,7 @@ type ExamPeriodData = {
 export default function ManagePeriodsPage() {
   const [periods, setPeriods] = useState<Record<string, ExamPeriodData>>({})
   const [editingPeriod, setEditingPeriod] = useState<string | null>(null)
+  const [editingPeriodNewKey, setEditingPeriodNewKey] = useState<string>("")
   const [newExcludedDate, setNewExcludedDate] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -84,12 +85,45 @@ export default function ManagePeriodsPage() {
       return
     }
 
+    const newKey = editingPeriodNewKey.trim()
+    if (!newKey) {
+      setMessage({
+        type: "error",
+        text: "Period key cannot be empty"
+      })
+      return
+    }
+
     setIsLoading(true)
     setMessage(null)
 
     try {
       const period = periods[periodKey]
-      
+
+      // If period key was changed, rename it first (updates all tables)
+      if (newKey !== periodKey) {
+        const renameResponse = await fetch('/api/admin/exam-periods', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password,
+            oldPeriodKey: periodKey,
+            newPeriodKey: newKey,
+          }),
+        })
+        const renameData = await renameResponse.json()
+
+        if (!renameResponse.ok) {
+          setMessage({
+            type: "error",
+            text: renameData.error || "Failed to change period key. It may already exist."
+          })
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // Save period details (name, dates, excluded dates)
       const response = await fetch('/api/admin/exam-periods', {
         method: 'POST',
         headers: {
@@ -97,7 +131,7 @@ export default function ManagePeriodsPage() {
         },
         body: JSON.stringify({
           password,
-          periodKey,
+          periodKey: newKey,
           name: period.name,
           startDate: period.startDate,
           endDate: period.endDate,
@@ -113,6 +147,7 @@ export default function ManagePeriodsPage() {
           text: data.message || `Successfully updated ${period.name}`
         })
         setEditingPeriod(null)
+        setEditingPeriodNewKey("")
         // Reload periods to get updated data
         await loadPeriods()
       } else {
@@ -528,7 +563,10 @@ export default function ManagePeriodsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setEditingPeriod(null)}
+                          onClick={() => {
+                            setEditingPeriod(null)
+                            setEditingPeriodNewKey("")
+                          }}
                           disabled={isLoading}
                         >
                           Cancel
@@ -537,7 +575,10 @@ export default function ManagePeriodsPage() {
                     ) : (
                       <Button
                         size="sm"
-                        onClick={() => setEditingPeriod(periodKey)}
+                        onClick={() => {
+                          setEditingPeriod(periodKey)
+                          setEditingPeriodNewKey(periodKey)
+                        }}
                         className="bg-purple-600 hover:bg-purple-700"
                       >
                         <Edit className="h-4 w-4 mr-2" />
@@ -565,8 +606,17 @@ export default function ManagePeriodsPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Period Key</Label>
-                        <Input value={periodKey} disabled className="bg-slate-100" />
+                        <Label htmlFor={`key-${periodKey}`}>Period Key</Label>
+                        <Input
+                          id={`key-${periodKey}`}
+                          value={editingPeriodNewKey}
+                          onChange={(e) => setEditingPeriodNewKey(e.target.value)}
+                          placeholder="e.g., spring2026_exam1"
+                          className="font-mono"
+                        />
+                        <p className="text-xs text-slate-500">
+                          Changing the key updates student_data, coin_adjustments, and student_requests. Use lowercase letters, numbers, and underscores.
+                        </p>
                       </div>
                     </div>
 
@@ -706,7 +756,8 @@ export default function ManagePeriodsPage() {
             </h3>
             <div className="space-y-2 text-sm text-blue-800">
               <p>• Changes to exam periods will affect all future data uploads</p>
-              <p>• Existing student data will not be automatically updated</p>
+              <p>• You can change the period key when editing—it will update all related student_data, coin_adjustments, and student_requests</p>
+              <p>• The period name (not the key) is shown to students on their lookup page</p>
               <p>• Excluded dates are automatically excluded from progress calculations</p>
               <p>• Make sure to coordinate changes with the academic calendar</p>
             </div>

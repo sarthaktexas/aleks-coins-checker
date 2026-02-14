@@ -131,6 +131,84 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PATCH - Change a period's key (updates all references across tables)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { password, oldPeriodKey, newPeriodKey } = body
+
+    if (!password || password !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+    }
+
+    if (!oldPeriodKey || !newPeriodKey) {
+      return NextResponse.json({ error: "Both oldPeriodKey and newPeriodKey are required" }, { status: 400 })
+    }
+
+    if (oldPeriodKey === newPeriodKey) {
+      return NextResponse.json({ error: "New key must be different from the current key" }, { status: 400 })
+    }
+
+    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+      return NextResponse.json({ error: "Database not configured" }, { status: 503 })
+    }
+
+    // Check that the old period exists
+    const existingCheck = await sql`
+      SELECT period_key FROM exam_periods WHERE period_key = ${oldPeriodKey}
+    `
+    if (existingCheck.rows.length === 0) {
+      return NextResponse.json({ error: "Period not found" }, { status: 404 })
+    }
+
+    // Check that new key doesn't already exist
+    const conflictCheck = await sql`
+      SELECT period_key FROM exam_periods WHERE period_key = ${newPeriodKey}
+    `
+    if (conflictCheck.rows.length > 0) {
+      return NextResponse.json({ error: `A period with key "${newPeriodKey}" already exists` }, { status: 409 })
+    }
+
+    // Update all tables in a transaction-like sequence
+    // 1. exam_periods
+    await sql`
+      UPDATE exam_periods 
+      SET period_key = ${newPeriodKey}, updated_at = NOW()
+      WHERE period_key = ${oldPeriodKey}
+    `
+
+    // 2. student_data (period column)
+    await sql`
+      UPDATE student_data 
+      SET period = ${newPeriodKey}
+      WHERE period = ${oldPeriodKey}
+    `
+
+    // 3. coin_adjustments (period column - only where period matches, not __GLOBAL__)
+    await sql`
+      UPDATE coin_adjustments 
+      SET period = ${newPeriodKey}
+      WHERE period = ${oldPeriodKey}
+    `
+
+    // 4. student_requests (period column)
+    await sql`
+      UPDATE student_requests 
+      SET period = ${newPeriodKey}
+      WHERE period = ${oldPeriodKey}
+    `
+
+    console.log(`Period key changed from ${oldPeriodKey} to ${newPeriodKey}`)
+    return NextResponse.json({
+      success: true,
+      message: `Period key successfully changed to "${newPeriodKey}"`,
+    })
+  } catch (error) {
+    console.error("Error changing period key:", error)
+    return NextResponse.json({ error: "Failed to change period key" }, { status: 500 })
+  }
+}
+
 // DELETE - Delete an exam period
 export async function DELETE(request: NextRequest) {
   try {

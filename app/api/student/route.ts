@@ -535,6 +535,19 @@ export async function POST(request: NextRequest) {
       }
     })
     
+    // Fetch exam period names for display (period_key -> name)
+    const periodNamesMap = new Map<string, string>()
+    try {
+      const periodsResult = await sql`
+        SELECT period_key, name FROM exam_periods
+      `
+      periodsResult.rows.forEach((row: { period_key: string; name: string }) => {
+        periodNamesMap.set(row.period_key, row.name)
+      })
+    } catch (e) {
+      console.error("Error fetching period names:", e)
+    }
+
     // Format periods data with overrides applied
     const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
       // Apply overrides to this period's data - pass studentId for optimization
@@ -545,10 +558,12 @@ export async function POST(request: NextRequest) {
       // Add coin adjustments for this period
       const periodKey = `${periodData.period}_${periodData.section}`
       const adjustment = adjustmentsByPeriod.get(periodKey) || 0
+      const periodName = periodNamesMap.get(periodData.period) ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
       
       return {
         period: periodData.period,
         section: periodData.section,
+        periodName,
         name: studentWithOverrides.name,
         email: studentWithOverrides.email,
         coins: studentWithOverrides.coins,
