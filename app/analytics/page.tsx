@@ -34,6 +34,7 @@ type DayStats = {
 
 type MergedPeriodStats = {
   period: string
+  periodName?: string  // Display name from exam_periods
   sections: string[]
   totalStudents: number
   averageCompletion: number
@@ -138,7 +139,7 @@ export default function AnalyticsPage() {
                           : "border-purple-200 text-purple-700 hover:bg-purple-50"
                       }
                     >
-                      {period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      {analytics.find(p => p.period === period)?.periodName ?? period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </Button>
                   ))}
                 </div>
@@ -155,7 +156,7 @@ export default function AnalyticsPage() {
                     <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
                       <div>
                         <h3 className="font-semibold text-purple-900">
-                          {period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {period.periodName ?? period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </h3>
                         <p className="text-sm text-purple-700">
                           Sections {period.sections.join(', ')} • {period.totalStudents} students

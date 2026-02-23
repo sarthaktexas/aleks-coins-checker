@@ -56,6 +56,7 @@ type SectionStats = {
 
 type MergedPeriodStats = {
   period: string
+  periodName?: string  // Display name from exam_periods; falls back to formatted period key
   sections: string[]
   totalStudents: number
   averageCompletion: number
@@ -436,8 +437,28 @@ export async function GET(request: NextRequest) {
     // Sort periods by upload date (most recent first)
     mergedPeriods.sort((a, b) => b.latestUploadDate.getTime() - a.latestUploadDate.getTime())
 
-    // Remove latestUploadDate before caching/returning (it was only needed for sorting)
-    const cleanedPeriods: MergedPeriodStats[] = mergedPeriods.map(({ latestUploadDate, ...period }) => period)
+    // Fetch period names from exam_periods for display
+    const periodNamesMap = new Map<string, string>()
+    try {
+      const periodsResult = await sql`
+        SELECT period_key, name FROM exam_periods
+      `
+      periodsResult.rows.forEach((row: { period_key: string; name: string }) => {
+        periodNamesMap.set(row.period_key, row.name)
+      })
+    } catch (e) {
+      console.error("Error fetching period names:", e)
+    }
+
+    const formatPeriodKey = (key: string) =>
+      key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+
+    // Remove latestUploadDate before caching/returning and add periodName
+    const cleanedPeriods: MergedPeriodStats[] = mergedPeriods.map(({ latestUploadDate, period: p, ...rest }) => ({
+      period: p,
+      periodName: periodNamesMap.get(p) ?? formatPeriodKey(p),
+      ...rest
+    }))
 
     // Update cache
     analyticsCache = {
