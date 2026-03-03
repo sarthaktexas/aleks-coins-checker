@@ -10,8 +10,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Mail, Users, Filter, Edit3, Send, Copy, CheckCircle, AlertTriangle, Target, Percent } from "lucide-react"
+import { Mail, Users, Filter, Edit3, Send, Copy, CheckCircle, AlertTriangle, Target, Percent, EyeOff } from "lucide-react"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
 
 type StudentData = {
   [studentId: string]: {
@@ -189,6 +192,7 @@ export default function EmailStudentsPage() {
   const [filteredStudents, setFilteredStudents] = useState<Array<{id: string, data: any}>>([])
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [copiedEmails, setCopiedEmails] = useState(false)
+  const [hidePII, setHidePII] = useHidePII()
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -500,7 +504,10 @@ export default function EmailStudentsPage() {
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Email Students</h1>
           </div>
-          <p className="text-slate-600">Send targeted emails to students based on their progress and criteria</p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <p className="text-slate-600">Send targeted emails to students based on their progress and criteria</p>
+            <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -758,6 +765,12 @@ export default function EmailStudentsPage() {
               <CardContent className="p-6 space-y-4">
                 {filteredStudents.length > 0 ? (
                   <>
+                    {hidePII && (
+                      <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                        <EyeOff className="h-4 w-4 flex-shrink-0" />
+                        <span>PII is hidden. Copy/send email actions are disabled. Turn off Hide PII to send emails.</span>
+                      </div>
+                    )}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Users className="h-4 w-4 text-blue-600" />
@@ -767,7 +780,7 @@ export default function EmailStudentsPage() {
                         <table className="w-full">
                           <thead className="text-left border-b border-blue-300">
                             <tr>
-                              <th className="pb-2 pr-4">Student ID</th>
+                              {!hidePII && <th className="pb-2 pr-4">Student ID</th>}
                               <th className="pb-2 pr-4">Name</th>
                               <th className="pb-2 pr-4">Email</th>
                               <th className="pb-2 pr-4 text-right">Coins</th>
@@ -776,6 +789,7 @@ export default function EmailStudentsPage() {
                           </thead>
                           <tbody>
                             {filteredStudents.map((student, index) => {
+                              const display = hidePII ? getFakeDataForStudent(student.id) : { name: student.data.name, email: student.data.email, studentId: student.id }
                               // Show period coins if period is selected, otherwise show total balance (includes all adjustments)
                               // totalBalance includes: sum of (period coins + period adjustments) + global adjustments (redemptions)
                               const coins = (selectedPeriod && selectedPeriod !== '__ALL__')
@@ -783,9 +797,11 @@ export default function EmailStudentsPage() {
                                 : (student.data.totalBalance !== undefined ? student.data.totalBalance : 0)
                               return (
                                 <tr key={student.id} className="border-b border-blue-200">
-                                  <td className="py-2 pr-4 font-mono text-xs">{student.id}</td>
-                                  <td className="py-2 pr-4">{student.data.name}</td>
-                                  <td className="py-2 pr-4">{student.data.email}</td>
+                                  {!hidePII && (
+                                    <td className="py-2 pr-4 font-mono text-xs">{display.studentId}</td>
+                                  )}
+                                  <td className="py-2 pr-4">{display.name}</td>
+                                  <td className="py-2 pr-4">{display.email}</td>
                                   <td className="py-2 pr-4 text-right font-medium">{coins}</td>
                                   <td className="py-2">{getStatusBadge(student.data.percentComplete)}</td>
                                 </tr>
@@ -801,6 +817,7 @@ export default function EmailStudentsPage() {
                         onClick={copyEmailsToClipboard}
                         variant="outline"
                         className="flex-1"
+                        disabled={hidePII}
                       >
                         {copiedEmails ? (
                           <div className="flex items-center gap-2">
@@ -831,6 +848,7 @@ export default function EmailStudentsPage() {
                         <Button
                           onClick={openIndividualEmails}
                           className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                          disabled={hidePII}
                         >
                           <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4" />
@@ -838,17 +856,26 @@ export default function EmailStudentsPage() {
                           </div>
                         </Button>
 
-                        <Button
-                          asChild
-                          className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-medium"
-                        >
-                          <a href={generateBCCMailtoLink()}>
+                        {hidePII ? (
+                          <Button
+                            className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-medium opacity-50 cursor-not-allowed"
+                            disabled
+                          >
                             <div className="flex items-center gap-2">
                               <Mail className="h-4 w-4" />
                               Open Email Client (All in BCC: {filteredStudents.length} recipients)
                             </div>
-                          </a>
-                        </Button>
+                          </Button>
+                        ) : (
+                          <Button asChild className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-medium">
+                            <a href={generateBCCMailtoLink()}>
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                Open Email Client (All in BCC: {filteredStudents.length} recipients)
+                              </div>
+                            </a>
+                          </Button>
+                        )}
                       </div>
                     )}
                   </>
@@ -882,7 +909,9 @@ export default function EmailStudentsPage() {
                       </div>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-slate-700">Body (Preview for {filteredStudents[0].data.name})</Label>
+                      <Label className="text-sm font-medium text-slate-700">
+                        Body (Preview for {hidePII ? getFakeDataForStudent(filteredStudents[0].id).name : filteredStudents[0].data.name})
+                      </Label>
                       <div className="mt-1 p-3 bg-slate-50 rounded-lg border text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
                         {generateEmailContent(filteredStudents[0]).body}
                       </div>

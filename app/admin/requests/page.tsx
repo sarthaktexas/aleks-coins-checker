@@ -8,7 +8,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, ArrowLeft, EyeOff } from "lucide-react"
 
 type StudentRequest = {
   id: number
@@ -45,6 +49,7 @@ export default function AdminRequestsPage() {
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null) // Track which student is being fast approved
   const [magicApproving, setMagicApproving] = useState<string | null>(null) // Track which student is being magic approved
+  const [hidePII, setHidePII] = useHidePII()
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -406,7 +411,8 @@ export default function AdminRequestsPage() {
           </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
             <div className="space-y-2 flex-1 min-w-[200px]">
               <Label htmlFor="section-filter">Filter by Section</Label>
               <Select value={selectedSection} onValueChange={setSelectedSection}>
@@ -462,6 +468,15 @@ export default function AdminRequestsPage() {
             </div>
           </div>
         </div>
+
+        {hidePII && (
+          <Alert className="mb-6 border-amber-200 bg-amber-50">
+            <EyeOff className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              PII is hidden. Names, emails, and IDs are replaced with placeholder data.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -522,7 +537,9 @@ export default function AdminRequestsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
                             <User className="h-6 w-6 text-blue-600" />
-                            <h2 className="text-xl font-bold text-slate-900">{firstRequest.student_name}</h2>
+                            <h2 className="text-xl font-bold text-slate-900">
+                              {hidePII ? getFakeDataForStudent(studentId).name : firstRequest.student_name}
+                            </h2>
                             <Badge variant="outline" className="bg-white">
                               {totalCount} request{totalCount !== 1 ? 's' : ''}
                               {pendingCount > 0 && ` (${pendingCount} pending)`}
@@ -531,11 +548,11 @@ export default function AdminRequestsPage() {
                           <div className="space-y-1 text-sm text-slate-600 ml-9">
                             <p className="flex items-center gap-2">
                               <Mail className="h-4 w-4" />
-                              {firstRequest.student_email}
+                              {hidePII ? getFakeDataForStudent(studentId).email : firstRequest.student_email}
                             </p>
                             <p className="flex items-center gap-2">
                               <FileText className="h-4 w-4" />
-                              Student ID: {firstRequest.student_id}
+                              Student ID: {hidePII ? getFakeDataForStudent(studentId).studentId : firstRequest.student_id}
                             </p>
                             <p className="flex items-center gap-2">
                               <Calendar className="h-4 w-4" />

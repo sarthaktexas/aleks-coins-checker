@@ -8,7 +8,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle, Coins, Plus, Trash2, User, Calendar, FileText, ArrowLeft } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { AlertCircle, CheckCircle, Coins, Plus, Trash2, User, Calendar, FileText, ArrowLeft, EyeOff } from "lucide-react"
 
 type CoinAdjustment = {
   id: number
@@ -53,6 +57,7 @@ export default function AdminCoinAdjustmentsPage() {
   // For student lookup
   const [studentData, setStudentData] = useState<any>(null)
   const [uploadRecords, setUploadRecords] = useState<any[]>([])
+  const [hidePII, setHidePII] = useHidePII()
 
   // Load saved password from localStorage
   useEffect(() => {
@@ -465,12 +470,25 @@ export default function AdminCoinAdjustmentsPage() {
         {/* Adjustments List */}
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>All Coin Adjustments</CardTitle>
-            <CardDescription>
-              {adjustments.length} adjustment{adjustments.length !== 1 ? 's' : ''} logged
-            </CardDescription>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <CardTitle>All Coin Adjustments</CardTitle>
+                <CardDescription>
+                  {adjustments.length} adjustment{adjustments.length !== 1 ? 's' : ''} logged
+                </CardDescription>
+              </div>
+              <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+            </div>
           </CardHeader>
           <CardContent>
+            {hidePII && (
+              <Alert className="mb-6 border-amber-200 bg-amber-50">
+                <EyeOff className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">
+                  PII is hidden. Names and IDs are replaced with placeholder data.
+                </AlertDescription>
+              </Alert>
+            )}
             {adjustments.length === 0 ? (
               <div className="p-12 text-center">
                 <Coins className="h-12 w-12 text-slate-400 mx-auto mb-4" />
@@ -488,7 +506,9 @@ export default function AdminCoinAdjustmentsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <User className="h-5 w-5 text-blue-600" />
-                          <h3 className="text-lg font-semibold text-slate-900">{adjustment.student_name}</h3>
+                          <h3 className="text-lg font-semibold text-slate-900">
+                            {hidePII ? getFakeDataForStudent(adjustment.student_id).name : adjustment.student_name}
+                          </h3>
                           <Badge 
                             className={adjustment.adjustment_amount >= 0 ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
                           >
@@ -498,7 +518,7 @@ export default function AdminCoinAdjustmentsPage() {
                         <div className="space-y-1 text-sm text-slate-600 ml-8">
                           <p className="flex items-center gap-2">
                             <FileText className="h-4 w-4" />
-                            Student ID: {adjustment.student_id}
+                            Student ID: {hidePII ? getFakeDataForStudent(adjustment.student_id).studentId : adjustment.student_id}
                           </p>
                           <p className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />

@@ -18,9 +18,13 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  EyeOff
 } from "lucide-react"
 import Link from "next/link"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
 
 type DayOverride = {
   id: number
@@ -44,6 +48,7 @@ export default function ViewOverridesPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [hidePII, setHidePII] = useHidePII()
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -147,9 +152,11 @@ export default function ViewOverridesPage() {
   }
 
   const filteredOverrides = overrides.filter((override) => {
+    const displayName = hidePII ? getFakeDataForStudent(override.student_id).name : override.student_name
+    const displayId = hidePII ? getFakeDataForStudent(override.student_id).studentId : override.student_id
     const matchesSearch = searchTerm === "" || 
-      override.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      override.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      displayId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       override.reason?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       override.date.includes(searchTerm)
     
@@ -301,7 +308,7 @@ export default function ViewOverridesPage() {
         {/* Overrides Table */}
         <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <CardTitle className="flex items-center gap-3">
                   <div className="p-2 bg-blue-100 rounded-lg">
@@ -313,8 +320,9 @@ export default function ViewOverridesPage() {
                   {filteredOverrides.length} overrides found
                 </CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={handleExport} disabled={filteredOverrides.length === 0}>
+              <div className="flex gap-2 items-center">
+                <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+                <Button size="sm" variant="outline" onClick={handleExport} disabled={filteredOverrides.length === 0 || hidePII}>
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
@@ -323,11 +331,19 @@ export default function ViewOverridesPage() {
           </CardHeader>
           <CardContent>
             {/* Search */}
-            <div className="mb-6">
+            <div className="mb-6 flex flex-col gap-2">
+              {hidePII && (
+                <Alert className="border-amber-200 bg-amber-50">
+                  <EyeOff className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    PII is hidden. Names and IDs are replaced with placeholder data.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-slate-500" />
                 <Input
-                  placeholder="Search by student name, ID, reason, or date..."
+                  placeholder={hidePII ? "Search by placeholder name, ID, reason, or date..." : "Search by student name, ID, reason, or date..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="max-w-md"
@@ -348,12 +364,14 @@ export default function ViewOverridesPage() {
                 <div className="w-20 text-center">Actions</div>
               </div>
               
-              {filteredOverrides.map((override) => (
+              {filteredOverrides.map((override) => {
+                const display = hidePII ? getFakeDataForStudent(override.student_id) : { name: override.student_name, studentId: override.student_id }
+                return (
                 <div key={override.id} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                   {/* Student Name and ID */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">{override.student_name}</p>
-                    <p className="font-mono text-xs text-slate-500 truncate">{override.student_id}</p>
+                    <p className="font-semibold text-slate-900 truncate">{display.name}</p>
+                    <p className="font-mono text-xs text-slate-500 truncate">{display.studentId}</p>
                   </div>
 
                   {/* Day Number */}
@@ -418,7 +436,7 @@ export default function ViewOverridesPage() {
                     </Button>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
 
             {filteredOverrides.length === 0 && !isLoading && (

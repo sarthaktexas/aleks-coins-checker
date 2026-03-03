@@ -38,6 +38,7 @@ export default function AdminPage() {
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const loadSettingsAbortRef = useRef<AbortController | null>(null)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -100,17 +101,26 @@ export default function AdminPage() {
   // Load admin settings
   const loadSettings = async () => {
     if (!password) return
-    
+
+    // Abort any previous in-flight request
+    loadSettingsAbortRef.current?.abort()
+    loadSettingsAbortRef.current = new AbortController()
+    const signal = loadSettingsAbortRef.current.signal
+
     setIsLoadingSettings(true)
     try {
-      const response = await fetch(`/api/admin/settings?password=${encodeURIComponent(password)}`)
+      const response = await fetch(`/api/admin/settings?password=${encodeURIComponent(password)}`, { signal })
       const data = await response.json()
-      
+
+      // Don't overwrite state if this request was aborted (e.g. because user toggled)
+      if (signal.aborted) return
+
       if (response.ok && data.success) {
         setOverridesEnabled(data.settings.overridesEnabled)
         setRedemptionRequestsEnabled(data.settings.redemptionRequestsEnabled)
       }
     } catch (error) {
+      if (signal.aborted) return
       console.error("Error loading settings:", error)
     } finally {
       setIsLoadingSettings(false)
@@ -123,6 +133,9 @@ export default function AdminPage() {
       setMessage({ type: "error", text: "Please enter the admin password" })
       return
     }
+
+    // Abort any in-flight loadSettings so its stale response doesn't overwrite our update
+    loadSettingsAbortRef.current?.abort()
 
     // Optimistically update the UI state immediately
     if (setting === 'overrides') {

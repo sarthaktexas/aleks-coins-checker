@@ -24,9 +24,13 @@ import {
   AlertTriangle,
   Copy,
   CheckCircle,
-  Trash2
+  Trash2,
+  EyeOff
 } from "lucide-react"
 import Link from "next/link"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
 
 type StudentData = {
   name: string
@@ -66,6 +70,7 @@ export default function ViewDataPage() {
   const [toastMessage, setToastMessage] = useState("")
   const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
   const [showExportDropdown, setShowExportDropdown] = useState(false)
+  const [hideStudentData, setHideStudentData] = useHidePII()
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -376,31 +381,43 @@ Total: ${extraCreditStudents.length} students`
     return 0
   }
 
+  // Helper to get display values (real or anonymized)
+  const getDisplayData = (studentId: string, data: StudentData) => {
+    if (hideStudentData) {
+      const fake = getFakeDataForStudent(studentId)
+      return { name: fake.name, email: fake.email, studentId: fake.studentId }
+    }
+    return { name: data.name, email: data.email, studentId }
+  }
+
   const filteredAndSortedStudents = Object.entries(studentData)
     .filter(([studentId, data]) => {
+      const display = getDisplayData(studentId, data)
       const matchesSearch = searchTerm === "" || 
-        data.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        data.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        studentId.toLowerCase().includes(searchTerm.toLowerCase())
+        display.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        display.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        display.studentId.toLowerCase().includes(searchTerm.toLowerCase())
       
       return matchesSearch
     })
     .sort(([studentIdA, dataA], [studentIdB, dataB]) => {
+      const displayA = getDisplayData(studentIdA, dataA)
+      const displayB = getDisplayData(studentIdB, dataB)
       let aValue: any
       let bValue: any
 
       switch (sortField) {
         case "studentId":
-          aValue = studentIdA.toLowerCase()
-          bValue = studentIdB.toLowerCase()
+          aValue = displayA.studentId.toLowerCase()
+          bValue = displayB.studentId.toLowerCase()
           break
         case "name":
-          aValue = dataA.name.toLowerCase()
-          bValue = dataB.name.toLowerCase()
+          aValue = displayA.name.toLowerCase()
+          bValue = displayB.name.toLowerCase()
           break
         case "email":
-          aValue = dataA.email.toLowerCase()
-          bValue = dataB.email.toLowerCase()
+          aValue = displayA.email.toLowerCase()
+          bValue = displayB.email.toLowerCase()
           break
         case "coins":
           aValue = dataA.coins
@@ -648,7 +665,7 @@ Total: ${extraCreditStudents.length} students`
                   <div className="relative export-dropdown-container">
                     <Button
                       onClick={() => setShowExportDropdown(!showExportDropdown)}
-                      disabled={isExporting || !password}
+                      disabled={isExporting || !password || hideStudentData}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
                       {isExporting ? (
@@ -688,8 +705,9 @@ Total: ${extraCreditStudents.length} students`
                     )}
                   </div>
                 )}
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={handleExport}>
+                <div className="flex gap-2 items-center">
+                  <HidePIIToggle hidePII={hideStudentData} onToggle={setHideStudentData} showAlert={false} />
+                  <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData}>
                     <Download className="h-4 w-4 mr-2" />
                     Export
                   </Button>
@@ -698,11 +716,19 @@ Total: ${extraCreditStudents.length} students`
             </CardHeader>
             <CardContent>
               {/* Search */}
-              <div className="mb-6">
+              <div className="mb-6 flex flex-col gap-2">
+                {hideStudentData && (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <EyeOff className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800">
+                      PII is hidden. Names, emails, and IDs are replaced with generated placeholder data for privacy (e.g., when presenting on screen).
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <div className="flex items-center gap-2">
                   <Search className="h-4 w-4 text-slate-500" />
                   <Input
-                    placeholder="Search by name, email, or student ID..."
+                    placeholder={hideStudentData ? "Search by placeholder name, email, or ID..." : "Search by name, email, or student ID..."}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="max-w-md"
@@ -718,7 +744,7 @@ Total: ${extraCreditStudents.length} students`
                     onClick={() => handleSort("name")}
                     className="flex-1 flex items-center gap-1 hover:text-slate-800 transition-colors"
                   >
-                    Student {getSortIcon("name")}
+                    Name {getSortIcon("name")}
                   </button>
                   <button 
                     onClick={() => handleSort("coins")}
@@ -752,12 +778,16 @@ Total: ${extraCreditStudents.length} students`
                   </button>
                 </div>
                 
-                {filteredAndSortedStudents.map(([studentId, data]) => (
+                {filteredAndSortedStudents.map(([studentId, data]) => {
+                  const display = getDisplayData(studentId, data)
+                  return (
                   <div key={studentId} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                    {/* Name - Primary */}
+                    {/* Name - Primary (use name not key; when anonymized show fake name + ID) */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 truncate">{data.name}</p>
-                      <p className="text-xs text-slate-500 font-mono">{studentId}</p>
+                      <p className="font-semibold text-slate-900 truncate">{display.name}</p>
+                      {hideStudentData && (
+                        <p className="text-xs text-slate-500 font-mono">ID: {display.studentId}</p>
+                      )}
                     </div>
 
                     {/* Coins - Secondary */}
@@ -828,10 +858,10 @@ Total: ${extraCreditStudents.length} students`
 
                     {/* Email - Collapsible */}
                     <div className="hidden lg:block min-w-0 flex-1">
-                      <p className="text-sm text-slate-600 truncate">{data.email}</p>
+                      <p className="text-sm text-slate-600 truncate">{display.email}</p>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
 
               {filteredAndSortedStudents.length === 0 && !isLoading && (

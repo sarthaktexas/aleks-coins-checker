@@ -13,9 +13,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
-  BarChart3
+  BarChart3,
+  EyeOff
 } from "lucide-react"
 import Link from "next/link"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type UploadRecord = {
   id: number
@@ -53,6 +58,7 @@ export default function AdminLeaderboardPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalStudents, setTotalStudents] = useState(0)
   const pageSize = 20
+  const [hidePII, setHidePII] = useHidePII()
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -344,7 +350,7 @@ export default function AdminLeaderboardPage() {
         {selectedPeriod && selectedSection && (
           <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
                   <CardTitle className="flex items-center gap-3 text-lg">
                     <Trophy className="h-5 w-5 text-yellow-500" />
@@ -354,13 +360,24 @@ export default function AdminLeaderboardPage() {
                     {selectedPeriod.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • Section {selectedSection}
                   </CardDescription>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-600">Total Students: {totalStudents}</p>
-                  <p className="text-sm text-slate-600">Page {currentPage} of {totalPages}</p>
+                <div className="flex items-center gap-4">
+                  <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+                  <div className="text-right">
+                    <p className="text-sm text-slate-600">Total Students: {totalStudents}</p>
+                    <p className="text-sm text-slate-600">Page {currentPage} of {totalPages}</p>
+                  </div>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
+              {hidePII && (
+                <Alert className="mb-6 border-amber-200 bg-amber-50">
+                  <EyeOff className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    PII is hidden. Names, emails, and IDs are replaced with placeholder data.
+                  </AlertDescription>
+                </Alert>
+              )}
               {isLoading ? (
                 <div className="py-12 text-center">
                   <p className="text-slate-600">Loading leaderboard...</p>
@@ -376,7 +393,7 @@ export default function AdminLeaderboardPage() {
                       <thead>
                         <tr className="border-b border-slate-200">
                           <th className="text-left py-3 px-4 font-semibold text-slate-700">Rank</th>
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Student ID</th>
+                          {!hidePII && <th className="text-left py-3 px-4 font-semibold text-slate-700">Student ID</th>}
                           <th className="text-left py-3 px-4 font-semibold text-slate-700">Name</th>
                           <th className="text-left py-3 px-4 font-semibold text-slate-700">Email</th>
                           <th className="text-right py-3 px-4 font-semibold text-slate-700">Total Coins</th>
@@ -385,21 +402,25 @@ export default function AdminLeaderboardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {students.map((student) => (
+                        {students.map((student) => {
+                          const display = hidePII ? getFakeDataForStudent(student.studentId) : { name: student.name, email: student.email, studentId: student.studentId }
+                          return (
                           <tr key={student.studentId} className="border-b border-slate-100 hover:bg-slate-50">
                             <td className="py-3 px-4">
                               <Badge className={getRankBadgeColor(student.rank)}>
                                 #{student.rank}
                               </Badge>
                             </td>
-                            <td className="py-3 px-4 text-sm text-slate-600 font-mono">
-                              {student.studentId}
-                            </td>
+                            {!hidePII && (
+                              <td className="py-3 px-4 text-sm text-slate-600 font-mono">
+                                {display.studentId}
+                              </td>
+                            )}
                             <td className="py-3 px-4 font-medium text-slate-900">
-                              {student.name}
+                              {display.name}
                             </td>
                             <td className="py-3 px-4 text-sm text-slate-600">
-                              {student.email}
+                              {display.email}
                             </td>
                             <td className="py-3 px-4 text-right font-bold text-slate-900">
                               <div className="flex items-center justify-end gap-1">
@@ -416,7 +437,7 @@ export default function AdminLeaderboardPage() {
                               </Badge>
                             </td>
                           </tr>
-                        ))}
+                        )})}
                       </tbody>
                     </table>
                   </div>
