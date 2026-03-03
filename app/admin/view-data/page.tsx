@@ -782,12 +782,10 @@ Total: ${extraCreditStudents.length} students`
                   const display = getDisplayData(studentId, data)
                   return (
                   <div key={studentId} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                    {/* Name - Primary (use name not key; when anonymized show fake name + ID) */}
+                    {/* Name and ID - Primary */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900 truncate">{display.name}</p>
-                      {hideStudentData && (
-                        <p className="text-xs text-slate-500 font-mono">ID: {display.studentId}</p>
-                      )}
+                      <p className="text-xs text-slate-500 font-mono">{display.studentId}</p>
                     </div>
 
                     {/* Coins - Secondary */}
