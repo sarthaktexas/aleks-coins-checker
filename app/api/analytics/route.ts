@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
+export const dynamic = "force-dynamic"
+
 // Simple in-memory cache for analytics (in production, consider Redis)
 let analyticsCache: { data: MergedPeriodStats[], timestamp: number } | null = null
 const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes - increased to reduce database queries

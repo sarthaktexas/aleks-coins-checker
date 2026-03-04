@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import crypto from "crypto"
 
+export const dynamic = "force-dynamic"
+
 // Create or update day override
 export async function POST(request: NextRequest) {
   try {

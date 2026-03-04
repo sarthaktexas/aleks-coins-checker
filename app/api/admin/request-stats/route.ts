@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
+export const dynamic = "force-dynamic"
+
 // GET - Fetch counts of pending student requests
 export async function GET(request: NextRequest) {
   try {
