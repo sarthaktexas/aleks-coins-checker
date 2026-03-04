@@ -26,6 +26,8 @@ import {
 import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
 import { RequestHistory } from "@/components/request-history"
+import { useHidePII } from "@/hooks/use-hide-pii"
+import { getFakeDataForStudent } from "@/lib/fake-data"
 
 type DailyLog = {
   day: number
@@ -130,6 +132,7 @@ export default function StudentLookup() {
   } | null>(null)
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
+  const [hidePII, _setHidePII] = useHidePII() // Read-only: syncs from localStorage when admin toggles on admin pages
 
   const handleSearch = async () => {
     if (!studentId.trim()) {
@@ -477,7 +480,9 @@ export default function StudentLookup() {
                         <User className="h-4 w-4" />
                         Name
                       </div>
-                      <p className="text-lg sm:text-xl font-semibold text-slate-900">{studentInfo.name}</p>
+                      <p className="text-lg sm:text-xl font-semibold text-slate-900">
+                        {hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name}
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -485,7 +490,9 @@ export default function StudentLookup() {
                         <Mail className="h-4 w-4" />
                         Email
                       </div>
-                      <p className="text-base sm:text-lg font-medium text-slate-700">{studentInfo.email}</p>
+                      <p className="text-base sm:text-lg font-medium text-slate-700">
+                        {hidePII ? getFakeDataForStudent(studentId).email : studentInfo.email}
+                      </p>
                     </div>
                   </div>
 
@@ -1051,8 +1058,8 @@ export default function StudentLookup() {
                             periodDays={periodData.periodDays}
                             studentInfo={{
                               studentId: studentId,
-                              name: periodData.name,
-                              email: periodData.email,
+                              name: hidePII ? getFakeDataForStudent(studentId).name : periodData.name,
+                              email: hidePII ? getFakeDataForStudent(studentId).email : periodData.email,
                               period: periodData.period,
                               sectionNumber: periodData.section
                             }}
@@ -1073,8 +1080,8 @@ export default function StudentLookup() {
                 periodDays={studentInfo.periodDays}
                 studentInfo={{
                   studentId: studentId,
-                  name: studentInfo.name,
-                  email: studentInfo.email,
+                  name: hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name,
+                  email: hidePII ? getFakeDataForStudent(studentId).email : studentInfo.email,
                   period: studentInfo.period,
                   sectionNumber: studentInfo.sectionNumber
                 }}
@@ -1143,8 +1150,8 @@ export default function StudentLookup() {
             onClose={() => setRedemptionModal({ ...redemptionModal, isOpen: false })}
             onSuccess={handleSearch}
             redemptionType={redemptionModal.type}
-            studentName={studentInfo.name}
-            studentEmail={studentInfo.email}
+            studentName={hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name}
+            studentEmail={hidePII ? getFakeDataForStudent(studentId).email : studentInfo.email}
             studentId={studentId}
             period={studentInfo.period || 'Unknown'}
             sectionNumber={studentInfo.sectionNumber || 'default'}
