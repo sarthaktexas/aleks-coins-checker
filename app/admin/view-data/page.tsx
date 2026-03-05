@@ -25,12 +25,16 @@ import {
   Copy,
   CheckCircle,
   Trash2,
-  EyeOff
+  EyeOff,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink
 } from "lucide-react"
 import Link from "next/link"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { CondensedCalendarView } from "@/components/condensed-calendar-view"
 
 type StudentData = {
   name: string
@@ -71,6 +75,7 @@ export default function ViewDataPage() {
   const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
   const [showExportDropdown, setShowExportDropdown] = useState(false)
   const [hideStudentData, setHideStudentData] = useHidePII()
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
 
   // Load saved password from localStorage on component mount
   useEffect(() => {
@@ -740,6 +745,7 @@ Total: ${extraCreditStudents.length} students`
               <div className="space-y-2">
                 {/* Header Row */}
                 <div className="flex items-center gap-4 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-600">
+                  <div className="flex-shrink-0 w-6" />
                   <button 
                     onClick={() => handleSort("name")}
                     className="flex-1 flex items-center gap-1 hover:text-slate-800 transition-colors"
@@ -780,84 +786,173 @@ Total: ${extraCreditStudents.length} students`
                 
                 {filteredAndSortedStudents.map(([studentId, data]) => {
                   const display = getDisplayData(studentId, data)
+                  const isExpanded = expandedStudentId === studentId
+                  const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
+                  const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
+                  const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
                   return (
-                  <div key={studentId} className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                    {/* Name and ID - Primary */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 truncate">{display.name}</p>
-                      <p className="text-xs text-slate-500 font-mono">{display.studentId}</p>
-                    </div>
+                  <div key={studentId} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                    <div
+                      className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => setExpandedStudentId(isExpanded ? null : studentId)}
+                    >
+                      {/* Expand indicator */}
+                      <div className="flex-shrink-0 w-6 flex items-center justify-center text-slate-400">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </div>
+                      {/* Name and ID - Primary */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{display.name}</p>
+                        <p className="text-xs text-slate-500 font-mono">{display.studentId}</p>
+                      </div>
 
-                    {/* Coins - Secondary */}
-                    <div className="flex items-center gap-2">
-                      <div className="text-2xl">🪙</div>
-                      <span className="text-xl font-bold text-amber-600">{data.coins}</span>
-                    </div>
+                      {/* Coins - Secondary */}
+                      <div className="flex items-center gap-2">
+                        <div className="text-2xl">🪙</div>
+                        <span className="text-xl font-bold text-amber-600">{data.coins}</span>
+                      </div>
 
-                    {/* Circular Progress */}
-                    <div className="relative w-12 h-12">
-                      <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          className="text-slate-200"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <path
-                          className={getProgressColor(data.percentComplete)}
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          fill="none"
-                          strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xs font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
+                      {/* Circular Progress */}
+                      <div className="relative w-12 h-12">
+                        <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                          <path
+                            className="text-slate-200"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            fill="none"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          />
+                          <path
+                            className={getProgressColor(data.percentComplete)}
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            fill="none"
+                            strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xs font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
+                        </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <div className="min-w-0">
+                        <Badge 
+                          className={
+                            data.percentComplete >= 90 
+                              ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
+                              : data.percentComplete >= 70 
+                              ? "bg-amber-500 hover:bg-amber-600 text-white"
+                              : "bg-rose-500 hover:bg-rose-600 text-white"
+                          }
+                        >
+                          {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
+                           data.percentComplete >= 70 ? "Good" : "Needs Work"}
+                        </Badge>
+                      </div>
+
+                      {/* Extra Credit Details */}
+                      <div className="min-w-0 text-center">
+                        {data.percentComplete >= 90 ? (
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
+                            <div className="text-xs text-emerald-600">
+                              {data.percentComplete.toFixed(1)}%
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-slate-500">Not Qualified</div>
+                            <div className="text-xs text-slate-400">
+                              {data.percentComplete.toFixed(1)}% • Need 90%
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Email - Collapsible */}
+                      <div className="hidden lg:block min-w-0 flex-1">
+                        <p className="text-sm text-slate-600 truncate">{display.email}</p>
                       </div>
                     </div>
 
-
-                    {/* Status Badge */}
-                    <div className="min-w-0">
-                      <Badge 
-                        className={
-                          data.percentComplete >= 90 
-                            ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
-                            : data.percentComplete >= 70 
-                            ? "bg-amber-500 hover:bg-amber-600 text-white"
-                            : "bg-rose-500 hover:bg-rose-600 text-white"
-                        }
-                      >
-                        {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
-                         data.percentComplete >= 70 ? "Good" : "Needs Work"}
-                      </Badge>
-                    </div>
-
-                    {/* Extra Credit Details */}
-                    <div className="min-w-0 text-center">
-                      {data.percentComplete >= 90 ? (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
-                          <div className="text-xs text-emerald-600">
-                            {data.percentComplete.toFixed(1)}%
-                          </div>
+                    {/* Expanded details panel */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 space-y-4">
+                        {/* Stats row - similar to student page */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <Card className="bg-white border-slate-200">
+                            <CardContent className="p-3">
+                              <div className="text-xs text-slate-500 font-medium">Coins</div>
+                              <p className="text-xl font-bold text-amber-600">{data.coins}</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-white border-slate-200">
+                            <CardContent className="p-3">
+                              <div className="text-xs text-slate-500 font-medium">Qualified days</div>
+                              <p className="text-lg font-bold text-slate-900">{qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""} / {workingDays.length}</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-white border-slate-200">
+                            <CardContent className="p-3">
+                              <div className="text-xs text-slate-500 font-medium">Progress</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${getProgressColor(data.percentComplete)}`}
+                                    style={{ width: `${Math.min(data.percentComplete, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-sm font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
+                              </div>
+                            </CardContent>
+                          </Card>
+                          {data.dailyLog && data.dailyLog.length > 0 && (
+                            <Card className="bg-white border-slate-200">
+                              <CardContent className="p-3">
+                                <div className="text-xs text-slate-500 font-medium">Avg. min/day</div>
+                                <p className="text-lg font-bold text-slate-900">
+                                  {Math.round(
+                                    data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
+                                    (data.dailyLog.filter((d: any) => d.minutes > 0).length || 1)
+                                  )} min
+                                </p>
+                              </CardContent>
+                            </Card>
+                          )}
                         </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-slate-500">Not Qualified</div>
-                          <div className="text-xs text-slate-400">
-                            {data.percentComplete.toFixed(1)}% • Need 90%
-                          </div>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Email - Collapsible */}
-                    <div className="hidden lg:block min-w-0 flex-1">
-                      <p className="text-sm text-slate-600 truncate">{display.email}</p>
-                    </div>
+                        {/* Condensed calendar - single row with horizontal scroll */}
+                        {data.dailyLog && data.dailyLog.length > 0 && (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <CondensedCalendarView
+                              dailyLog={data.dailyLog}
+                              totalDays={data.totalDays}
+                              periodDays={data.periodDays}
+                            />
+                          </div>
+                        )}
+
+                        {/* Open in new tab link */}
+                        <div className="flex justify-end pt-2">
+                          <a
+                            href={`/?studentId=${encodeURIComponent(studentId)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Open student view in new tab
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )})}
               </div>

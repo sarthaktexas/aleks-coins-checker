@@ -2,12 +2,14 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Search,
   User,
@@ -134,26 +136,29 @@ export default function StudentLookup() {
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
   const [hidePII, _setHidePII] = useHidePII() // Read-only: syncs from localStorage when admin toggles on admin pages
 
-  const handleSearch = async () => {
-    if (!studentId.trim()) {
+  const searchParams = useSearchParams()
+  const hasAutoSearchedFromUrl = useRef(false)
+
+  const performSearch = async (idOverride?: string) => {
+    const id = (idOverride ?? studentId).trim()
+    if (!id) {
       setError("Please enter a student ID")
       return
     }
 
     setIsSearching(true)
-      setError("")
-      setStudentInfo(null)
-      setSelectedPeriodHistory(null)
-      setLeaderboardData(null)
+    setError("")
+    setStudentInfo(null)
+    setSelectedPeriodHistory(null)
+    setLeaderboardData(null)
 
     try {
-
       const response = await fetch("/api/student", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ studentId: studentId.trim() }),
+        body: JSON.stringify({ studentId: id }),
       })
 
 
@@ -177,11 +182,11 @@ export default function StudentLookup() {
         setPendingRequests(data.pendingRequests || [])
         setApprovedRequests(data.approvedRequests || [])
         setRejectedRequests(data.rejectedRequests || [])
-        setIsDemoStudent(studentId.trim().toLowerCase() === "abc123")
+        setIsDemoStudent(id.toLowerCase() === "abc123")
         
         // Fetch leaderboard data for current period
         if (data.student.period && data.student.sectionNumber) {
-          loadLeaderboardData(studentId.trim(), data.student.period, data.student.sectionNumber)
+          loadLeaderboardData(id, data.student.period, data.student.sectionNumber)
         }
       } else {
         setError(data.error || "Student ID not found. Please check your ID and try again.")
@@ -202,6 +207,18 @@ export default function StudentLookup() {
       setIsSearching(false)
     }
   }
+
+  const handleSearch = () => performSearch()
+
+  // Auto-load student when ?studentId=xxx is in URL (e.g. from admin view-data "Open in new tab")
+  useEffect(() => {
+    const idFromUrl = searchParams.get("studentId")
+    if (idFromUrl && idFromUrl.trim() && !hasAutoSearchedFromUrl.current) {
+      hasAutoSearchedFromUrl.current = true
+      setStudentId(idFromUrl.trim())
+      performSearch(idFromUrl.trim())
+    }
+  }, [searchParams])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -392,6 +409,20 @@ export default function StudentLookup() {
           <h1 className="text-3xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">ALEKS Points Portal</h1>
           <p className="text-slate-600 text-base sm:text-lg">Enter your student ID to view your progress and points</p>
         </div>
+
+        {/* Hide PII Warning - shown when admin has toggled PII hiding (e.g., for screen sharing) */}
+        {hidePII && (
+          <Alert className="mb-6 border-amber-200 bg-amber-50">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              <span className="font-medium">Privacy mode is on.</span> Names and emails are shown as placeholders. To turn this off, go to the{" "}
+              <a href="/admin/dashboard" className="underline font-medium hover:text-amber-900">
+                Admin Dashboard
+              </a>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Search Card */}
         <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
