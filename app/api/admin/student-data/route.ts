@@ -383,6 +383,36 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function deleteRelatedStudentRecords(period?: string, sectionNumber?: string) {
+  if (period && sectionNumber) {
+    const adjustmentsResult = await sql`
+      DELETE FROM coin_adjustments
+      WHERE period = ${period} AND section_number = ${sectionNumber}
+      RETURNING id
+    `
+    const requestsResult = await sql`
+      DELETE FROM student_requests
+      WHERE period = ${period} AND section_number = ${sectionNumber}
+      RETURNING id
+    `
+    return {
+      adjustmentsDeleted: adjustmentsResult.rows.length,
+      requestsDeleted: requestsResult.rows.length,
+      overridesDeleted: 0,
+    }
+  }
+
+  const adjustmentsResult = await sql`DELETE FROM coin_adjustments RETURNING id`
+  const requestsResult = await sql`DELETE FROM student_requests RETURNING id`
+  const overridesResult = await sql`DELETE FROM student_day_overrides RETURNING id`
+
+  return {
+    adjustmentsDeleted: adjustmentsResult.rows.length,
+    requestsDeleted: requestsResult.rows.length,
+    overridesDeleted: overridesResult.rows.length,
+  }
+}
+
 // DELETE - Delete student data (all or specific upload)
 export async function DELETE(request: NextRequest) {
   try {
@@ -399,11 +429,9 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    let result
-
     if (uploadId) {
       // Delete specific upload by ID
-      result = await sql`
+      const result = await sql`
         DELETE FROM student_data
         WHERE id = ${uploadId}
         RETURNING id, period, section_number, uploaded_at
@@ -415,43 +443,51 @@ export async function DELETE(request: NextRequest) {
         }, { status: 404 })
       }
 
-      return NextResponse.json({ 
-        success: true, 
-        message: `Successfully deleted upload for period ${result.rows[0].period}, section ${result.rows[0].section_number}`,
-        deletedCount: result.rows.length,
-        deletedRecord: result.rows[0]
-      })
-    } else {
-      // Delete all student data (original behavior)
-      const countResult = await sql`
-        SELECT COUNT(*) as count FROM student_data
-      `
-      const recordCount = parseInt(countResult.rows[0].count)
-
-      if (recordCount === 0) {
-        return NextResponse.json({ 
-          success: true, 
-          message: "No student data found to delete",
-          deletedCount: 0
-        })
-      }
-
-      result = await sql`
-        DELETE FROM student_data
-        RETURNING id, period, uploaded_at
-      `
+      const { period, section_number: sectionNumber } = result.rows[0]
+      const relatedDeleted = await deleteRelatedStudentRecords(period, sectionNumber)
 
       return NextResponse.json({ 
         success: true, 
-        message: `Successfully deleted all student data (${result.rows.length} records)`,
+        message: `Successfully deleted upload for period ${period}, section ${sectionNumber}`,
         deletedCount: result.rows.length,
-        deletedRecords: result.rows.map(row => ({
-          id: row.id,
-          period: row.period,
-          uploaded_at: row.uploaded_at
-        }))
+        deletedRecord: result.rows[0],
+        relatedDeleted,
       })
     }
+
+    // Delete all student data and related records
+    const relatedDeleted = await deleteRelatedStudentRecords()
+
+    const result = await sql`
+      DELETE FROM student_data
+      RETURNING id, period, uploaded_at
+    `
+
+    const totalDeleted =
+      result.rows.length +
+      relatedDeleted.adjustmentsDeleted +
+      relatedDeleted.requestsDeleted +
+      relatedDeleted.overridesDeleted
+
+    if (totalDeleted === 0) {
+      return NextResponse.json({ 
+        success: true, 
+        message: "No student data found to delete",
+        deletedCount: 0,
+      })
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: `Successfully deleted all student data (${result.rows.length} uploads, ${relatedDeleted.requestsDeleted} requests, ${relatedDeleted.adjustmentsDeleted} coin adjustments, ${relatedDeleted.overridesDeleted} day overrides)`,
+      deletedCount: result.rows.length,
+      deletedRecords: result.rows.map(row => ({
+        id: row.id,
+        period: row.period,
+        uploaded_at: row.uploaded_at
+      })),
+      relatedDeleted,
+    })
   } catch (error) {
     console.error("Error deleting student data:", error)
     return NextResponse.json(

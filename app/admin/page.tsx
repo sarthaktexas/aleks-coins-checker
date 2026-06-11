@@ -614,6 +614,9 @@ export default function AdminPage() {
                         <li>Student progress records</li>
                         <li>Coin calculations</li>
                         <li>Daily log entries</li>
+                        <li>Student requests (redemptions and overrides)</li>
+                        <li>Coin adjustments</li>
+                        <li>Day overrides</li>
                       </ul>
                     </div>
                   </div>
