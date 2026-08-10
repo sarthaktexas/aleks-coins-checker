@@ -563,7 +563,9 @@ Total: ${extraCreditStudents.length} students`
                   Student Data - {selectedPeriod} - Section {selectedSection}
                 </h2>
                 <p className="text-xs text-utsa-muted mt-0.5">
-                  {Object.keys(studentData).length} students found
+                  {isLoadingStudents
+                    ? "Loading students…"
+                    : `${Object.keys(studentData).length} students found`}
                 </p>
               </div>
               
@@ -621,6 +623,52 @@ Total: ${extraCreditStudents.length} students`
             </div>
           </div>
           <div className="p-4">
+            {isLoadingStudents ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-4 w-4 rounded bg-utsa-surface animate-pulse" />
+                  <div className="h-9 max-w-md flex-1 rounded-md bg-utsa-surface animate-pulse" />
+                </div>
+                <div className="flex items-center gap-4 p-3 bg-utsa-surface border border-utsa-border rounded-md">
+                  <div className="h-4 w-6 rounded bg-utsa-border/60 animate-pulse" />
+                  <div className="h-4 flex-1 rounded bg-utsa-border/60 animate-pulse" />
+                  <div className="h-4 w-16 rounded bg-utsa-border/60 animate-pulse" />
+                  <div className="h-4 w-12 rounded bg-utsa-border/60 animate-pulse" />
+                  <div className="h-4 w-20 rounded bg-utsa-border/60 animate-pulse" />
+                </div>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-4 p-4 bg-white border border-utsa-border rounded-md animate-pulse"
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    <div className="h-4 w-4 rounded bg-utsa-surface flex-shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-4 w-36 rounded bg-utsa-surface" />
+                      <div className="h-3 w-24 rounded bg-utsa-surface" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-full bg-utsa-surface" />
+                      <div className="h-6 w-8 rounded bg-utsa-surface" />
+                    </div>
+                    <div className="h-8 w-12 rounded bg-utsa-surface" />
+                    <div className="h-6 w-20 rounded-full bg-utsa-surface" />
+                    <div className="hidden sm:block space-y-1.5 min-w-[5rem]">
+                      <div className="h-3 w-16 rounded bg-utsa-surface mx-auto" />
+                      <div className="h-3 w-12 rounded bg-utsa-surface mx-auto" />
+                    </div>
+                    <div className="hidden lg:block flex-1">
+                      <div className="h-4 w-40 rounded bg-utsa-surface" />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-center gap-2 pt-4 text-utsa-muted">
+                  <div className="w-4 h-4 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm">Loading student data…</p>
+                </div>
+              </div>
+            ) : (
+              <>
             <div className="mb-4 flex flex-col gap-2">
               {hideStudentData && (
                 <Alert className="border-amber-200 bg-amber-50">
@@ -836,7 +884,7 @@ Total: ${extraCreditStudents.length} students`
               )})}
             </div>
 
-            {filteredAndSortedStudents.length === 0 && !isLoading && (
+            {filteredAndSortedStudents.length === 0 && (
               <div className="text-center py-8">
                 {Object.keys(studentData).length === 0 ? (
                   <div>
@@ -850,14 +898,7 @@ Total: ${extraCreditStudents.length} students`
                 )}
               </div>
             )}
-
-            {isLoading && (
-              <div className="text-center py-8">
-                <div className="inline-flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
-                  <p className="text-utsa-muted">Loading student data...</p>
-                </div>
-              </div>
+              </>
             )}
           </div>
         </div>
