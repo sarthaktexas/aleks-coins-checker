@@ -358,7 +358,15 @@ export default function AdminPage() {
     }
   }
 
-  const handlePullFromAleks = async () => {
+  const handlePullFromAleks = async (opts: { force?: boolean; period?: string } = {}) => {
+    const force = Boolean(opts.force)
+    const period = (opts.period || "").trim()
+
+    if (force && !period) {
+      setMessage({ type: "error", text: "Select an exam period above before forcing a sync" })
+      return
+    }
+
     setIsPulling(true)
     setMessage(null)
 
@@ -366,6 +374,11 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/aleks-sync/trigger", {
         method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          force,
+          ...(period ? { period } : {}),
+        }),
       })
       if (response.status === 401) {
         setMessage({ type: "error", text: SESSION_EXPIRED })
@@ -597,7 +610,7 @@ export default function AdminPage() {
           <Button
             type="button"
             disabled={isPulling || isDeletingSection || isUploading}
-            onClick={handlePullFromAleks}
+            onClick={() => handlePullFromAleks()}
           >
             {isPulling ? (
               <>
@@ -613,9 +626,36 @@ export default function AdminPage() {
           </Button>
         </div>
 
+        <div className="space-y-2 rounded border border-dashed border-utsa-border bg-utsa-surface/60 px-3 py-3">
+          <p className="text-xs font-medium text-utsa-midnight">Debug</p>
+          <p className="text-xs text-utsa-muted">
+            Force a sync for the exam period selected above, even if that period has ended. Uses
+            the period end date as the ALEKS report end.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isPulling || isDeletingSection || isUploading || !selectedPeriod}
+            onClick={() => handlePullFromAleks({ force: true, period: selectedPeriod })}
+            className="border-utsa-orange/40 text-utsa-accessible"
+          >
+            {isPulling ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Starting forced pull…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Force sync ({selectedPeriod || "select period"})
+              </>
+            )}
+          </Button>
+        </div>
+
         <p className="text-xs text-utsa-muted">
-          Uses the period/section fields above for delete. Pull runs the GitHub Action, which
-          auto-detects the active exam period and scrapes classes from ALEKS.
+          Normal pull auto-detects the active exam period. Force sync uses the period dropdown
+          above and ignores the ended/not-started window.
         </p>
       </div>
 

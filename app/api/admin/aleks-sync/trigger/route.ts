@@ -5,16 +5,26 @@ export const dynamic = "force-dynamic"
 
 /**
  * POST /api/admin/aleks-sync/trigger
- * Dispatches the GitHub Actions "ALEKS daily sync" workflow (workflow_dispatch).
+ * Body (optional JSON):
+ *   { period?: string, force?: boolean }
  *
- * Requires on Vercel:
- *   GITHUB_SYNC_PAT — classic/fine-grained PAT with Actions: write
- *   GITHUB_REPO — "owner/repo" (optional if VERCEL_GIT_REPO_OWNER + VERCEL_GIT_REPO_SLUG exist)
+ * Dispatches the GitHub Actions "ALEKS daily sync" workflow (workflow_dispatch).
  */
 export async function POST(request: NextRequest) {
   try {
     const session = requireAdmin(request)
     if (!isSession(session)) return session
+
+    let period = ""
+    let force = false
+    try {
+      const body = await request.json()
+      if (typeof body?.period === "string") period = body.period.trim()
+      if (typeof body?.force === "boolean") force = body.force
+      if (body?.force === "1" || body?.force === "true") force = true
+    } catch {
+      // empty body is fine
+    }
 
     const pat = process.env.GITHUB_SYNC_PAT || process.env.GITHUB_TOKEN
     if (!pat) {
@@ -51,15 +61,27 @@ export async function POST(request: NextRequest) {
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ ref: process.env.ALEKS_SYNC_REF || "main" }),
+      body: JSON.stringify({
+        ref: process.env.ALEKS_SYNC_REF || "main",
+        inputs: {
+          period: period || "",
+          force: force ? "true" : "false",
+        },
+      }),
     })
 
     if (res.status === 204) {
+      const bits = [
+        force ? "forced" : null,
+        period ? `period=${period}` : "auto period",
+      ].filter(Boolean)
       return NextResponse.json({
         success: true,
-        message: `ALEKS sync workflow dispatched on ${repo}. Check GitHub → Actions for progress.`,
+        message: `ALEKS sync workflow dispatched on ${repo} (${bits.join(", ")}). Check GitHub → Actions for progress.`,
         repo,
         workflow: workflowFile,
+        period: period || null,
+        force,
         actionsUrl: `https://github.com/${repo}/actions/workflows/${workflowFile}`,
       })
     }

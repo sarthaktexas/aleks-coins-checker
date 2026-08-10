@@ -425,18 +425,63 @@ export function todayInCentral(): string {
   }).format(new Date())
 }
 
-export function computeReportWindow(startDate: string, endDate: string, today = todayInCentral()) {
+export function computeReportWindow(
+  startDate: string,
+  endDate: string,
+  today = todayInCentral(),
+  options: { force?: boolean } = {},
+) {
+  const force = Boolean(options.force)
+
+  if (!force) {
+    if (today < startDate) {
+      return {
+        shouldSync: false as const,
+        reason: "Period has not started yet",
+        today,
+        reportStartDate: startDate,
+        reportEndDate: endDate,
+        forced: false,
+      }
+    }
+    if (today > endDate) {
+      return {
+        shouldSync: false as const,
+        reason: "Period has ended",
+        today,
+        reportStartDate: startDate,
+        reportEndDate: endDate,
+        forced: false,
+      }
+    }
+    return {
+      shouldSync: true as const,
+      reason: null as string | null,
+      today,
+      reportStartDate: startDate,
+      reportEndDate: today,
+      forced: false,
+    }
+  }
+
+  // Forced: always sync. Cap the ALEKS end date at the period end (never past it).
+  let reportEndDate = endDate
+  let reason: string | null = "Forced sync"
   if (today < startDate) {
-    return { shouldSync: false as const, reason: "Period has not started yet", today, reportStartDate: startDate, reportEndDate: endDate }
+    reason = "Forced sync (period has not started yet — using full period range)"
+  } else if (today > endDate) {
+    reason = "Forced sync (period has ended — using period end date)"
+  } else {
+    reportEndDate = today
+    reason = "Forced sync"
   }
-  if (today > endDate) {
-    return { shouldSync: false as const, reason: "Period has ended", today, reportStartDate: startDate, reportEndDate: endDate }
-  }
+
   return {
     shouldSync: true as const,
-    reason: null as string | null,
+    reason,
     today,
     reportStartDate: startDate,
-    reportEndDate: today,
+    reportEndDate,
+    forced: true,
   }
 }

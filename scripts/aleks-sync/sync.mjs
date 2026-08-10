@@ -5,10 +5,13 @@
  *   ALEKS_USERNAME, ALEKS_PASSWORD
  *   APP_URL, IMPORT_API_TOKEN
  *
- * Exam period comes from the app (latest uploaded student_data period).
+ * Exam period comes from the app (latest uploaded student_data period),
+ * or EXAM_PERIOD env / workflow input override.
  * Classes are scraped from the ALEKS Class dropdown (active + archived).
  *
  * Optional:
+ *   EXAM_PERIOD — force a specific period key
+ *   FORCE_SYNC=1 — sync even if outside the period date window
  *   HEADED=1 — show browser
  *   DRY_RUN=1 — download but do not POST to the app
  *   DOWNLOAD_DIR — override download folder
@@ -75,8 +78,12 @@ function sectionFromClassName(aleksName, knownSections = []) {
   return name.replace(/\s+/g, "_").slice(0, 40)
 }
 
-async function fetchSyncConfig(appUrl, token) {
-  const url = `${appUrl.replace(/\/$/, "")}/api/admin/aleks-sync/config`
+async function fetchSyncConfig(appUrl, token, { period, force } = {}) {
+  const params = new URLSearchParams()
+  if (period) params.set("period", period)
+  if (force) params.set("force", "1")
+  const qs = params.toString()
+  const url = `${appUrl.replace(/\/$/, "")}/api/admin/aleks-sync/config${qs ? `?${qs}` : ""}`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -423,19 +430,27 @@ async function main() {
   const password = requireEnv("ALEKS_PASSWORD")
   const appUrl = requireEnv("APP_URL")
   const token = requireEnv("IMPORT_API_TOKEN")
+  const periodOverride = (process.env.EXAM_PERIOD || "").trim()
+  const forceSync = process.env.FORCE_SYNC === "1" || process.env.FORCE_SYNC === "true"
   const dryRun = process.env.DRY_RUN === "1"
   const headed = process.env.HEADED === "1"
   const downloadDir = process.env.DOWNLOAD_DIR || path.join(__dirname, ".downloads")
 
   await fs.mkdir(downloadDir, { recursive: true })
 
-  console.log("Fetching sync config (active period from DB)…")
-  const config = await fetchSyncConfig(appUrl, token)
+  console.log(
+    `Fetching sync config${periodOverride ? ` (period=${periodOverride})` : " (active period from DB)"}${forceSync ? " [FORCE]" : ""}…`,
+  )
+  const config = await fetchSyncConfig(appUrl, token, {
+    period: periodOverride || undefined,
+    force: forceSync,
+  })
   const examPeriod = config.period?.key
   if (!examPeriod) throw new Error("Config did not return a period key")
 
   console.log(JSON.stringify({
     source: config.source,
+    force: config.force,
     latestUploadAt: config.latestUploadAt,
     knownSections: config.knownSections,
     period: config.period,

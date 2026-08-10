@@ -5,6 +5,17 @@ on:
     # 12:00 UTC ≈ 7:00 AM Central (CST) / 6:00 AM CDT
     - cron: "0 12 * * *"
   workflow_dispatch:
+    inputs:
+      period:
+        description: "Exam period key (empty = auto from latest upload)"
+        required: false
+        default: ""
+        type: string
+      force:
+        description: "Force sync even if period has ended / not started"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   sync:
@@ -35,6 +46,8 @@ jobs:
           ALEKS_PASSWORD: ${{ secrets.ALEKS_PASSWORD }}
           APP_URL: ${{ secrets.APP_URL }}
           IMPORT_API_TOKEN: ${{ secrets.IMPORT_API_TOKEN }}
+          EXAM_PERIOD: ${{ inputs.period }}
+          FORCE_SYNC: ${{ inputs.force == true && '1' || '0' }}
         run: npm run sync
 
       - name: Upload debug artifacts
