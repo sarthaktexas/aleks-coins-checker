@@ -234,7 +234,12 @@ export default function EmailStudentsPage() {
         url += '?' + params.toString()
       }
       
-      const response = await fetch(url)
+      const response = await fetch(url, { credentials: "same-origin" })
+      if (response.status === 401) {
+        setMessage({ type: "error", text: "Session expired — refresh and sign in again." })
+        setStudentData({})
+        return
+      }
       const data = await response.json()
 
       if (response.ok) {
@@ -247,8 +252,13 @@ export default function EmailStudentsPage() {
             const balancesResponse = await fetch('/api/admin/student-balances', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: "same-origin",
               body: JSON.stringify({ studentIds })
             })
+            if (balancesResponse.status === 401) {
+              setMessage({ type: "error", text: "Session expired — refresh and sign in again." })
+              return
+            }
             const balancesData = await balancesResponse.json()
             
             if (balancesResponse.ok && balancesData.balances) {

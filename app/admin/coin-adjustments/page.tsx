@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
-import { AlertCircle, CheckCircle, Coins, Plus, Trash2, User, Calendar, FileText, EyeOff, Lock } from "lucide-react"
+import { AlertCircle, CheckCircle, Coins, Plus, Trash2, User, Calendar, FileText, EyeOff } from "lucide-react"
 
 type CoinAdjustment = {
   id: number
