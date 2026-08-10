@@ -1,60 +1,192 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  Calendar, 
-  Save, 
-  Edit, 
-  Plus, 
-  Trash2, 
-  CheckCircle, 
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Calendar,
+  Save,
+  Edit,
+  Plus,
+  Trash2,
+  CheckCircle,
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
-import { EXAM_PERIODS } from "@/lib/exam-periods"
+import {
+  EXAM_PERIODS,
+  CURRENT_YEAR,
+  groupBySemester,
+  getExamLabel,
+  buildPeriodKey,
+  buildPeriodName,
+  getExamTypeFromKey,
+  parsePeriodKey,
+  SEMESTER_OPTIONS,
+  EXAM_TYPE_OPTIONS,
+  type SemesterSeason,
+  type ExamType,
+} from "@/lib/exam-periods"
 
 type ExamPeriodData = {
   name: string
   startDate: string
   endDate: string
-  excludedDates: readonly string[]
+  excludedDates: readonly string[] | string[]
+}
+
+type PeriodFormState = {
+  season: SemesterSeason
+  year: string
+  examType: ExamType
+  periodKey: string
+  name: string
+  startDate: string
+  endDate: string
+  excludedDates: string[]
+}
+
+const emptyForm = (): PeriodFormState => ({
+  season: "spring",
+  year: String(CURRENT_YEAR),
+  examType: "exam1",
+  periodKey: buildPeriodKey("spring", CURRENT_YEAR, "exam1"),
+  name: buildPeriodName("spring", CURRENT_YEAR, "exam1"),
+  startDate: "",
+  endDate: "",
+  excludedDates: [],
+})
+
+function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormState {
+  const parsed = parsePeriodKey(periodKey)
+  const season = parsed?.season ?? "spring"
+  const year = parsed?.year ?? CURRENT_YEAR
+  const examType = getExamTypeFromKey(periodKey)
+
+  return {
+    season,
+    year: String(year),
+    examType,
+    periodKey,
+    name: period.name,
+    startDate: formatDateForInput(period.startDate),
+    endDate: formatDateForInput(period.endDate),
+    excludedDates: [...period.excludedDates],
+  }
+}
+
+function formatDateForInput(date: string) {
+  try {
+    if (!date) return ""
+    if (date.includes("-") && date.length === 10) return date
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ""
+    return d.toISOString().split("T")[0]
+  } catch {
+    return ""
+  }
+}
+
+function formatDateForDisplay(
+  date: string,
+  options: { month?: "short" | "long"; day?: "numeric"; year?: "numeric" } = {},
+) {
+  const monthNamesShort = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ]
+  const monthNamesLong = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ]
+
+  try {
+    if (!date) return "Invalid Date"
+
+    let year: number
+    let month: number
+    let day: number
+
+    if (date.includes("-") && date.length === 10) {
+      ;[year, month, day] = date.split("-").map(Number)
+    } else {
+      const d = new Date(date)
+      if (isNaN(d.getTime())) return "Invalid Date"
+      year = d.getFullYear()
+      month = d.getMonth() + 1
+      day = d.getDate()
+    }
+
+    let result = ""
+    if (options.month === "long") result += monthNamesLong[month - 1]
+    else result += monthNamesShort[month - 1]
+    if (options.day === "numeric") result += ` ${day}`
+    if (options.year === "numeric") result += `, ${year}`
+    return result
+  } catch {
+    return "Invalid Date"
+  }
+}
+
+function formatDateRange(startDate: string, endDate: string) {
+  try {
+    return `${formatDateForDisplay(startDate, { month: "short", day: "numeric" })} – ${formatDateForDisplay(endDate, { month: "short", day: "numeric" })}`
+  } catch {
+    return "Invalid Date"
+  }
 }
 
 export default function ManagePeriodsPage() {
   const [periods, setPeriods] = useState<Record<string, ExamPeriodData>>({})
-  const [editingPeriod, setEditingPeriod] = useState<string | null>(null)
-  const [editingPeriodNewKey, setEditingPeriodNewKey] = useState<string>("")
-  const [newExcludedDate, setNewExcludedDate] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newPeriod, setNewPeriod] = useState({
-    periodKey: "",
-    name: "",
-    startDate: "",
-    endDate: "",
-    excludedDates: [] as string[]
-  })
+  const [dialogMode, setDialogMode] = useState<"add" | "edit" | null>(null)
+  const [editingOriginalKey, setEditingOriginalKey] = useState<string | null>(null)
+  const [form, setForm] = useState<PeriodFormState>(emptyForm)
+  const [newExcludedDate, setNewExcludedDate] = useState("")
+  const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
 
-  // Load periods from database
+  const semesterGroups = useMemo(
+    () =>
+      groupBySemester(
+        Object.entries(periods).map(([periodKey, period]) => ({ periodKey, period })),
+        (item) => item.periodKey,
+      ),
+    [periods],
+  )
+
   const loadPeriods = async () => {
     try {
-      const response = await fetch('/api/admin/exam-periods')
+      const response = await fetch("/api/admin/exam-periods")
       const data = await response.json()
-      
+
       if (response.ok) {
         setPeriods(data.periods || {})
       } else {
         console.error("Failed to load periods:", data.error)
-        // Fallback to hardcoded periods if database fails
         setPeriods(EXAM_PERIODS)
       }
     } catch (error) {
       console.error("Error loading periods:", error)
-      // Fallback to hardcoded periods if database fails
       setPeriods(EXAM_PERIODS)
     }
   }
@@ -63,13 +195,52 @@ export default function ManagePeriodsPage() {
     loadPeriods()
   }, [])
 
-  const handleSavePeriod = async (periodKey: string) => {
-    const newKey = editingPeriodNewKey.trim()
-    if (!newKey) {
-      setMessage({
-        type: "error",
-        text: "Period key cannot be empty"
+  const openAddDialog = () => {
+    setDialogMode("add")
+    setEditingOriginalKey(null)
+    setNewExcludedDate("")
+    setForm(emptyForm())
+    setMessage(null)
+  }
+
+  const openEditDialog = (periodKey: string) => {
+    const period = periods[periodKey]
+    if (!period) return
+    setDialogMode("edit")
+    setEditingOriginalKey(periodKey)
+    setNewExcludedDate("")
+    setForm(formFromPeriod(periodKey, period))
+    setMessage(null)
+  }
+
+  const closeDialog = () => {
+    setDialogMode(null)
+    setEditingOriginalKey(null)
+    setNewExcludedDate("")
+  }
+
+  const updateFormPart = <K extends keyof PeriodFormState>(key: K, value: PeriodFormState[K]) => {
+    if (key === "season" || key === "year" || key === "examType") {
+      setForm((prev) => {
+        const next = { ...prev, [key]: value }
+        const yearNum = Number(key === "year" ? (value as string) : next.year) || CURRENT_YEAR
+        const season = (key === "season" ? value : next.season) as SemesterSeason
+        const examType = (key === "examType" ? value : next.examType) as ExamType
+        return {
+          ...next,
+          periodKey: buildPeriodKey(season, yearNum, examType),
+          name: buildPeriodName(season, yearNum, examType),
+        }
       })
+      return
+    }
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async () => {
+    const periodKey = form.periodKey.trim()
+    if (!periodKey || !form.name.trim() || !form.startDate || !form.endDate) {
+      setMessage({ type: "error", text: "Please fill in all required fields" })
       return
     }
 
@@ -77,17 +248,14 @@ export default function ManagePeriodsPage() {
     setMessage(null)
 
     try {
-      const period = periods[periodKey]
-
-      // If period key was changed, rename it first (updates all tables)
-      if (newKey !== periodKey) {
-        const renameResponse = await fetch('/api/admin/exam-periods', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+      if (dialogMode === "edit" && editingOriginalKey && periodKey !== editingOriginalKey) {
+        const renameResponse = await fetch("/api/admin/exam-periods", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify({
-            oldPeriodKey: periodKey,
-            newPeriodKey: newKey,
+            oldPeriodKey: editingOriginalKey,
+            newPeriodKey: periodKey,
           }),
         })
         if (renameResponse.status === 401) {
@@ -96,30 +264,26 @@ export default function ManagePeriodsPage() {
           return
         }
         const renameData = await renameResponse.json()
-
         if (!renameResponse.ok) {
           setMessage({
             type: "error",
-            text: renameData.error || "Failed to change period key. It may already exist."
+            text: renameData.error || "Failed to change period key. It may already exist.",
           })
           setIsLoading(false)
           return
         }
       }
 
-      // Save period details (name, dates, excluded dates)
-      const response = await fetch('/api/admin/exam-periods', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch("/api/admin/exam-periods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          periodKey: newKey,
-          name: period.name,
-          startDate: period.startDate,
-          endDate: period.endDate,
-          excludedDates: period.excludedDates,
+          periodKey,
+          name: form.name.trim(),
+          startDate: form.startDate,
+          endDate: form.endDate,
+          excludedDates: form.excludedDates,
         }),
       })
 
@@ -133,565 +297,177 @@ export default function ManagePeriodsPage() {
       if (response.ok) {
         setMessage({
           type: "success",
-          text: data.message || `Successfully updated ${period.name}`
+          text: data.message || `Successfully saved ${form.name}`,
         })
-        setEditingPeriod(null)
-        setEditingPeriodNewKey("")
-        // Reload periods to get updated data
+        closeDialog()
         await loadPeriods()
       } else {
         setMessage({
           type: "error",
-          text: data.error || "Failed to save changes. Please try again."
+          text: data.error || "Failed to save changes. Please try again.",
         })
       }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: "Failed to save changes. Please try again."
-      })
+    } catch {
+      setMessage({ type: "error", text: "Failed to save changes. Please try again." })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleAddExcludedDate = (periodKey: string) => {
+  const addExcludedDate = () => {
     if (!newExcludedDate) return
-
-    setPeriods(prev => ({
+    if (form.excludedDates.includes(newExcludedDate)) {
+      setNewExcludedDate("")
+      return
+    }
+    setForm((prev) => ({
       ...prev,
-      [periodKey]: {
-        ...prev[periodKey],
-        excludedDates: [...prev[periodKey].excludedDates, newExcludedDate]
-      }
+      excludedDates: [...prev.excludedDates, newExcludedDate].sort(),
     }))
     setNewExcludedDate("")
   }
 
-  const handleRemoveExcludedDate = (periodKey: string, dateIndex: number) => {
-    setPeriods(prev => ({
+  const removeExcludedDate = (index: number) => {
+    setForm((prev) => ({
       ...prev,
-      [periodKey]: {
-        ...prev[periodKey],
-        excludedDates: prev[periodKey].excludedDates.filter((_, index) => index !== dateIndex)
-      }
+      excludedDates: prev.excludedDates.filter((_, i) => i !== index),
     }))
   }
 
-  const handleAddNewPeriod = async () => {
-    if (!newPeriod.periodKey || !newPeriod.name || !newPeriod.startDate || !newPeriod.endDate) {
-      setMessage({
-        type: "error",
-        text: "Please fill in all required fields"
-      })
-      return
-    }
-
-    setIsLoading(true)
-    setMessage(null)
-
-    try {
-      const response = await fetch('/api/admin/exam-periods', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          periodKey: newPeriod.periodKey,
-          name: newPeriod.name,
-          startDate: newPeriod.startDate,
-          endDate: newPeriod.endDate,
-          excludedDates: newPeriod.excludedDates,
-        }),
-      })
-
-      if (response.status === 401) {
-        setMessage({ type: "error", text: "Session expired — refresh and sign in again." })
-        return
-      }
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessage({
-          type: "success",
-          text: data.message || `Successfully added ${newPeriod.name}`
-        })
-        setShowAddForm(false)
-        setNewPeriod({
-          periodKey: "",
-          name: "",
-          startDate: "",
-          endDate: "",
-          excludedDates: []
-        })
-        // Reload periods to get updated data
-        await loadPeriods()
-      } else {
-        setMessage({
-          type: "error",
-          text: data.error || "Failed to add new period. Please try again."
-        })
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: "Failed to add new period. Please try again."
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Format date for HTML date input (YYYY-MM-DD)
-  const formatDateForInput = (date: string) => {
-    try {
-      if (!date) return ""
-      
-      // If already in YYYY-MM-DD format, return as-is
-      if (date.includes('-') && date.length === 10) {
-        return date
-      }
-      
-      // Try to parse and format
-      const d = new Date(date)
-      if (isNaN(d.getTime())) return ""
-      
-      return d.toISOString().split('T')[0]
-    } catch (error) {
-      console.error("Date input formatting error:", error, "date:", date)
-      return ""
-    }
-  }
-
-  // Format date for display without timezone issues
-  const formatDateForDisplay = (date: string, options: { month?: "short" | "long", day?: "numeric", year?: "numeric" } = {}) => {
-    const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    const monthNamesLong = ["January", "February", "March", "April", "May", "June",
-                           "July", "August", "September", "October", "November", "December"]
-    
-    try {
-      if (!date) return "Invalid Date"
-      
-      // If already in YYYY-MM-DD format, parse it manually
-      if (date.includes('-') && date.length === 10) {
-        const [year, month, day] = date.split('-').map(Number)
-        
-        let result = ""
-        
-        if (options.month === "long") {
-          result += monthNamesLong[month - 1]
-        } else {
-          result += monthNamesShort[month - 1]
-        }
-        
-        if (options.day === "numeric") {
-          result += ` ${day}`
-        }
-        
-        if (options.year === "numeric") {
-          result += `, ${year}`
-        }
-        
-        return result
-      }
-      
-      // Fallback to Date object parsing - format without timezone conversion
-      const d = new Date(date)
-      if (isNaN(d.getTime())) return "Invalid Date"
-      
-      // Format manually to avoid timezone conversion
-      const year = d.getFullYear()
-      const month = d.getMonth() + 1
-      const day = d.getDate()
-      
-      let result = ""
-      
-      if (options.month === "long") {
-        result += monthNamesLong[month - 1]
-      } else {
-        result += monthNamesShort[month - 1]
-      }
-      
-      if (options.day === "numeric") {
-        result += ` ${day}`
-      }
-      
-      if (options.year === "numeric") {
-        result += `, ${year}`
-      }
-      
-      return result
-    } catch (error) {
-      console.error("Date display formatting error:", error, "date:", date)
-      return "Invalid Date"
-    }
-  }
-
-  const formatDateRange = (startDate: string, endDate: string) => {
-    try {
-      const startFormatted = formatDateForDisplay(startDate, { month: "short", day: "numeric" })
-      const endFormatted = formatDateForDisplay(endDate, { month: "short", day: "numeric" })
-      
-      return `${startFormatted} - ${endFormatted}`
-    } catch (error) {
-      console.error("Date parsing error:", error, "startDate:", startDate, "endDate:", endDate)
-      return "Invalid Date"
-    }
+  const toggleSemester = (semesterKey: string) => {
+    setCollapsedSemesters((prev) => {
+      const next = new Set(prev)
+      if (next.has(semesterKey)) next.delete(semesterKey)
+      else next.add(semesterKey)
+      return next
+    })
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-utsa-midnight">Manage Exam Periods</h1>
-        <p className="text-sm text-utsa-muted">Edit exam period dates and excluded dates</p>
-      </div>
-
-      <div className="mb-0 flex flex-wrap gap-2">
-        <Button
-          onClick={() => setShowAddForm(!showAddForm)}
-          variant="outline"
-          className="border-utsa-border"
-        >
-          {showAddForm ? "Cancel" : "Add New Period"}
-        </Button>
-        <Button
-          onClick={async () => {
-            setIsLoading(true)
-            try {
-              const response = await fetch('/api/admin/init-periods', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: "same-origin",
-                body: JSON.stringify({}),
-              })
-              if (response.status === 401) {
-                setMessage({ type: "error", text: "Session expired — refresh and sign in again." })
-                return
-              }
-              const data = await response.json()
-              if (response.ok) {
-                setMessage({ type: "success", text: data.message })
-                await loadPeriods()
-              } else {
-                setMessage({ type: "error", text: data.error })
-              }
-            } catch (error) {
-              setMessage({ type: "error", text: "Failed to initialize periods" })
-            } finally {
-              setIsLoading(false)
-            }
-          }}
-          disabled={isLoading}
-          variant="outline"
-          size="sm"
-          className="border-utsa-border"
-        >
-          Initialize
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-utsa-midnight">Manage Exam Periods</h1>
+          <p className="text-sm text-utsa-muted">Organized by semester — edit dates and exempt days</p>
+        </div>
+        <Button onClick={openAddDialog}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Period
         </Button>
       </div>
 
       {message && (
-        <Alert className={`${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+        <Alert
+          className={
+            message.type === "success"
+              ? "border-green-200 bg-green-50"
+              : "border-red-200 bg-red-50"
+          }
+        >
           <div className="flex items-center gap-2">
             {message.type === "success" ? (
               <CheckCircle className="h-4 w-4 text-green-600" />
             ) : (
               <AlertTriangle className="h-4 w-4 text-red-600" />
             )}
-            <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
+            <AlertDescription
+              className={message.type === "success" ? "text-green-800" : "text-red-800"}
+            >
               {message.text}
             </AlertDescription>
           </div>
         </Alert>
       )}
 
-      {showAddForm && (
-        <div className="rounded-md border border-utsa-border bg-white p-4 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-utsa-midnight">Add New Exam Period</h2>
-            <p className="text-xs text-utsa-muted">Create a new exam period with custom dates</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-period-key">Period Key</Label>
-              <Input
-                id="new-period-key"
-                value={newPeriod.periodKey}
-                onChange={(e) => setNewPeriod(prev => ({ ...prev, periodKey: e.target.value }))}
-                placeholder="e.g., spring2026_exam1"
-                className="border-utsa-border focus-visible:ring-utsa-orange"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-period-name">Period Name</Label>
-              <Input
-                id="new-period-name"
-                value={newPeriod.name}
-                onChange={(e) => setNewPeriod(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g., Spring 2026 - Exam 1 Period"
-                className="border-utsa-border focus-visible:ring-utsa-orange"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-start-date">Start Date</Label>
-              <Input
-                id="new-start-date"
-                type="date"
-                value={newPeriod.startDate}
-                onChange={(e) => setNewPeriod(prev => ({ ...prev, startDate: e.target.value }))}
-                className="border-utsa-border focus-visible:ring-utsa-orange"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-end-date">End Date</Label>
-              <Input
-                id="new-end-date"
-                type="date"
-                value={newPeriod.endDate}
-                onChange={(e) => setNewPeriod(prev => ({ ...prev, endDate: e.target.value }))}
-                className="border-utsa-border focus-visible:ring-utsa-orange"
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleAddNewPeriod} disabled={isLoading} className="">
-              {isLoading ? "Adding..." : "Add Period"}
-            </Button>
-            <Button 
-              variant="outline" 
-              className="border-utsa-border"
-              onClick={() => {
-                setShowAddForm(false)
-                setNewPeriod({
-                  periodKey: "",
-                  name: "",
-                  startDate: "",
-                  endDate: "",
-                  excludedDates: []
-                })
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+      {semesterGroups.length === 0 ? (
+        <div className="rounded-md border border-utsa-border bg-white p-8 text-center">
+          <Calendar className="h-8 w-8 text-utsa-muted mx-auto mb-2" />
+          <p className="text-sm text-utsa-muted">No exam periods yet. Add one to get started.</p>
         </div>
-      )}
-
-      <div className="space-y-4">
-        {Object.entries(periods).map(([periodKey, period]) => (
-          <div key={periodKey} className="rounded-md border border-utsa-border bg-white overflow-hidden">
-            <div className="flex items-center justify-between gap-3 border-b border-utsa-border bg-utsa-surface px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <Calendar className="h-4 w-4 text-utsa-orange shrink-0" />
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-utsa-midnight truncate">{period.name}</h2>
-                  <p className="text-xs text-utsa-muted">
-                    {formatDateRange(period.startDate, period.endDate)} • {period.excludedDates.length} exempt days
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                {editingPeriod === periodKey ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="success"
-                      onClick={() => handleSavePeriod(periodKey)}
-                      disabled={isLoading}
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {isLoading ? "Saving..." : "Save"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingPeriod(null)
-                        setEditingPeriodNewKey("")
-                      }}
-                      disabled={isLoading}
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setEditingPeriod(periodKey)
-                      setEditingPeriodNewKey(periodKey)
-                    }}
-                    className=""
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4">
-              {editingPeriod === periodKey ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`name-${periodKey}`}>Period Name</Label>
-                      <Input
-                        id={`name-${periodKey}`}
-                        value={period.name}
-                        onChange={(e) => setPeriods(prev => ({
-                          ...prev,
-                          [periodKey]: { ...prev[periodKey], name: e.target.value }
-                        }))}
-                        className="border-utsa-border focus-visible:ring-utsa-orange"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`key-${periodKey}`}>Period Key</Label>
-                      <Input
-                        id={`key-${periodKey}`}
-                        value={editingPeriodNewKey}
-                        onChange={(e) => setEditingPeriodNewKey(e.target.value)}
-                        placeholder="e.g., spring2026_exam1"
-                        className="font-mono border-utsa-border focus-visible:ring-utsa-orange"
-                      />
-                      <p className="text-xs text-utsa-muted">
-                        Changing the key updates student_data, coin_adjustments, and student_requests. Use lowercase letters, numbers, and underscores.
-                      </p>
-                    </div>
+      ) : (
+        <div className="space-y-4">
+          {semesterGroups.map((group) => {
+            const isCollapsed = collapsedSemesters.has(group.semesterKey)
+            return (
+              <div
+                key={group.semesterKey}
+                className="rounded-md border border-utsa-border bg-white overflow-hidden"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleSemester(group.semesterKey)}
+                  className="w-full flex items-center justify-between gap-3 border-b border-utsa-border bg-utsa-surface px-4 py-3 text-left hover:bg-utsa-surface/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-utsa-muted shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-utsa-muted shrink-0" />
+                    )}
+                    <Calendar className="h-4 w-4 text-utsa-orange shrink-0" />
+                    <h2 className="text-sm font-semibold text-utsa-midnight truncate">
+                      {group.semesterLabel}
+                    </h2>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {group.items.length} {group.items.length === 1 ? "period" : "periods"}
+                    </Badge>
                   </div>
+                </button>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`start-${periodKey}`}>Start Date</Label>
-                      <Input
-                        id={`start-${periodKey}`}
-                        type="date"
-                        value={formatDateForInput(period.startDate)}
-                        onChange={(e) => setPeriods(prev => ({
-                          ...prev,
-                          [periodKey]: { ...prev[periodKey], startDate: e.target.value }
-                        }))}
-                        className="border-utsa-border focus-visible:ring-utsa-orange"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`end-${periodKey}`}>End Date</Label>
-                      <Input
-                        id={`end-${periodKey}`}
-                        type="date"
-                        value={formatDateForInput(period.endDate)}
-                        onChange={(e) => setPeriods(prev => ({
-                          ...prev,
-                          [periodKey]: { ...prev[periodKey], endDate: e.target.value }
-                        }))}
-                        className="border-utsa-border focus-visible:ring-utsa-orange"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label>Excluded Dates</Label>
-                    <div className="space-y-2">
-                      {period.excludedDates.map((date, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <Input
-                            type="date"
-                            value={date}
-                            onChange={(e) => {
-                              const newExcludedDates = [...period.excludedDates]
-                              newExcludedDates[index] = e.target.value
-                              setPeriods(prev => ({
-                                ...prev,
-                                [periodKey]: { ...prev[periodKey], excludedDates: newExcludedDates }
-                              }))
-                            }}
-                            className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRemoveExcludedDate(periodKey, index)}
-                            className="text-red-600 border-red-200 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                {!isCollapsed && (
+                  <div className="divide-y divide-utsa-border">
+                    {group.items.map(({ periodKey, period }) => (
+                      <div
+                        key={periodKey}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 hover:bg-utsa-surface/40 transition-colors"
+                      >
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="text-xs border-utsa-border font-medium">
+                              {getExamLabel(periodKey)}
+                            </Badge>
+                            <span className="text-sm font-medium text-utsa-midnight truncate">
+                              {period.name}
+                            </span>
+                          </div>
+                          <p className="text-xs text-utsa-muted">
+                            {formatDateRange(period.startDate, period.endDate)}
+                            {period.excludedDates.length > 0 && (
+                              <> · {period.excludedDates.length} exempt {period.excludedDates.length === 1 ? "day" : "days"}</>
+                            )}
+                          </p>
+                          {period.excludedDates.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {period.excludedDates.map((date, index) => (
+                                <span
+                                  key={`${periodKey}-${date}-${index}`}
+                                  className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs"
+                                >
+                                  {formatDateForDisplay(date, { month: "short", day: "numeric" })}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-[11px] font-mono text-utsa-muted/80">{periodKey}</p>
                         </div>
-                      ))}
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="date"
-                          value={newExcludedDate}
-                          onChange={(e) => setNewExcludedDate(e.target.value)}
-                          placeholder="Add excluded date"
-                          className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
-                        />
                         <Button
                           size="sm"
-                          onClick={() => handleAddExcludedDate(periodKey)}
-                          disabled={!newExcludedDate}
-                          className=""
+                          variant="outline"
+                          onClick={() => openEditDialog(periodKey)}
+                          className="border-utsa-border shrink-0 self-start sm:self-center"
                         >
-                          <Plus className="h-4 w-4" />
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
                         </Button>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs font-medium text-utsa-muted">Start Date</Label>
-                      <p className="text-base font-semibold text-utsa-midnight">
-                        {formatDateForDisplay(period.startDate, { 
-                          year: "numeric", 
-                          month: "long", 
-                          day: "numeric"
-                        })}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-medium text-utsa-muted">End Date</Label>
-                      <p className="text-base font-semibold text-utsa-midnight">
-                        {formatDateForDisplay(period.endDate, { 
-                          year: "numeric", 
-                          month: "long", 
-                          day: "numeric"
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {period.excludedDates.length > 0 && (
-                    <div>
-                      <Label className="text-xs font-medium text-utsa-muted">Excluded Dates</Label>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {period.excludedDates.map((date, index) => (
-                          <span
-                            key={index}
-                            className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium"
-                          >
-                            {formatDateForDisplay(date, { 
-                              month: "short", 
-                              day: "numeric"
-                            })}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       <div className="rounded-md border border-utsa-border bg-utsa-surface p-4 text-xs text-utsa-muted">
         <h3 className="font-medium text-utsa-midnight mb-2 flex items-center gap-2">
@@ -700,12 +476,185 @@ export default function ManagePeriodsPage() {
         </h3>
         <div className="space-y-1">
           <p>• Changes to exam periods will affect all future data uploads</p>
-          <p>• You can change the period key when editing—it will update all related student_data, coin_adjustments, and student_requests</p>
+          <p>• Changing the period key updates student_data, coin_adjustments, and student_requests</p>
           <p>• The period name (not the key) is shown to students on their lookup page</p>
           <p>• Excluded dates are automatically excluded from progress calculations</p>
-          <p>• Make sure to coordinate changes with the academic calendar</p>
         </div>
       </div>
+
+      <Dialog open={dialogMode !== null} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {dialogMode === "add" ? "Add Exam Period" : "Edit Exam Period"}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogMode === "add"
+                ? "Pick a semester and exam — the key and name are generated for you."
+                : "Update dates, name, or the period key used across the system."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Semester</Label>
+                <Select
+                  value={form.season}
+                  onValueChange={(value) => updateFormPart("season", value as SemesterSeason)}
+                >
+                  <SelectTrigger className="border-utsa-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEMESTER_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="period-year">Year</Label>
+                <Input
+                  id="period-year"
+                  type="number"
+                  min={2020}
+                  max={2100}
+                  value={form.year}
+                  onChange={(e) => updateFormPart("year", e.target.value)}
+                  className="border-utsa-border focus-visible:ring-utsa-orange"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Exam</Label>
+                <Select
+                  value={form.examType}
+                  onValueChange={(value) => updateFormPart("examType", value as ExamType)}
+                >
+                  <SelectTrigger className="border-utsa-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXAM_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="period-name">Display Name</Label>
+                <Input
+                  id="period-name"
+                  value={form.name}
+                  onChange={(e) => updateFormPart("name", e.target.value)}
+                  className="border-utsa-border focus-visible:ring-utsa-orange"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="period-key">Period Key</Label>
+                <Input
+                  id="period-key"
+                  value={form.periodKey}
+                  onChange={(e) => updateFormPart("periodKey", e.target.value)}
+                  className="font-mono text-sm border-utsa-border focus-visible:ring-utsa-orange"
+                />
+                <p className="text-[11px] text-utsa-muted">
+                  Auto-fills from semester above. Changing it remaps related data.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="start-date">Start Date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => updateFormPart("startDate", e.target.value)}
+                  className="border-utsa-border focus-visible:ring-utsa-orange"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="end-date">End Date</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) => updateFormPart("endDate", e.target.value)}
+                  className="border-utsa-border focus-visible:ring-utsa-orange"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Excluded Dates</Label>
+              {form.excludedDates.length === 0 ? (
+                <p className="text-xs text-utsa-muted">No exempt days yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {form.excludedDates.map((date, index) => (
+                    <div key={`${date}-${index}`} className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={date}
+                        onChange={(e) => {
+                          const next = [...form.excludedDates]
+                          next[index] = e.target.value
+                          setForm((prev) => ({ ...prev, excludedDates: next }))
+                        }}
+                        className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => removeExcludedDate(index)}
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={newExcludedDate}
+                  onChange={(e) => setNewExcludedDate(e.target.value)}
+                  className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
+                />
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={addExcludedDate}
+                  disabled={!newExcludedDate}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog} disabled={isLoading} className="border-utsa-border">
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isLoading} variant="success">
+              <Save className="h-4 w-4 mr-2" />
+              {isLoading ? "Saving…" : dialogMode === "add" ? "Add Period" : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

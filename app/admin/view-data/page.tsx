@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -21,11 +21,13 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Calendar,
 } from "lucide-react"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { CondensedCalendarView } from "@/components/condensed-calendar-view"
+import { groupBySemester, getExamLabel } from "@/lib/exam-periods"
 
 type StudentData = {
   name: string
@@ -66,10 +68,25 @@ export default function ViewDataPage() {
   const [showExportDropdown, setShowExportDropdown] = useState(false)
   const [hideStudentData, setHideStudentData] = useHidePII()
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
+  const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
+
+  const semesterGroups = useMemo(
+    () => groupBySemester(uploadRecords, (record) => record.period),
+    [uploadRecords],
+  )
 
   useEffect(() => {
     loadUploadRecords()
   }, [])
+
+  const toggleSemester = (semesterKey: string) => {
+    setCollapsedSemesters((prev) => {
+      const next = new Set(prev)
+      if (next.has(semesterKey)) next.delete(semesterKey)
+      else next.add(semesterKey)
+      return next
+    })
+  }
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -456,7 +473,7 @@ Total: ${extraCreditStudents.length} students`
             Available Data Sets
           </h2>
           <p className="text-xs text-utsa-muted mt-0.5">
-            Select a period to view student data (shows latest upload only)
+            Organized by semester — select a period to view student data (latest upload only)
           </p>
         </div>
         <div className="p-4">
@@ -468,66 +485,124 @@ Total: ${extraCreditStudents.length} students`
           ) : uploadRecords.length === 0 ? (
             <p className="text-sm text-utsa-muted py-3">No data sets uploaded yet.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {uploadRecords.map((record) => (
-                <div key={record.id} className="rounded-md border border-utsa-border p-4 hover:border-utsa-orange/50 transition-colors">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="outline" className="text-xs border-utsa-border">
-                          {record.period}
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          Section {record.section_number || 'default'}
+            <div className="space-y-3">
+              {semesterGroups.map((group) => {
+                const isCollapsed = collapsedSemesters.has(group.semesterKey)
+                const isSelectedInGroup = group.items.some(
+                  (r) =>
+                    selectedPeriod === r.period &&
+                    selectedSection === (r.section_number || "default"),
+                )
+                return (
+                  <div
+                    key={group.semesterKey}
+                    className={`rounded-md border overflow-hidden ${
+                      isSelectedInGroup ? "border-utsa-orange/40" : "border-utsa-border"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleSemester(group.semesterKey)}
+                      className="w-full flex items-center justify-between gap-3 bg-utsa-surface px-3 py-2.5 text-left hover:bg-utsa-surface/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isCollapsed ? (
+                          <ChevronRight className="h-4 w-4 text-utsa-muted shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-utsa-muted shrink-0" />
+                        )}
+                        <Calendar className="h-3.5 w-3.5 text-utsa-orange shrink-0" />
+                        <span className="text-sm font-semibold text-utsa-midnight truncate">
+                          {group.semesterLabel}
+                        </span>
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          {group.items.length} {group.items.length === 1 ? "dataset" : "datasets"}
                         </Badge>
                       </div>
-                      <span className="text-xs text-utsa-muted">
-                        {record.student_count} students
-                      </span>
-                    </div>
-                    <p className="text-sm text-utsa-muted">
-                      {formatDate(record.uploaded_at)}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedPeriod(record.period)
-                          setSelectedSection(record.section_number || 'default')
-                          loadStudentData(record.period, record.section_number || 'default')
-                        }}
-                        className="flex-1"
-                        disabled={isLoadingStudents}
-                      >
-                        {isLoadingStudents && selectedPeriod === record.period && selectedSection === (record.section_number || 'default') ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                            Loading…
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Data
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deleteUpload(record.id)}
-                        disabled={isLoadingStudents || deletingUploadId === record.id}
-                        className="px-3"
-                      >
-                        {deletingUploadId === record.id ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
+                    </button>
+
+                    {!isCollapsed && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3 border-t border-utsa-border">
+                        {group.items.map((record) => {
+                          const section = record.section_number || "default"
+                          const isSelected =
+                            selectedPeriod === record.period && selectedSection === section
+                          return (
+                            <div
+                              key={record.id}
+                              className={`rounded-md border p-4 transition-colors ${
+                                isSelected
+                                  ? "border-utsa-orange bg-orange-50/40"
+                                  : "border-utsa-border hover:border-utsa-orange/50"
+                              }`}
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex flex-col gap-1 min-w-0">
+                                    <Badge variant="outline" className="text-xs border-utsa-border w-fit">
+                                      {getExamLabel(record.period)}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs w-fit">
+                                      Section {section}
+                                    </Badge>
+                                  </div>
+                                  <span className="text-xs text-utsa-muted shrink-0">
+                                    {record.student_count} students
+                                  </span>
+                                </div>
+                                <p className="text-xs font-mono text-utsa-muted truncate">
+                                  {record.period}
+                                </p>
+                                <p className="text-sm text-utsa-muted">
+                                  {formatDate(record.uploaded_at)}
+                                </p>
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedPeriod(record.period)
+                                      setSelectedSection(section)
+                                      loadStudentData(record.period, section)
+                                    }}
+                                    className="flex-1"
+                                    disabled={isLoadingStudents}
+                                    variant={isSelected ? "default" : "outline"}
+                                  >
+                                    {isLoadingStudents && isSelected ? (
+                                      <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                        Loading…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Eye className="h-4 w-4 mr-2" />
+                                        {isSelected ? "Viewing" : "View Data"}
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => deleteUpload(record.id)}
+                                    disabled={isLoadingStudents || deletingUploadId === record.id}
+                                    className="px-3"
+                                  >
+                                    {deletingUploadId === record.id ? (
+                                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -540,7 +615,7 @@ Total: ${extraCreditStudents.length} students`
               <div>
                 <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
                   <Users className="h-4 w-4 text-utsa-orange" />
-                  Student Data - {selectedPeriod} - Section {selectedSection}
+                  Student Data — {getExamLabel(selectedPeriod)} ({selectedPeriod}) — Section {selectedSection}
                 </h2>
                 <p className="text-xs text-utsa-muted mt-0.5">
                   {isLoadingStudents
