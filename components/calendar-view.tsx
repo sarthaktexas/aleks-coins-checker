@@ -39,9 +39,11 @@ type CalendarViewProps = {
     period?: string
     sectionNumber?: string
   }
+  /** Called after a successful override request so the parent can refresh pending requests */
+  onRequestSubmitted?: () => void
 }
 
-export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: CalendarViewProps) {
+export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onRequestSubmitted }: CalendarViewProps) {
   const [overrides, setOverrides] = useState<DayOverride[]>([])
   const [overrideModal, setOverrideModal] = useState<{
     isOpen: boolean
@@ -308,6 +310,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo }: C
 
   const handleOverrideSuccess = () => {
     loadOverrides() // Reload overrides after successful save
+    onRequestSubmitted?.() // Refresh pending requests (incl. other periods) in parent
   }
 
   return (

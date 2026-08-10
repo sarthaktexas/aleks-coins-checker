@@ -593,7 +593,7 @@ export async function POST(request: NextRequest) {
     const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${studentSectionNumber}`
     const currentPeriodAdjustment = adjustmentsByPeriod.get(currentPeriodKey) || 0
     
-    // Get pending requests for this student
+    // Get pending requests for this student (all periods — do not filter by current period)
     let pendingRequests = []
     try {
       const requestsResult = await sql`
@@ -602,7 +602,11 @@ export async function POST(request: NextRequest) {
           request_type,
           request_details,
           submitted_at,
-          status
+          status,
+          period,
+          section_number,
+          day_number,
+          override_date
         FROM student_requests
         WHERE student_id = ${normalizedId} AND status = 'pending'
         ORDER BY submitted_at DESC

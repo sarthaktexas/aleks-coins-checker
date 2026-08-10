@@ -90,8 +90,15 @@ export default function AdminRequestsPage() {
     }
   }
 
-  // Function to get day details for override requests
-  const getDayDetails = async (studentId: string, dayNumber: number) => {
+  // Function to get day details for override requests.
+  // Prefer matching by override date (and period when available) so requests
+  // from older periods aren't looked up against the latest period's day numbers.
+  const getDayDetails = async (
+    studentId: string,
+    dayNumber: number,
+    overrideDate?: string,
+    period?: string
+  ) => {
     try {
       const response = await fetch("/api/student", {
         method: "POST",
@@ -102,12 +109,37 @@ export default function AdminRequestsPage() {
       })
       const data = await response.json()
       
-      if (response.ok && data.student && data.student.dailyLog) {
-        const day = data.student.dailyLog.find((d: any) => d.day === dayNumber)
-        if (day) {
-          return {
-            minutes: day.minutes || 0,
-            topics: day.topics || 0
+      if (response.ok) {
+        const findDay = (dailyLog: any[]) => {
+          if (overrideDate) {
+            const byDate = dailyLog.find((d: any) => d.date === overrideDate)
+            if (byDate) return byDate
+          }
+          return dailyLog.find((d: any) => d.day === dayNumber)
+        }
+
+        // Search all periods first so historical-period requests resolve correctly
+        if (Array.isArray(data.periods)) {
+          for (const periodEntry of data.periods) {
+            if (period && periodEntry.period !== period) continue
+            if (!periodEntry.dailyLog) continue
+            const day = findDay(periodEntry.dailyLog)
+            if (day) {
+              return {
+                minutes: day.minutes || 0,
+                topics: day.topics || 0
+              }
+            }
+          }
+        }
+
+        if (data.student && data.student.dailyLog) {
+          const day = findDay(data.student.dailyLog)
+          if (day) {
+            return {
+              minutes: day.minutes || 0,
+              topics: day.topics || 0
+            }
           }
         }
       }
@@ -185,7 +217,12 @@ export default function AdminRequestsPage() {
     
     // Fetch day details for override requests
     if (request.request_type === 'override_request' && request.day_number) {
-      const details = await getDayDetails(request.student_id, request.day_number)
+      const details = await getDayDetails(
+        request.student_id,
+        request.day_number,
+        request.override_date,
+        request.period
+      )
       setDayDetails(prev => ({
         ...prev,
         [request.id]: details
@@ -556,7 +593,17 @@ export default function AdminRequestsPage() {
                             </p>
                             <p className="flex items-center gap-2">
                               <Calendar className="h-4 w-4" />
-                              Section {firstRequest.section_number} • {firstRequest.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              Section {firstRequest.section_number}
+                              {(() => {
+                                const periods = Array.from(new Set(studentRequests.map(r => r.period).filter(Boolean)))
+                                if (periods.length === 1) {
+                                  return ` • ${periods[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`
+                                }
+                                if (periods.length > 1) {
+                                  return ` • ${periods.length} periods`
+                                }
+                                return ''
+                              })()}
                             </p>
                           </div>
                         </div>
@@ -616,6 +663,13 @@ export default function AdminRequestsPage() {
                                     <Clock className="h-4 w-4" />
                                     Submitted: {formatDate(request.submitted_at)}
                                   </p>
+                                  {request.period && (
+                                    <p className="flex items-center gap-2">
+                                      <Calendar className="h-4 w-4" />
+                                      {request.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                      {request.section_number ? ` • Section ${request.section_number}` : ''}
+                                    </p>
+                                  )}
                                   
                                   {/* Day Details for Override Requests */}
                                   {request.request_type === 'override_request' && request.day_number && (

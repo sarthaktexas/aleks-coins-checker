@@ -210,6 +210,41 @@ export default function StudentLookup() {
 
   const handleSearch = () => performSearch()
 
+  // Soft refresh after submitting a request from a historical period calendar —
+  // updates pending/history without resetting the selected period tab.
+  const refreshStudentRequests = async () => {
+    const id = studentId.trim()
+    if (!id) return
+
+    try {
+      const response = await fetch("/api/student", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ studentId: id }),
+      })
+
+      if (!response.ok) return
+
+      const data = await response.json()
+      if (data.success) {
+        setPendingRequests(data.pendingRequests || [])
+        setApprovedRequests(data.approvedRequests || [])
+        setRejectedRequests(data.rejectedRequests || [])
+        setTotalCoinsAcrossPeriods(data.totalCoinsAcrossPeriods ?? data.student?.totalCoins ?? data.student?.coins ?? 0)
+        if (data.student) {
+          setStudentInfo(data.student)
+        }
+        if (data.periods) {
+          setStudentPeriods(data.periods)
+        }
+      }
+    } catch (err) {
+      console.error("Error refreshing student requests:", err)
+    }
+  }
+
   // Auto-load student when ?studentId=xxx is in URL (e.g. from admin view-data "Open in new tab")
   useEffect(() => {
     const idFromUrl = searchParams.get("studentId")
@@ -738,6 +773,12 @@ export default function StudentLookup() {
                                 <p className="text-sm text-amber-700 mb-2">{request.request_details}</p>
                                 <p className="text-xs text-amber-600">
                                   Submitted: {new Date(request.submitted_at).toLocaleDateString()}
+                                  {request.period && (
+                                    <span className="ml-2">
+                                      • {(request.period as string).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                                      {request.section_number ? ` • Section ${request.section_number}` : ''}
+                                    </span>
+                                  )}
                                   {request.request_type !== 'override_request' && (
                                     <span className="ml-2">
                                       • {request.request_type === 'assignment_replacement' ? '10' : '20'} coins deducted
@@ -1089,11 +1130,12 @@ export default function StudentLookup() {
                             periodDays={periodData.periodDays}
                             studentInfo={{
                               studentId: studentId,
-                              name: hidePII ? getFakeDataForStudent(studentId).name : periodData.name,
-                              email: hidePII ? getFakeDataForStudent(studentId).email : periodData.email,
+                              name: hidePII ? getFakeDataForStudent(studentId).name : (periodData.name || studentInfo.name),
+                              email: hidePII ? getFakeDataForStudent(studentId).email : (periodData.email || studentInfo.email),
                               period: periodData.period,
                               sectionNumber: periodData.section
                             }}
+                            onRequestSubmitted={refreshStudentRequests}
                           />
                         </div>
                       </div>
@@ -1116,6 +1158,7 @@ export default function StudentLookup() {
                   period: studentInfo.period,
                   sectionNumber: studentInfo.sectionNumber
                 }}
+                onRequestSubmitted={refreshStudentRequests}
               />
             )}
           </div>

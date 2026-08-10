@@ -1,8 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 
-// Helper function to load student data (similar to student route)
-async function loadStudentDataFromDB(studentId: string): Promise<{ dailyLog: any[] }> {
+// Helper: load minutes for a student day by preferring override_date + period
+async function getMinutesForRequest(
+  studentId: string,
+  dayNumber: number | null,
+  overrideDate: string | null,
+  period: string | null
+): Promise<number> {
   const result = await sql`
     SELECT 
       period,
@@ -14,11 +19,19 @@ async function loadStudentDataFromDB(studentId: string): Promise<{ dailyLog: any
   `
 
   if (result.rows.length === 0) {
-    return { dailyLog: [] }
+    return 0
   }
 
-  // Find the student in the most recent upload
-  for (const row of result.rows) {
+  const normalizedDate = (overrideDate || '').trim()
+  const normalizedId = studentId.toLowerCase().trim()
+
+  // Prefer rows matching the request's period, then fall back to any period
+  const matchingPeriodRows = period
+    ? result.rows.filter((row: any) => row.period === period)
+    : []
+  const rowsToSearch = matchingPeriodRows.length > 0 ? matchingPeriodRows : result.rows
+
+  for (const row of rowsToSearch) {
     let rowStudentData: any
     if (typeof row.data === "string") {
       rowStudentData = JSON.parse(row.data)
@@ -26,13 +39,25 @@ async function loadStudentDataFromDB(studentId: string): Promise<{ dailyLog: any
       rowStudentData = row.data
     }
 
-    const student = rowStudentData[studentId.toLowerCase().trim()]
-    if (student && student.dailyLog) {
-      return { dailyLog: student.dailyLog }
+    const student = rowStudentData[normalizedId]
+    if (!student?.dailyLog) continue
+
+    if (normalizedDate) {
+      const byDate = student.dailyLog.find((d: any) => d.date === normalizedDate)
+      if (byDate && byDate.minutes !== undefined) {
+        return byDate.minutes || 0
+      }
+    }
+
+    if (dayNumber != null) {
+      const byDay = student.dailyLog.find((d: any) => d.day === dayNumber)
+      if (byDay && byDay.minutes !== undefined) {
+        return byDay.minutes || 0
+      }
     }
   }
 
-  return { dailyLog: [] }
+  return 0
 }
 
 // POST - Magic approve day overrides with 31+ minutes
@@ -59,7 +84,6 @@ export async function POST(request: NextRequest) {
     const normalizedStudentId = studentId.toLowerCase().trim()
 
     // Check if overrides are enabled
-    let overridesEnabled = true
     try {
       const settingsResult = await sql`
         SELECT setting_value
@@ -85,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     // Get all pending day override requests for this student
     const pendingRequestsResult = await sql`
-      SELECT id, request_type, request_details, day_number, override_date
+      SELECT id, request_type, request_details, day_number, override_date, period
       FROM student_requests
       WHERE student_id = ${normalizedStudentId} 
         AND status = 'pending'
@@ -101,17 +125,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Load student data to get daily log with minutes
-    const { dailyLog } = await loadStudentDataFromDB(normalizedStudentId)
-
-    // Build a map of day_number to minutes
-    const dayMinutesMap = new Map<number, number>()
-    dailyLog.forEach((day: any) => {
-      if (day.day && day.minutes !== undefined) {
-        dayMinutesMap.set(day.day, day.minutes)
-      }
-    })
-
     const pendingRequests = pendingRequestsResult.rows
     let approvedCount = 0
     let skippedCount = 0
@@ -119,8 +132,12 @@ export async function POST(request: NextRequest) {
 
     // Process each pending day override request
     for (const requestData of pendingRequests) {
-      const dayNumber = requestData.day_number
-      const minutes = dayMinutesMap.get(dayNumber) || 0
+      const minutes = await getMinutesForRequest(
+        normalizedStudentId,
+        requestData.day_number,
+        requestData.override_date,
+        requestData.period
+      )
 
       // Extract the reason from request_details to check if it includes "review"
       let reasonText = ''
