@@ -1,9 +1,7 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { 
@@ -12,8 +10,6 @@ import {
   ChevronRight,
   Coins,
   EyeOff,
-  Lock,
-  AlertTriangle,
 } from "lucide-react"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
@@ -41,11 +37,9 @@ type LeaderboardStudent = {
   percentComplete: number
 }
 
+const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+
 export default function AdminLeaderboardPage() {
-  const [password, setPassword] = useState("")
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [authError, setAuthError] = useState("")
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false)
   const [uploadRecords, setUploadRecords] = useState<UploadRecord[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState("")
   const [selectedSection, setSelectedSection] = useState("")
@@ -58,72 +52,31 @@ export default function AdminLeaderboardPage() {
   const pageSize = 20
   const [hidePII, setHidePII] = useHidePII()
 
-  // Load saved password from localStorage on component mount
   useEffect(() => {
-    const savedPassword = localStorage.getItem('adminPassword')
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
+    loadUploadRecords()
   }, [])
 
-  // Save password to localStorage when it changes
   useEffect(() => {
-    if (password) {
-      localStorage.setItem('adminPassword', password)
-    }
-  }, [password])
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadUploadRecords()
-    }
-  }, [isAuthenticated])
-
-  useEffect(() => {
-    if (isAuthenticated && selectedPeriod && selectedSection) {
+    if (selectedPeriod && selectedSection) {
       loadLeaderboard(1)
     }
-  }, [selectedPeriod, selectedSection, isAuthenticated])
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoadingAuth(true)
-    setAuthError("")
-
-    try {
-      const response = await fetch("/api/admin/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        setIsAuthenticated(true)
-      } else {
-        setAuthError(result.error || "Authentication failed")
-      }
-    } catch (error) {
-      setAuthError("Network error. Please try again.")
-    } finally {
-      setIsLoadingAuth(false)
-    }
-  }
+  }, [selectedPeriod, selectedSection])
 
   const loadUploadRecords = async () => {
     setIsLoading(true)
+    setError("")
     try {
-      const response = await fetch("/api/admin/student-data")
+      const response = await fetch("/api/admin/student-data", { credentials: "same-origin" })
+      if (response.status === 401) {
+        setError(SESSION_EXPIRED)
+        return
+      }
       const result = await response.json()
 
       if (response.ok) {
         const records = result.uploadRecords || []
         setUploadRecords(records)
         
-        // Set default to first available period/section if none selected
         if (!selectedPeriod && records.length > 0) {
           const firstRecord = records[0]
           setSelectedPeriod(firstRecord.period)
@@ -140,7 +93,7 @@ export default function AdminLeaderboardPage() {
   }
 
   const loadLeaderboard = async (page: number) => {
-    if (!selectedPeriod || !selectedSection || !password) {
+    if (!selectedPeriod || !selectedSection) {
       return
     }
 
@@ -150,8 +103,14 @@ export default function AdminLeaderboardPage() {
 
     try {
       const response = await fetch(
-        `/api/admin/leaderboard?password=${encodeURIComponent(password)}&period=${encodeURIComponent(selectedPeriod)}&sectionNumber=${encodeURIComponent(selectedSection)}&page=${page}&pageSize=${pageSize}`
+        `/api/admin/leaderboard?period=${encodeURIComponent(selectedPeriod)}&sectionNumber=${encodeURIComponent(selectedSection)}&page=${page}&pageSize=${pageSize}`,
+        { credentials: "same-origin" },
       )
+      if (response.status === 401) {
+        setError(SESSION_EXPIRED)
+        setStudents([])
+        return
+      }
       const result = await response.json()
 
       if (response.ok && result.success) {
@@ -176,7 +135,6 @@ export default function AdminLeaderboardPage() {
     }
   }
 
-  // Get unique periods and sections from upload records
   const getAvailablePeriods = () => {
     const periods = new Set<string>()
     uploadRecords.forEach(record => {
@@ -200,45 +158,6 @@ export default function AdminLeaderboardPage() {
     if (rank === 2) return "bg-gray-400 hover:bg-gray-500"
     if (rank === 3) return "bg-amber-600 hover:bg-amber-700"
     return "bg-utsa-orange hover:bg-utsa-accessible"
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="mx-auto max-w-sm space-y-4 pt-8">
-        <div className="flex items-center gap-2">
-          <Lock className="h-5 w-5 text-utsa-orange" />
-          <h1 className="text-lg font-semibold text-utsa-midnight">Admin login</h1>
-        </div>
-        <form onSubmit={handleLogin} className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isLoadingAuth}
-              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
-              placeholder="Admin password"
-              required
-            />
-          </div>
-          {authError && (
-            <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
-              <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
-              <AlertDescription className="text-utsa-accessible">{authError}</AlertDescription>
-            </Alert>
-          )}
-          <Button
-            type="submit"
-            disabled={isLoadingAuth}
-            className="w-full bg-utsa-orange hover:bg-utsa-accessible"
-          >
-            {isLoadingAuth ? "Checking…" : "Continue"}
-          </Button>
-        </form>
-      </div>
-    )
   }
 
   return (
@@ -460,4 +379,3 @@ export default function AdminLeaderboardPage() {
     </div>
   )
 }
-

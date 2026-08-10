@@ -177,7 +177,6 @@ type FilterCriteria = {
 }
 
 export default function EmailStudentsPage() {
-  const [password, setPassword] = useState("")
   const [selectedPeriod, setSelectedPeriod] = useState("__ALL__")
   const [sectionNumber, setSectionNumber] = useState("")
   const [periods, setPeriods] = useState<Record<string, any>>({})
@@ -192,21 +191,6 @@ export default function EmailStudentsPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [copiedEmails, setCopiedEmails] = useState(false)
   const [hidePII, setHidePII] = useHidePII()
-
-  // Load saved password from localStorage
-  useEffect(() => {
-    const savedPassword = localStorage.getItem('adminPassword')
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
-  }, [])
-
-  // Save password to localStorage
-  useEffect(() => {
-    if (password) {
-      localStorage.setItem('adminPassword', password)
-    }
-  }, [password])
 
   // Load periods from database
   const loadPeriods = async () => {
