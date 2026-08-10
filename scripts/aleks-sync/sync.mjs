@@ -30,12 +30,6 @@ function requireEnv(name) {
   return value
 }
 
-/** YYYY-MM-DD → M/D/YYYY (ALEKS date fields) */
-function toAleksDate(iso) {
-  const [y, m, d] = iso.split("-").map(Number)
-  return `${m}/${d}/${y}`
-}
-
 /** Derive portal section number from an ALEKS class label. */
 function sectionFromClassName(aleksName, knownSections = []) {
   const name = String(aleksName || "").trim()
@@ -403,52 +397,59 @@ async function openTimeAndTopic(page) {
   await page.waitForTimeout(1500)
 }
 
+/** YYYY-MM-DD → parts for ALEKS month/day/year selects (month is 1-12). */
+function isoToAleksParts(iso) {
+  const [y, m, d] = iso.split("-").map(Number)
+  return { year: String(y), month: String(m), day: String(d) }
+}
+
+async function readReportDateRange(page) {
+  const body = await page.locator("body").innerText()
+  const m = body.match(/Report from\s+(\d{2}\/\d{2}\/\d{4})\s+to\s+(\d{2}\/\d{2}\/\d{4})/i)
+  if (!m) return null
+  const toIso = (mdy) => {
+    const [mm, dd, yyyy] = mdy.split("/")
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`
+  }
+  return { start: toIso(m[1]), end: toIso(m[2]), label: m[0] }
+}
+
 async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
-  await clickFirst(page, [
-    'text=/Change\\s*Date\\s*Range/i',
-    'a:has-text("Change Date Range")',
-    'button:has-text("Change Date Range")',
-  ])
-  await page.waitForTimeout(800)
+  await page.locator("a").filter({ hasText: /^Change Date Range$/i }).first().click()
+  await page.waitForSelector("#from_date_month", { state: "visible", timeout: 15000 })
+  await page.waitForTimeout(300)
 
-  const start = toAleksDate(startIso)
-  const end = toAleksDate(endIso)
+  const from = isoToAleksParts(startIso)
+  const to = isoToAleksParts(endIso)
 
-  try {
-    await fillFirst(page, [
-      'input[name*="start" i]',
-      'input[id*="start" i]',
-      'input[aria-label*="Start" i]',
-      'label:has-text("Start") + input',
-      'label:has-text("From") + input',
-    ], start)
-    await fillFirst(page, [
-      'input[name*="end" i]',
-      'input[id*="end" i]',
-      'input[aria-label*="End" i]',
-      'label:has-text("End") + input',
-      'label:has-text("To") + input',
-    ], end)
-  } catch {
-    const dateInputs = page.locator('input[type="text"], input:not([type])')
-    const count = await dateInputs.count()
-    if (count < 2) {
-      await screenshot(page, downloadDir, "date-range-inputs-missing")
-      throw new Error("Could not find start/end date inputs")
-    }
-    await dateInputs.nth(0).fill(start)
-    await dateInputs.nth(1).fill(end)
+  await page.locator("#from_date_month").selectOption(from.month)
+  await page.locator("#from_date_day").selectOption(from.day)
+  await page.locator("#from_date_year").selectOption(from.year)
+  await page.locator("#to_date_month").selectOption(to.month)
+  await page.locator("#to_date_day").selectOption(to.day)
+  await page.locator("#to_date_year").selectOption(to.year)
+
+  const hiddenFrom = await page.locator("#from_date").inputValue()
+  const hiddenTo = await page.locator("#to_date").inputValue()
+  console.log(`Date selects set → hidden fields ${hiddenFrom} → ${hiddenTo}`)
+  if (hiddenFrom !== startIso || hiddenTo !== endIso) {
+    await screenshot(page, downloadDir, "date-range-mismatch")
+    throw new Error(`Date fields did not stick (got ${hiddenFrom}→${hiddenTo}, wanted ${startIso}→${endIso})`)
   }
 
-  await clickFirst(page, [
-    'text=/^Compute$/i',
-    'button:has-text("Compute")',
-    'input[value="Compute"]',
-    'a:has-text("Compute")',
-  ])
+  await page.getByRole("button", { name: /^Compute$/i }).click()
+  await page.waitForLoadState("networkidle", { timeout: 120000 }).catch(() => {})
+  await page.waitForTimeout(3000)
+  await screenshot(page, downloadDir, "03-after-compute")
 
-  await page.waitForLoadState("networkidle", { timeout: 90000 }).catch(() => {})
-  await page.waitForTimeout(2000)
+  const applied = await readReportDateRange(page)
+  console.log(`Report range after compute: ${applied?.label || "(not found)"}`)
+  if (!applied || applied.start !== startIso || applied.end !== endIso) {
+    await screenshot(page, downloadDir, "date-range-not-applied")
+    throw new Error(
+      `Date range did not apply. Wanted ${startIso}→${endIso}, got ${applied?.start || "?"}→${applied?.end || "?"}`,
+    )
+  }
 }
 
 async function downloadExcel(page, downloadDir, sectionNumber) {
@@ -567,21 +568,41 @@ async function main() {
       console.log(`\n=== Class: ${cls.aleksName} → section ${cls.sectionNumber}${cls.archived ? " (archived)" : ""} ===`)
       try {
         await selectClass(page, cls, downloadDir)
+        await openTimeAndTopic(page)
 
-        if (!dateRangeSet) {
-          await openTimeAndTopic(page)
-          await screenshot(page, downloadDir, "02-time-and-topic")
-          console.log(`Setting date range ${config.reportStartDate} → ${config.reportEndDate}`)
+        const currentRange = await readReportDateRange(page)
+        const needsDateSet =
+          !dateRangeSet ||
+          !currentRange ||
+          currentRange.start !== config.reportStartDate ||
+          currentRange.end !== config.reportEndDate
+
+        if (needsDateSet) {
+          await screenshot(page, downloadDir, `02-time-and-topic-${cls.sectionNumber}`)
+          console.log(
+            `Setting date range ${config.reportStartDate} → ${config.reportEndDate}` +
+              (currentRange ? ` (was ${currentRange.start}→${currentRange.end})` : ""),
+          )
           await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
           dateRangeSet = true
         } else {
-          await openTimeAndTopic(page)
-          await page.waitForTimeout(1500)
+          console.log(`Date range already correct: ${currentRange.label}`)
+          await page.waitForTimeout(1000)
         }
 
         console.log("Downloading Excel…")
         const filePath = await downloadExcel(page, downloadDir, cls.sectionNumber)
         console.log(`Saved ${filePath}`)
+
+        // Sanity-check the workbook covers the requested start date
+        const bytes = await fs.readFile(filePath)
+        const asText = bytes.toString("utf8")
+        // xlsx is zip; also check via crude string for MM/DD in shared strings isn't reliable.
+        // Soft check: file should be larger than the empty 1-week default (~15KB).
+        if (bytes.length < 16000) {
+          console.warn(`Warning: ${path.basename(filePath)} is only ${bytes.length} bytes — date range may be wrong`)
+        }
+        void asText
 
         if (dryRun) {
           console.log("DRY_RUN=1 — skipping import")
@@ -604,6 +625,7 @@ async function main() {
             sectionNumber: cls.sectionNumber,
             ok: true,
             studentCount: imported.studentCount,
+            fileBytes: bytes.length,
           })
         }
       } catch (err) {

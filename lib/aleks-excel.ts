@@ -64,11 +64,111 @@ function timeToMinutes(time: unknown): number {
   return Number.parseInt(parts[0]) * 60 + Number.parseInt(parts[1])
 }
 
+function parseMdyToIso(text: string): string | null {
+  const m = String(text).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (!m) return null
+  return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`
+}
+
+/**
+ * Normalize ALEKS Time and Topic workbooks into the shape processExcelData expects:
+ * positional name/id/email + h:mm_N / added to pie_N columns.
+ *
+ * Supports:
+ * - Legacy exports already using h:mm_1 headers
+ * - Current ALEKS exports with a date row + repeating h:mm / added to pie / attempted groups
+ */
 export function parseAleksWorkbook(fileBuffer: ArrayBuffer) {
   const workbook = XLSX.read(fileBuffer, { type: "array" })
   const sheetName = workbook.SheetNames[0]
   const worksheet = workbook.Sheets[sheetName]
-  return XLSX.utils.sheet_to_json(worksheet, { range: 3 }) as Record<string, unknown>[]
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: null,
+    raw: false,
+  }) as unknown[][]
+
+  if (!rows.length) return [] as Record<string, unknown>[]
+
+  // Legacy path: headers already include h:mm_N
+  const legacy = XLSX.utils.sheet_to_json(worksheet, { range: 3 }) as Record<string, unknown>[]
+  if (legacy.length > 0) {
+    const sampleKeys = Object.keys(legacy[0] || {})
+    if (sampleKeys.some((k) => /^h:mm_\d+$/i.test(k))) {
+      return legacy
+    }
+  }
+
+  // Modern path: find the subheader row containing bare "h:mm"
+  let subHeaderIdx = -1
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const row = rows[i] || []
+    const cells = row.map((c) => String(c ?? "").trim().toLowerCase())
+    if (cells.includes("h:mm") && cells.includes("added to pie")) {
+      subHeaderIdx = i
+      break
+    }
+  }
+  if (subHeaderIdx < 1) {
+    // Fall back to legacy parse even without numbered columns
+    return legacy
+  }
+
+  const dateRow = rows[subHeaderIdx - 1] || []
+  const subHeader = rows[subHeaderIdx] || []
+
+  // Build day column map: first dated h:mm group → day 1, etc.
+  const dayCols: Array<{ day: number; timeIdx: number; topicIdx: number; date: string | null }> = []
+  let dayNum = 0
+  for (let col = 0; col < subHeader.length; col++) {
+    const label = String(subHeader[col] ?? "")
+      .trim()
+      .toLowerCase()
+    if (label !== "h:mm") continue
+    const dateText = String(dateRow[col] ?? dateRow[col - 0] ?? "")
+    const iso = parseMdyToIso(dateText)
+    // Skip the "Total Time (for date range)" group which has h:mm but no date above it
+    if (!iso) continue
+    dayNum += 1
+    const topicIdx = col + 1
+    dayCols.push({ day: dayNum, timeIdx: col, topicIdx, date: iso })
+  }
+
+  if (dayCols.length === 0) {
+    console.warn("ALEKS workbook: no dated h:mm columns found; falling back to legacy parse")
+    return legacy
+  }
+
+  console.log(
+    `ALEKS workbook: normalized ${dayCols.length} day columns (${dayCols[0].date} → ${dayCols[dayCols.length - 1].date})`,
+  )
+
+  const dataRows = rows.slice(subHeaderIdx + 1)
+  const out: Record<string, unknown>[] = []
+
+  for (const row of dataRows) {
+    if (!row || !Array.isArray(row)) continue
+    const name = String(row[0] ?? "").trim()
+    const studentId = String(row[2] ?? "").trim()
+    if (!name || !studentId) continue
+
+    const record: Record<string, unknown> = {
+      // Keep positional keys compatible with processExcelData's Object.keys order
+      name,
+      login: String(row[1] ?? "").trim(),
+      studentId,
+      email: String(row[3] ?? "").trim(),
+    }
+
+    for (const day of dayCols) {
+      record[`h:mm_${day.day}`] = row[day.timeIdx] ?? ""
+      record[`added to pie_${day.day}`] = row[day.topicIdx] ?? ""
+    }
+
+    out.push(record)
+  }
+
+  return out
 }
 
 export async function processExcelData(rawData: Record<string, unknown>[], examPeriod: string) {
