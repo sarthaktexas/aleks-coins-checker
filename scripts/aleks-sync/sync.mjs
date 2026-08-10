@@ -461,47 +461,62 @@ async function readReportDateRange(page) {
 
 /** Pick a <select> option by numeric value (handles "2" vs "02"). */
 async function selectNumericOption(page, selectId, wanted) {
-  const result = await page.evaluate(
-    ({ selectId, wanted }) => {
-      const el = document.getElementById(selectId)
-      if (!el) return { ok: false, error: `missing #${selectId}` }
-      const opts = [...el.options].map((o) => ({
-        value: o.value,
-        text: (o.textContent || "").trim(),
-      }))
-      const n = Number(wanted)
-      const match =
-        opts.find((o) => String(Number(o.value)) === String(n) && o.value !== "") ||
-        opts.find((o) => o.value === String(wanted)) ||
-        opts.find((o) => o.value === String(wanted).padStart(2, "0")) ||
-        opts.find((o) => o.text === String(wanted)) ||
-        opts.find((o) => new RegExp(`^0*${n}$`).test(o.value))
-      if (!match) {
-        return {
-          ok: false,
-          error: `no option ${wanted} in #${selectId}`,
-          opts,
-        }
-      }
-      el.value = match.value
-      el.dispatchEvent(new Event("input", { bubbles: true }))
-      el.dispatchEvent(new Event("change", { bubbles: true }))
-      // Some ALEKS scripts listen for jQuery change
-      if (window.jQuery) {
-        try {
-          window.jQuery(el).trigger("change")
-        } catch {
-          /* ignore */
-        }
-      }
-      return { ok: true, value: match.value, opts }
-    },
-    { selectId, wanted: String(wanted) },
+  const locator = page.locator(`#${selectId}`)
+  await locator.waitFor({ state: "attached", timeout: 10000 })
+  const options = await locator.evaluate((el) =>
+    [...el.options].map((o) => ({ value: o.value, text: (o.textContent || "").trim() })),
   )
-  if (!result.ok) {
-    console.log(`selectNumericOption failed: ${result.error}`, result.opts || "")
-    throw new Error(result.error || `Failed to set #${selectId}`)
+  const n = Number(wanted)
+  const candidates = []
+  for (const o of options) {
+    if (o.value !== "" && Number(o.value) === n) candidates.push(o.value)
   }
+  candidates.push(String(wanted), String(wanted).padStart(2, "0"))
+  // Month name fallback (e.g. "February")
+  const monthNames = [
+    "",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ]
+  if (n >= 1 && n <= 12) {
+    const name = monthNames[n]
+    const byName = options.find((o) => o.text.toLowerCase().startsWith(name.slice(0, 3)))
+    if (byName) candidates.push(byName.value)
+  }
+
+  const tried = new Set()
+  for (const value of candidates) {
+    if (value == null || tried.has(value)) continue
+    tried.add(value)
+    try {
+      await locator.selectOption(value)
+    } catch {
+      try {
+        await locator.selectOption({ label: value })
+      } catch {
+        continue
+      }
+    }
+    const current = await locator.inputValue()
+    if (Number(current) === n || current === value) return current
+    // Label-selected months may store non-numeric values
+    if (monthNames[n] && String(current).toLowerCase().startsWith(monthNames[n].slice(0, 3))) {
+      return current
+    }
+  }
+  throw new Error(
+    `Could not set #${selectId} to ${wanted}. Options: ${options.map((o) => o.value || o.text).join(",")}`,
+  )
 }
 
 async function setAleksDateParts(page, prefix, iso) {
@@ -511,26 +526,7 @@ async function setAleksDateParts(page, prefix, iso) {
   await selectNumericOption(page, `${prefix}_date_year`, parts.year)
   await selectNumericOption(page, `${prefix}_date_month`, parts.month)
   await selectNumericOption(page, `${prefix}_date_day`, parts.day)
-  await page.waitForTimeout(150)
-
-  // Force hidden YYYY-MM-DD fields that ALEKS submits / mirrors.
-  await page.evaluate(
-    ({ prefix, iso }) => {
-      const hidden = document.getElementById(`${prefix}_date`)
-      if (!hidden) return
-      hidden.value = iso
-      hidden.dispatchEvent(new Event("input", { bubbles: true }))
-      hidden.dispatchEvent(new Event("change", { bubbles: true }))
-      if (window.jQuery) {
-        try {
-          window.jQuery(hidden).trigger("change")
-        } catch {
-          /* ignore */
-        }
-      }
-    },
-    { prefix, iso },
-  )
+  await page.waitForTimeout(200)
 }
 
 async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
@@ -540,31 +536,26 @@ async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
 
   await setAleksDateParts(page, "from", startIso)
   await setAleksDateParts(page, "to", endIso)
-  await page.waitForTimeout(200)
+  await page.waitForTimeout(300)
 
   let hiddenFrom = await page.locator("#from_date").inputValue()
   let hiddenTo = await page.locator("#to_date").inputValue()
   console.log(`Date selects set → hidden fields ${hiddenFrom} → ${hiddenTo}`)
 
   if (hiddenFrom !== startIso || hiddenTo !== endIso) {
-    // One more hard set of hidden fields, then re-read.
+    // Soft-set hidden values only (no change events — ALEKS date_tool crashes on synthetic events).
     await page.evaluate(
       ({ startIso, endIso }) => {
-        for (const [id, iso] of [
-          ["from_date", startIso],
-          ["to_date", endIso],
-        ]) {
-          const el = document.getElementById(id)
-          if (!el) continue
-          el.value = iso
-          el.dispatchEvent(new Event("change", { bubbles: true }))
-        }
+        const from = document.getElementById("from_date")
+        const to = document.getElementById("to_date")
+        if (from) from.value = startIso
+        if (to) to.value = endIso
       },
       { startIso, endIso },
     )
     hiddenFrom = await page.locator("#from_date").inputValue()
     hiddenTo = await page.locator("#to_date").inputValue()
-    console.log(`After hidden force → ${hiddenFrom} → ${hiddenTo}`)
+    console.log(`After hidden write → ${hiddenFrom} → ${hiddenTo}`)
   }
 
   if (hiddenFrom !== startIso || hiddenTo !== endIso) {
@@ -574,7 +565,7 @@ async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
         if (!el) return null
         return {
           value: el.value,
-          options: [...el.options].map((o) => o.value),
+          options: [...el.options].map((o) => `${o.value}:${(o.textContent || "").trim()}`),
         }
       }
       return {
