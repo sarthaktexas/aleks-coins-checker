@@ -461,32 +461,12 @@ Total: ${extraCreditStudents.length} students`
         </div>
         <div className="p-4">
           {isLoadingUploads ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="rounded-md border border-utsa-border p-4 space-y-3 animate-pulse">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="h-5 w-24 rounded bg-utsa-surface" />
-                      <div className="h-5 w-20 rounded bg-utsa-surface" />
-                    </div>
-                    <div className="h-4 w-16 rounded bg-utsa-surface" />
-                  </div>
-                  <div className="h-4 w-28 rounded bg-utsa-surface" />
-                  <div className="flex gap-2">
-                    <div className="h-8 flex-1 rounded bg-utsa-surface" />
-                    <div className="h-8 w-10 rounded bg-utsa-surface" />
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center gap-2 py-3 text-sm text-utsa-muted">
+              <div className="w-3.5 h-3.5 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
+              Loading data sets…
             </div>
           ) : uploadRecords.length === 0 ? (
-            <div className="text-center py-10">
-              <Database className="h-8 w-8 text-utsa-muted/40 mx-auto mb-3" />
-              <p className="text-sm text-utsa-muted">No data sets uploaded yet.</p>
-              <p className="text-xs text-utsa-muted mt-1">
-                Upload student data from the Upload page to get started.
-              </p>
-            </div>
+            <p className="text-sm text-utsa-muted py-3">No data sets uploaded yet.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {uploadRecords.map((record) => (
@@ -624,48 +604,9 @@ Total: ${extraCreditStudents.length} students`
           </div>
           <div className="p-4">
             {isLoadingStudents ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-4 w-4 rounded bg-utsa-surface animate-pulse" />
-                  <div className="h-9 max-w-md flex-1 rounded-md bg-utsa-surface animate-pulse" />
-                </div>
-                <div className="flex items-center gap-4 p-3 bg-utsa-surface border border-utsa-border rounded-md">
-                  <div className="h-4 w-6 rounded bg-utsa-border/60 animate-pulse" />
-                  <div className="h-4 flex-1 rounded bg-utsa-border/60 animate-pulse" />
-                  <div className="h-4 w-16 rounded bg-utsa-border/60 animate-pulse" />
-                  <div className="h-4 w-12 rounded bg-utsa-border/60 animate-pulse" />
-                  <div className="h-4 w-20 rounded bg-utsa-border/60 animate-pulse" />
-                </div>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-4 p-4 bg-white border border-utsa-border rounded-md animate-pulse"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <div className="h-4 w-4 rounded bg-utsa-surface flex-shrink-0" />
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="h-4 w-36 rounded bg-utsa-surface" />
-                      <div className="h-3 w-24 rounded bg-utsa-surface" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-full bg-utsa-surface" />
-                      <div className="h-6 w-8 rounded bg-utsa-surface" />
-                    </div>
-                    <div className="h-8 w-12 rounded bg-utsa-surface" />
-                    <div className="h-6 w-20 rounded-full bg-utsa-surface" />
-                    <div className="hidden sm:block space-y-1.5 min-w-[5rem]">
-                      <div className="h-3 w-16 rounded bg-utsa-surface mx-auto" />
-                      <div className="h-3 w-12 rounded bg-utsa-surface mx-auto" />
-                    </div>
-                    <div className="hidden lg:block flex-1">
-                      <div className="h-4 w-40 rounded bg-utsa-surface" />
-                    </div>
-                  </div>
-                ))}
-                <div className="flex items-center justify-center gap-2 pt-4 text-utsa-muted">
-                  <div className="w-4 h-4 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm">Loading student data…</p>
-                </div>
+              <div className="flex items-center gap-2 py-3 text-sm text-utsa-muted">
+                <div className="w-3.5 h-3.5 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
+                Loading student data…
               </div>
             ) : (
               <>
