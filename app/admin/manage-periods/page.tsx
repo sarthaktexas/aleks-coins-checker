@@ -500,9 +500,9 @@ export default function ManagePeriodsPage() {
                   <>
                     <Button
                       size="sm"
+                      variant="success"
                       onClick={() => handleSavePeriod(periodKey)}
                       disabled={isLoading}
-                      className="btn-tactile-success text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {isLoading ? "Saving..." : "Save"}
@@ -510,7 +510,6 @@ export default function ManagePeriodsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-utsa-border"
                       onClick={() => {
                         setEditingPeriod(null)
                         setEditingPeriodNewKey("")

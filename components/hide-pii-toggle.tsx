@@ -2,6 +2,7 @@
 
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Switch } from "@/components/ui/switch"
 import { EyeOff } from "lucide-react"
 
 type HidePIIToggleProps = {
@@ -13,17 +14,15 @@ type HidePIIToggleProps = {
 export function HidePIIToggle({ hidePII, onToggle, showAlert = true }: HidePIIToggleProps) {
   return (
     <>
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50">
-        <EyeOff className="h-4 w-4 text-slate-500" />
-        <Label htmlFor="hide-pii" className="text-sm font-medium text-slate-700 cursor-pointer">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-[rgba(3,32,68,0.14)] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+        <EyeOff className="h-3.5 w-3.5 text-utsa-muted" />
+        <Label htmlFor="hide-pii" className="text-xs font-semibold text-utsa-midnight cursor-pointer">
           Hide PII
         </Label>
-        <input
+        <Switch
           id="hide-pii"
-          type="checkbox"
           checked={hidePII}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          onCheckedChange={onToggle}
         />
       </div>
       {showAlert && hidePII && (

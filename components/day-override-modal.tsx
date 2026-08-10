@@ -169,7 +169,7 @@ export function DayOverrideModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="p-1 bg-blue-100 rounded">
-              <Shield className="h-4 w-4 text-blue-600" />
+              <Shield className="h-4 w-4 text-utsa-orange" />
             </div>
             Request Day Override
           </DialogTitle>
@@ -261,7 +261,6 @@ export function DayOverrideModal({
             <Button
               type="submit"
               disabled={isLoading || !reason.trim() || (dayInfo.isLatestDay && !dayInfo.isLastDay) || !overridesEnabled || isCheckingSettings}
-              className="bg-blue-600 hover:bg-blue-700"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">

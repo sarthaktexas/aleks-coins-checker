@@ -636,7 +636,6 @@ export default function EmailStudentsPage() {
                 <Button
                   variant={filterCriteria.hasProgress ? "default" : "outline"}
                   size="sm"
-                  className={filterCriteria.hasProgress ? "btn-tactile-orange text-white" : "border-utsa-border"}
                   onClick={() => setFilterCriteria(prev => ({ 
                     ...prev, 
                     hasProgress: !prev.hasProgress,
@@ -648,7 +647,6 @@ export default function EmailStudentsPage() {
                 <Button
                   variant={filterCriteria.noProgress ? "default" : "outline"}
                   size="sm"
-                  className={filterCriteria.noProgress ? "btn-tactile-orange text-white" : "border-utsa-border"}
                   onClick={() => setFilterCriteria(prev => ({ 
                     ...prev, 
                     noProgress: !prev.noProgress,

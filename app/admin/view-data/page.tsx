@@ -321,11 +321,11 @@ Total: ${extraCreditStudents.length} students`
 
   const getSortIcon = (field: keyof StudentData | "studentId" | "status") => {
     if (sortField !== field) {
-      return <ArrowUpDown className="h-4 w-4 text-utsa-muted" />
+      return <ArrowUpDown className="h-3 w-3 text-utsa-muted" />
     }
     return sortDirection === "asc" ? 
-      <ArrowUp className="h-4 w-4 text-utsa-midnight" /> : 
-      <ArrowDown className="h-4 w-4 text-utsa-midnight" />
+      <ArrowUp className="h-3 w-3 text-utsa-midnight" /> : 
+      <ArrowDown className="h-3 w-3 text-utsa-midnight" />
   }
 
   const getStatusValue = (percentComplete: number) => {
@@ -555,7 +555,7 @@ Total: ${extraCreditStudents.length} students`
                     <Button
                       onClick={() => setShowExportDropdown(!showExportDropdown)}
                       disabled={isExporting || hideStudentData}
-                      className="btn-tactile-success text-white text-white"
+                      variant="success"
                     >
                       {isExporting ? (
                         <div className="flex items-center gap-2">
@@ -573,20 +573,20 @@ Total: ${extraCreditStudents.length} students`
                       )}
                     </Button>
                     {showExportDropdown && !isExporting && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-utsa-border z-50">
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded border border-[rgba(3,32,68,0.12)] shadow-[0_4px_16px_rgba(3,32,68,0.12)] z-50 overflow-hidden">
                         <div className="py-1">
                           <button
                             onClick={exportExtraCreditToCSV}
-                            className="w-full text-left px-4 py-2 text-sm text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
+                            className="w-full text-left px-3 py-1.5 text-xs font-medium text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-3.5 w-3.5 text-utsa-muted" />
                             Export as CSV
                           </button>
                           <button
                             onClick={copyExtraCreditToClipboard}
-                            className="w-full text-left px-4 py-2 text-sm text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
+                            className="w-full text-left px-3 py-1.5 text-xs font-medium text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
                           >
-                            <Copy className="h-4 w-4" />
+                            <Copy className="h-3.5 w-3.5 text-utsa-muted" />
                             Copy to Clipboard
                           </button>
                         </div>
@@ -595,7 +595,7 @@ Total: ${extraCreditStudents.length} students`
                   </div>
                 )}
                 <HidePIIToggle hidePII={hideStudentData} onToggle={setHideStudentData} showAlert={false} />
-                <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData} className="border-utsa-border">
+                <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData}>
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
@@ -610,234 +610,166 @@ Total: ${extraCreditStudents.length} students`
               </div>
             ) : (
               <>
-            <div className="mb-4 flex flex-col gap-2">
+            <div className="mb-3 flex flex-col gap-2">
               {hideStudentData && (
-                <Alert className="border-amber-200 bg-amber-50">
+                <Alert className="border-amber-200 bg-amber-50 py-2">
                   <EyeOff className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800">
-                    PII is hidden. Names, emails, and IDs are replaced with generated placeholder data for privacy (e.g., when presenting on screen).
+                  <AlertDescription className="text-amber-800 text-xs">
+                    PII is hidden. Names, emails, and IDs are replaced with placeholders.
                   </AlertDescription>
                 </Alert>
               )}
               <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-utsa-muted" />
+                <Search className="h-3.5 w-3.5 text-utsa-muted" />
                 <Input
-                  placeholder={hideStudentData ? "Search by placeholder name, email, or ID..." : "Search by name, email, or student ID..."}
+                  placeholder={hideStudentData ? "Search placeholders…" : "Search name, email, or ID…"}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="max-w-md border-utsa-border focus-visible:ring-utsa-orange"
+                  className="h-8 max-w-sm text-sm border-utsa-border focus-visible:ring-utsa-orange"
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-4 p-3 bg-utsa-surface border border-utsa-border rounded-md text-sm font-medium text-utsa-muted">
-                <div className="flex-shrink-0 w-6" />
-                <button 
+            {filteredAndSortedStudents.length === 0 ? (
+              <div className="text-center py-6">
+                {Object.keys(studentData).length === 0 ? (
+                  <p className="text-sm text-utsa-muted">No student data found for this period.</p>
+                ) : (
+                  <p className="text-sm text-utsa-muted">No students match your search.</p>
+                )}
+              </div>
+            ) : (
+            <div className="rounded-md border border-utsa-border overflow-hidden">
+              <div className="flex items-center gap-3 px-3 py-2 bg-utsa-surface text-xs font-medium text-utsa-muted border-b border-utsa-border">
+                <div className="w-4 flex-shrink-0" />
+                <button
                   onClick={() => handleSort("name")}
-                  className="flex-1 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
+                  className="flex-1 min-w-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors text-left"
                 >
                   Name {getSortIcon("name")}
                 </button>
-                <button 
+                <button
                   onClick={() => handleSort("coins")}
-                  className="flex items-center gap-2 hover:text-utsa-midnight transition-colors"
+                  className="w-14 flex-shrink-0 flex items-center justify-end gap-1 hover:text-utsa-midnight transition-colors"
                 >
                   Coins {getSortIcon("coins")}
                 </button>
-                <button 
+                <button
                   onClick={() => handleSort("percentComplete")}
-                  className="w-12 text-center flex items-center justify-center gap-1 hover:text-utsa-midnight transition-colors"
+                  className="w-28 flex-shrink-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
                 >
                   Progress {getSortIcon("percentComplete")}
                 </button>
-                <button 
+                <button
                   onClick={() => handleSort("status")}
-                  className="min-w-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
+                  className="w-20 flex-shrink-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
                 >
                   Status {getSortIcon("status")}
                 </button>
-                <button 
-                  onClick={() => handleSort("percentComplete")}
-                  className="min-w-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
-                >
-                  Extra Credit {getSortIcon("percentComplete")}
-                </button>
-                <button 
+                <button
                   onClick={() => handleSort("email")}
-                  className="hidden lg:flex min-w-0 flex-1 items-center gap-1 hover:text-utsa-midnight transition-colors"
+                  className="hidden md:flex flex-1 min-w-0 items-center gap-1 hover:text-utsa-midnight transition-colors text-left"
                 >
                   Email {getSortIcon("email")}
                 </button>
               </div>
-              
-              {filteredAndSortedStudents.map(([studentId, data]) => {
-                const display = getDisplayData(studentId, data)
-                const isExpanded = expandedStudentId === studentId
-                const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
-                const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
-                const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
-                return (
-                <div key={studentId} className="bg-white border border-utsa-border rounded-md overflow-hidden">
-                  <div
-                    className="flex items-center gap-4 p-4 hover:bg-utsa-surface/50 transition-colors cursor-pointer"
-                    onClick={() => setExpandedStudentId(isExpanded ? null : studentId)}
-                  >
-                    <div className="flex-shrink-0 w-6 flex items-center justify-center text-utsa-muted">
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-utsa-midnight truncate">{display.name}</p>
-                      <p className="text-xs text-utsa-muted font-mono">{display.studentId}</p>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <div className="text-2xl">🪙</div>
-                      <span className="text-xl font-bold text-amber-600">{data.coins}</span>
-                    </div>
+              <div className="divide-y divide-utsa-border">
+                {filteredAndSortedStudents.map(([studentId, data]) => {
+                  const display = getDisplayData(studentId, data)
+                  const isExpanded = expandedStudentId === studentId
+                  const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
+                  const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
+                  const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
+                  const avgMins = data.dailyLog && data.dailyLog.length > 0
+                    ? Math.round(
+                        data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
+                        (data.dailyLog.filter((d: any) => d.minutes > 0).length || 1)
+                      )
+                    : null
+                  const statusLabel = data.percentComplete >= 90 ? "Extra credit" : data.percentComplete >= 70 ? "Good" : "Needs work"
+                  const statusClass = data.percentComplete >= 90
+                    ? "text-emerald-700"
+                    : data.percentComplete >= 70
+                    ? "text-amber-700"
+                    : "text-rose-700"
 
-                    <div className="relative w-12 h-8">
-                      <svg className="w-12 h-8 transform -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          className="text-utsa-border"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          fill="none"
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                        <path
-                          className={getProgressColor(data.percentComplete)}
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          fill="none"
-                          strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
-                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xs font-bold text-utsa-midnight">{data.percentComplete.toFixed(1)}%</span>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0">
-                      <Badge 
-                        className={
-                          data.percentComplete >= 90 
-                            ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
-                            : data.percentComplete >= 70 
-                            ? "bg-amber-500 hover:bg-amber-600 text-white"
-                            : "bg-rose-500 hover:bg-rose-600 text-white"
-                        }
+                  return (
+                    <div key={studentId}>
+                      <div
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-utsa-surface/60 transition-colors cursor-pointer"
+                        onClick={() => setExpandedStudentId(isExpanded ? null : studentId)}
                       >
-                        {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
-                         data.percentComplete >= 70 ? "Good" : "Needs Work"}
-                      </Badge>
-                    </div>
-
-                    <div className="min-w-0 text-center">
-                      {data.percentComplete >= 90 ? (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
-                          <div className="text-xs text-emerald-600">
-                            {data.percentComplete.toFixed(1)}%
+                        <div className="w-4 flex-shrink-0 text-utsa-muted">
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-utsa-midnight truncate leading-tight">{display.name}</p>
+                          <p className="text-[11px] text-utsa-muted font-mono truncate">{display.studentId}</p>
+                        </div>
+                        <div className="w-14 flex-shrink-0 text-right text-sm font-semibold text-amber-600 tabular-nums">
+                          {data.coins}
+                        </div>
+                        <div className="w-28 flex-shrink-0 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-utsa-border rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${getProgressColor(data.percentComplete)}`}
+                              style={{ width: `${Math.min(data.percentComplete, 100)}%` }}
+                            />
                           </div>
+                          <span className="text-xs font-medium text-utsa-midnight tabular-nums w-9 text-right">
+                            {data.percentComplete.toFixed(0)}%
+                          </span>
                         </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-utsa-muted">Not Qualified</div>
-                          <div className="text-xs text-utsa-muted">
-                            {data.percentComplete.toFixed(1)}% • Need 90%
+                        <div className={`w-20 flex-shrink-0 text-xs font-medium ${statusClass}`}>
+                          {statusLabel}
+                        </div>
+                        <div className="hidden md:block flex-1 min-w-0">
+                          <p className="text-xs text-utsa-muted truncate">{display.email}</p>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-utsa-border bg-utsa-surface/50 px-3 py-3 space-y-3">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-utsa-muted">
+                            <span><span className="font-medium text-utsa-midnight">{data.coins}</span> coins</span>
+                            <span>
+                              <span className="font-medium text-utsa-midnight">
+                                {qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""}
+                              </span>
+                              {" "}/ {workingDays.length} days
+                            </span>
+                            {avgMins !== null && (
+                              <span><span className="font-medium text-utsa-midnight">{avgMins}</span> avg min/day</span>
+                            )}
+                            <a
+                              href={`/?studentId=${encodeURIComponent(studentId)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-utsa-orange hover:underline ml-auto"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Student view
+                            </a>
                           </div>
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="hidden lg:block min-w-0 flex-1">
-                      <p className="text-sm text-utsa-muted truncate">{display.email}</p>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="border-t border-utsa-border bg-utsa-surface px-4 py-4 space-y-4">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="bg-white border border-utsa-border rounded-md p-3">
-                          <div className="text-xs text-utsa-muted font-medium">Coins</div>
-                          <p className="text-xl font-bold text-amber-600">{data.coins}</p>
-                        </div>
-                        <div className="bg-white border border-utsa-border rounded-md p-3">
-                          <div className="text-xs text-utsa-muted font-medium">Qualified days</div>
-                          <p className="text-lg font-bold text-utsa-midnight">{qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""} / {workingDays.length}</p>
-                        </div>
-                        <div className="bg-white border border-utsa-border rounded-md p-3">
-                          <div className="text-xs text-utsa-muted font-medium">Progress</div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 h-2 bg-utsa-border rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${getProgressColor(data.percentComplete)}`}
-                                style={{ width: `${Math.min(data.percentComplete, 100)}%` }}
+                          {data.dailyLog && data.dailyLog.length > 0 && (
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <CondensedCalendarView
+                                dailyLog={data.dailyLog}
+                                totalDays={data.totalDays}
+                                periodDays={data.periodDays}
                               />
                             </div>
-                            <span className="text-sm font-bold text-utsa-midnight">{data.percentComplete.toFixed(1)}%</span>
-                          </div>
-                        </div>
-                        {data.dailyLog && data.dailyLog.length > 0 && (
-                          <div className="bg-white border border-utsa-border rounded-md p-3">
-                            <div className="text-xs text-utsa-muted font-medium">Avg. min/day</div>
-                            <p className="text-lg font-bold text-utsa-midnight">
-                              {Math.round(
-                                data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
-                                (data.dailyLog.filter((d: any) => d.minutes > 0).length || 1)
-                              )} min
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      {data.dailyLog && data.dailyLog.length > 0 && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <CondensedCalendarView
-                            dailyLog={data.dailyLog}
-                            totalDays={data.totalDays}
-                            periodDays={data.periodDays}
-                          />
+                          )}
                         </div>
                       )}
-
-                      <div className="flex justify-end pt-2">
-                        <a
-                          href={`/?studentId=${encodeURIComponent(studentId)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-md transition-colors"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          Open student view in new tab
-                        </a>
-                      </div>
                     </div>
-                  )}
-                </div>
-              )})}
-            </div>
-
-            {filteredAndSortedStudents.length === 0 && (
-              <div className="text-center py-8">
-                {Object.keys(studentData).length === 0 ? (
-                  <div>
-                    <p className="text-utsa-muted mb-2">No student data found for this period.</p>
-                    <p className="text-sm text-utsa-muted">
-                      Upload student data using the &quot;Upload Student Data&quot; tool first.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-utsa-muted">No students found matching your search criteria.</p>
-                )}
+                  )
+                })}
               </div>
+            </div>
             )}
               </>
             )}

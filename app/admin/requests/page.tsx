@@ -323,11 +323,11 @@ export default function AdminRequestsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Pending</Badge>
+        return <Badge variant="warning">Pending</Badge>
       case 'approved':
-        return <Badge className="btn-tactile-success text-white">Approved</Badge>
+        return <Badge variant="success">Approved</Badge>
       case 'rejected':
-        return <Badge className="bg-red-500 hover:bg-red-600">Rejected</Badge>
+        return <Badge variant="destructive">Rejected</Badge>
       default:
         return <Badge>{status}</Badge>
     }
@@ -540,7 +540,6 @@ export default function AdminRequestsPage() {
                             size="sm"
                             onClick={() => handleMagicApprove(studentId)}
                             disabled={magicApproving === studentId || fastApproving === studentId}
-                            className=""
                           >
                             {magicApproving === studentId ? (
                               "Approving..."
@@ -552,9 +551,9 @@ export default function AdminRequestsPage() {
                         {pendingCount > 1 && (
                           <Button
                             size="sm"
+                            variant="success"
                             onClick={() => handleFastApproveAll(studentId)}
                             disabled={fastApproving === studentId || magicApproving === studentId}
-                            className="btn-tactile-success text-white"
                           >
                             {fastApproving === studentId ? (
                               "Approving..."
@@ -622,15 +621,14 @@ export default function AdminRequestsPage() {
                                 onClick={cancelEditing}
                                 variant="outline"
                                 disabled={isUpdating}
-                                className="border-utsa-border"
                               >
                                 Cancel
                               </Button>
                               <Button
                                 size="sm"
+                                variant="success"
                                 onClick={() => handleUpdateRequest(request.id)}
                                 disabled={isUpdating}
-                                className="btn-tactile-success text-white"
                               >
                                 {isUpdating ? "Saving..." : "Save"}
                               </Button>

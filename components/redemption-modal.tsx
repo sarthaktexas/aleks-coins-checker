@@ -170,21 +170,21 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Cost Badge */}
           <div className="flex justify-center">
-            <Badge className="btn-tactile-success text-white text-white px-4 py-2 text-sm font-medium">
+            <Badge variant="success" className="px-3 py-1.5 text-sm">
               Cost: {info.cost} coins
             </Badge>
           </div>
 
           {/* Student Info */}
-          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="bg-utsa-surface rounded-md border border-[rgba(3,32,68,0.1)] p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-utsa-muted">
               <User className="h-4 w-4" />
-              <span className="font-medium">Student:</span>
+              <span className="font-medium text-utsa-midnight">Student:</span>
               <span>{studentName}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-utsa-muted">
               <Mail className="h-4 w-4" />
-              <span className="font-medium">Email:</span>
+              <span className="font-medium text-utsa-midnight">Email:</span>
               <span>{studentEmail}</span>
             </div>
           </div>
@@ -241,7 +241,7 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !redemptionRequestsEnabled || isCheckingSettings} className="btn-tactile-success text-white">
+            <Button type="submit" variant="success" disabled={isSubmitting || !redemptionRequestsEnabled || isCheckingSettings}>
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

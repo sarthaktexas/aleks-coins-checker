@@ -110,10 +110,10 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays }: Conde
   const exemptCount = allDays.filter((d) => d.isExcluded).length
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded border border-[rgba(3,32,68,0.12)] bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-600">Daily Progress</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs font-medium text-utsa-muted">Daily Progress</span>
+        <span className="text-xs text-utsa-muted">
           {totalDays} / {periodDays} days
           {exemptCount > 0 && ` (${exemptCount} exempt)`}
         </span>

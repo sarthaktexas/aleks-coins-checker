@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Trophy,
   ChevronLeft,
@@ -175,44 +176,48 @@ export default function AdminLeaderboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="period">Period</Label>
-            <select
-              id="period"
-              value={selectedPeriod}
-              onChange={(e) => {
-                setSelectedPeriod(e.target.value)
-                const sections = getAvailableSections(e.target.value)
+            <Select
+              value={selectedPeriod || undefined}
+              onValueChange={(value) => {
+                setSelectedPeriod(value)
+                const sections = getAvailableSections(value)
                 if (sections.length > 0) {
                   setSelectedSection(sections[0])
                 } else {
                   setSelectedSection("")
                 }
               }}
-              className="w-full h-8 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange"
             >
-              <option value="">Select a period</option>
-              {getAvailablePeriods().map(period => (
-                <option key={period} value={period}>
-                  {period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="period">
+                <SelectValue placeholder="Select a period" />
+              </SelectTrigger>
+              <SelectContent>
+                {getAvailablePeriods().map(period => (
+                  <SelectItem key={period} value={period}>
+                    {period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="section">Section</Label>
-            <select
-              id="section"
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
+            <Select
+              value={selectedSection || undefined}
+              onValueChange={setSelectedSection}
               disabled={!selectedPeriod}
-              className="w-full h-8 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange disabled:bg-utsa-surface disabled:cursor-not-allowed"
             >
-              <option value="">Select a section</option>
-              {selectedPeriod && getAvailableSections(selectedPeriod).map(section => (
-                <option key={section} value={section}>
-                  Section {section}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="section">
+                <SelectValue placeholder="Select a section" />
+              </SelectTrigger>
+              <SelectContent>
+                {selectedPeriod && getAvailableSections(selectedPeriod).map(section => (
+                  <SelectItem key={section} value={section}>
+                    Section {section}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -327,7 +332,6 @@ export default function AdminLeaderboardPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1 || isLoading}
-                        className="flex items-center gap-1 border-utsa-border"
                       >
                         <ChevronLeft className="h-4 w-4" />
                         Previous
@@ -351,7 +355,6 @@ export default function AdminLeaderboardPage() {
                               size="sm"
                               onClick={() => handlePageChange(pageNum)}
                               disabled={isLoading}
-                              className={currentPage === pageNum ? "btn-tactile-orange text-white" : "border-utsa-border"}
                             >
                               {pageNum}
                             </Button>
@@ -363,7 +366,6 @@ export default function AdminLeaderboardPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages || isLoading}
-                        className="flex items-center gap-1 border-utsa-border"
                       >
                         Next
                         <ChevronRight className="h-4 w-4" />
