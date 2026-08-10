@@ -1,25 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import crypto from "crypto"
+import { bustStudentDataCache } from "@/lib/student-cache"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
 // Create or update day override
 export async function POST(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { 
       studentId, 
       dayNumber, 
       date, 
       overrideType, 
       reason, 
-      adminPassword 
     } = await request.json()
-
-    // Validate admin password
-    if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid admin password" }, { status: 401 })
-    }
 
     // Validate required fields
     if (!studentId || !dayNumber || !date || !overrideType) {
@@ -80,8 +79,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Database table setup failed" }, { status: 500 })
     }
 
-    // Create a simple hash of the admin password for audit trail (not for security)
-    const adminPasswordHash = crypto.createHash('sha256').update(adminPassword).digest('hex').substring(0, 16)
+    // Audit identity from session (not password)
+    const adminPasswordHash = crypto
+      .createHash('sha256')
+      .update(`${session.userId}:${session.username}`)
+      .digest('hex')
+      .substring(0, 16)
 
     // Normalize student_id to ensure consistency with how overrides are queried
     const normalizedStudentId = (studentId || '').toLowerCase().trim()
@@ -142,6 +145,8 @@ export async function POST(request: NextRequest) {
       `
     }
 
+    bustStudentDataCache()
+
     return NextResponse.json({
       success: true,
       message: "Day override saved successfully",
@@ -169,16 +174,11 @@ export async function POST(request: NextRequest) {
 // Get all overrides for a student
 export async function GET(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
-    const password = searchParams.get("password")
-
-    // Check admin password for admin view (when no specific studentId)
-    if (!studentId) {
-      if (!password || password !== process.env.ADMIN_PASSWORD) {
-        return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-      }
-    }
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -287,16 +287,13 @@ export async function GET(request: NextRequest) {
 // Delete a day override
 export async function DELETE(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { 
       studentId, 
       dayNumber, 
-      adminPassword 
     } = await request.json()
-
-    // Validate admin password
-    if (!adminPassword || adminPassword !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid admin password" }, { status: 401 })
-    }
 
     // Validate required fields
     if (!studentId || !dayNumber) {
@@ -323,6 +320,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Override not found" }, { status: 404 })
     }
 
+    bustStudentDataCache()
+
     return NextResponse.json({
       success: true,
       message: "Day override deleted successfully"
@@ -336,4 +335,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-

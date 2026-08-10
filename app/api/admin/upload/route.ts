@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { bustStudentDataCache } from "@/lib/student-cache"
 import * as XLSX from "xlsx"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 function getWorkingDays(startDate: string, endDate: string, excludedDates: string[] = []) {
   // Parse dates manually to avoid timezone issues
@@ -303,18 +305,13 @@ async function processExcelData(rawData: any[], examPeriod: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
     const formData = await request.formData()
-    const password = formData.get("password") as string
     const file = formData.get("file") as File
     const examPeriod = formData.get("examPeriod") as string
     const sectionNumber = formData.get("sectionNumber") as string
-
-
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
@@ -421,6 +418,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save data to database" }, { status: 500 })
     }
 
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,

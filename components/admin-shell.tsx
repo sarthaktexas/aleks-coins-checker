@@ -1,0 +1,67 @@
+"use client"
+
+import type { ReactNode } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { AdminUserBadge } from "@/components/admin-auth-provider"
+import "@/app/admin/admin.css"
+
+const NAV_ITEMS = [
+  { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin", label: "Upload", exact: true },
+  { href: "/admin/view-data", label: "Data" },
+  { href: "/admin/manage-periods", label: "Periods" },
+  { href: "/admin/view-overrides", label: "Overrides" },
+  { href: "/admin/requests", label: "Requests" },
+  { href: "/admin/bug-reports", label: "Bugs" },
+  { href: "/admin/coin-adjustments", label: "Coins" },
+  { href: "/admin/email-students", label: "Email" },
+  { href: "/admin/leaderboard", label: "Leaderboard" },
+] as const
+
+function isActive(pathname: string, href: string, exact?: boolean) {
+  if (exact) return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+export function AdminShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+
+  return (
+    <div className="admin-shell flex min-h-screen flex-col">
+      <header className="sticky top-0 z-40 border-b border-utsa-border bg-white">
+        <div className="h-1 w-full bg-utsa-orange" />
+        <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
+          <Link href="/admin/dashboard" className="shrink-0 text-sm font-bold text-utsa-midnight">
+            ALEKS Admin
+          </Link>
+          <Link href="/" className="text-xs text-utsa-muted hover:text-utsa-orange">
+            ← Student portal
+          </Link>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 pt-1">
+          {NAV_ITEMS.map((item) => {
+            const active = isActive(pathname, item.href, "exact" in item ? item.exact : false)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "shrink-0 rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  active
+                    ? "bg-utsa-orange text-white"
+                    : "text-utsa-midnight/70 hover:bg-utsa-orange/10 hover:text-utsa-midnight",
+                )}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+      </header>
+
+      <main className="mx-auto w-full max-w-5xl flex-1 p-4 sm:p-6">{children}</main>
+    </div>
+  )
+}

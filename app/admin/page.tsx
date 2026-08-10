@@ -6,10 +6,17 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Upload, Shield, Database, CheckCircle, AlertTriangle, Calendar, FileSpreadsheet, Trash2, Mail, Coins, Settings } from "lucide-react"
+import {
+  Upload,
+  CheckCircle,
+  AlertTriangle,
+  Calendar,
+  FileSpreadsheet,
+  Trash2,
+  Coins,
+} from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 
@@ -20,9 +27,9 @@ type ExamPeriodData = {
   excludedDates: readonly string[]
 }
 
+const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 
 export default function AdminPage() {
-  const [password, setPassword] = useState("")
   const [file, setFile] = useState<File | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState("")
   const [sectionNumber, setSectionNumber] = useState("")
@@ -40,48 +47,23 @@ export default function AdminPage() {
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const loadSettingsAbortRef = useRef<AbortController | null>(null)
 
-  // Load saved password from localStorage on component mount
-  useEffect(() => {
-    const savedPassword = localStorage.getItem('adminPassword')
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
-  }, [])
-
-  // Save password to localStorage when it changes
-  useEffect(() => {
-    if (password) {
-      localStorage.setItem('adminPassword', password)
-    }
-  }, [password])
-
-  // Load periods from database
   const loadPeriods = async () => {
     try {
-      const response = await fetch('/api/admin/exam-periods')
+      const response = await fetch("/api/admin/exam-periods", { credentials: "same-origin" })
       const data = await response.json()
-      
+
       if (response.ok) {
         setPeriods(data.periods || {})
-        // Set default period to first available if none selected
         if (!selectedPeriod && Object.keys(data.periods || {}).length > 0) {
           setSelectedPeriod(Object.keys(data.periods)[0])
         }
       } else {
-        console.error("Failed to load periods:", data.error)
-        // Fallback to hardcoded periods if database fails
         setPeriods(EXAM_PERIODS)
-        if (!selectedPeriod) {
-          setSelectedPeriod("summer2025_exam2")
-        }
+        if (!selectedPeriod) setSelectedPeriod("summer2025_exam2")
       }
-    } catch (error) {
-      console.error("Error loading periods:", error)
-      // Fallback to hardcoded periods if database fails
+    } catch {
       setPeriods(EXAM_PERIODS)
-      if (!selectedPeriod) {
-        setSelectedPeriod("summer2025_exam2")
-      }
+      if (!selectedPeriod) setSelectedPeriod("summer2025_exam2")
     } finally {
       setIsLoadingPeriods(false)
     }
@@ -89,108 +71,88 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadPeriods()
+    loadSettings()
   }, [])
 
-  // Load admin settings when password is available
-  useEffect(() => {
-    if (password) {
-      loadSettings()
-    }
-  }, [password])
-
-  // Load admin settings
   const loadSettings = async () => {
-    if (!password) return
-
-    // Abort any previous in-flight request
     loadSettingsAbortRef.current?.abort()
-    loadSettingsAbortRef.current = new AbortController()
-    const signal = loadSettingsAbortRef.current.signal
+    const controller = new AbortController()
+    loadSettingsAbortRef.current = controller
+    const signal = controller.signal
 
     setIsLoadingSettings(true)
     try {
-      const response = await fetch(`/api/admin/settings?password=${encodeURIComponent(password)}`, { signal })
-      const data = await response.json()
-
-      // Don't overwrite state if this request was aborted (e.g. because user toggled)
+      const response = await fetch("/api/admin/settings", {
+        signal,
+        credentials: "same-origin",
+        cache: "no-store",
+      })
       if (signal.aborted) return
-
+      if (response.status === 401) {
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
+      const data = await response.json()
+      if (signal.aborted) return
       if (response.ok && data.success) {
         setOverridesEnabled(data.settings.overridesEnabled)
         setRedemptionRequestsEnabled(data.settings.redemptionRequestsEnabled)
+      } else {
+        setMessage({ type: "error", text: data.error || "Failed to load settings" })
       }
     } catch (error) {
       if (signal.aborted) return
       console.error("Error loading settings:", error)
+      setMessage({ type: "error", text: "Failed to load settings" })
     } finally {
-      setIsLoadingSettings(false)
+      // Only the latest in-flight load may clear the loading flag
+      if (loadSettingsAbortRef.current === controller) {
+        setIsLoadingSettings(false)
+      }
     }
   }
 
-  // Update settings
-  const updateSettings = async (setting: 'overrides' | 'redemption', value: boolean) => {
-    if (!password) {
-      setMessage({ type: "error", text: "Please enter the admin password" })
-      return
-    }
-
-    // Abort any in-flight loadSettings so its stale response doesn't overwrite our update
+  const updateSettings = async (setting: "overrides" | "redemption", value: boolean) => {
     loadSettingsAbortRef.current?.abort()
 
-    // Optimistically update the UI state immediately
-    if (setting === 'overrides') {
-      setOverridesEnabled(value)
-    } else {
-      setRedemptionRequestsEnabled(value)
-    }
+    if (setting === "overrides") setOverridesEnabled(value)
+    else setRedemptionRequestsEnabled(value)
 
     setIsSavingSettings(true)
     try {
       const updates: { overridesEnabled?: boolean; redemptionRequestsEnabled?: boolean } = {}
-      if (setting === 'overrides') {
-        updates.overridesEnabled = value
-      } else {
-        updates.redemptionRequestsEnabled = value
-      }
+      if (setting === "overrides") updates.overridesEnabled = value
+      else updates.redemptionRequestsEnabled = value
 
       const response = await fetch("/api/admin/settings", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          password,
-          ...updates,
-        }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+        body: JSON.stringify(updates),
       })
+
+      if (response.status === 401) {
+        if (setting === "overrides") setOverridesEnabled(!value)
+        else setRedemptionRequestsEnabled(!value)
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
 
       const result = await response.json()
 
       if (response.ok && result.success) {
-        // Update state from the API response to ensure we have the correct values
         setOverridesEnabled(result.settings.overridesEnabled)
         setRedemptionRequestsEnabled(result.settings.redemptionRequestsEnabled)
-        setMessage({
-          type: "success",
-          text: `Settings updated successfully`,
-        })
+        setMessage({ type: "success", text: "Settings updated" })
       } else {
-        // Revert the optimistic update on error
-        if (setting === 'overrides') {
-          setOverridesEnabled(!value)
-        } else {
-          setRedemptionRequestsEnabled(!value)
-        }
+        if (setting === "overrides") setOverridesEnabled(!value)
+        else setRedemptionRequestsEnabled(!value)
         setMessage({ type: "error", text: result.error || "Failed to update settings" })
       }
-    } catch (error) {
-      console.error("Error updating settings:", error)
-      // Revert the optimistic update on error
-      if (setting === 'overrides') {
-        setOverridesEnabled(!value)
-      } else {
-        setRedemptionRequestsEnabled(!value)
-      }
+    } catch {
+      if (setting === "overrides") setOverridesEnabled(!value)
+      else setRedemptionRequestsEnabled(!value)
       setMessage({ type: "error", text: "Network error. Please try again." })
     } finally {
       setIsSavingSettings(false)
@@ -208,9 +170,7 @@ export default function AdminPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      handleFileChange(selectedFile)
-    }
+    if (selectedFile) handleFileChange(selectedFile)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -231,34 +191,19 @@ export default function AdminPage() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
-
-    const droppedFiles = Array.from(e.dataTransfer.files)
-    const excelFile = droppedFiles.find((file) => file.name.endsWith(".xlsx") || file.name.endsWith(".xls"))
-
-    if (excelFile) {
-      handleFileChange(excelFile)
-    } else {
-      setMessage({ type: "error", text: "Please drop a valid Excel file (.xlsx or .xls)" })
-    }
-  }
-
-  const handleDropZoneClick = () => {
-    fileInputRef.current?.click()
+    const excelFile = Array.from(e.dataTransfer.files).find(
+      (f) => f.name.endsWith(".xlsx") || f.name.endsWith(".xls"),
+    )
+    if (excelFile) handleFileChange(excelFile)
+    else setMessage({ type: "error", text: "Please drop a valid Excel file (.xlsx or .xls)" })
   }
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!password) {
-      setMessage({ type: "error", text: "Please enter the admin password" })
-      return
-    }
-
     if (!file) {
       setMessage({ type: "error", text: "Please select a file to upload" })
       return
     }
-
     if (!sectionNumber.trim()) {
       setMessage({ type: "error", text: "Please enter a section number" })
       return
@@ -269,7 +214,6 @@ export default function AdminPage() {
 
     try {
       const formData = new FormData()
-      formData.append("password", password)
       formData.append("file", file)
       formData.append("examPeriod", selectedPeriod)
       formData.append("sectionNumber", sectionNumber)
@@ -277,23 +221,25 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/upload", {
         method: "POST",
         body: formData,
+        credentials: "same-origin",
       })
-
+      if (response.status === 401) {
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
       const result = await response.json()
 
       if (response.ok) {
         setMessage({
           type: "success",
-          text: `Successfully processed and uploaded data for ${result.studentCount} students`,
+          text: `Uploaded data for ${result.studentCount} students`,
         })
         setFile(null)
-        setPassword("")
-        // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = ""
       } else {
         setMessage({ type: "error", text: result.error || "Upload failed" })
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: "Network error. Please try again." })
     } finally {
       setIsUploading(false)
@@ -301,34 +247,28 @@ export default function AdminPage() {
   }
 
   const handleDeleteAllData = async () => {
-    if (!password) {
-      setMessage({ type: "error", text: "Please enter the admin password" })
-      return
-    }
-
     setIsDeleting(true)
     setMessage(null)
 
     try {
       const response = await fetch("/api/admin/student-data", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({}),
       })
-
+      if (response.status === 401) {
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
       const result = await response.json()
 
       if (response.ok) {
-        setMessage({
-          type: "success",
-          text: result.message || "All student data deleted successfully",
-        })
+        setMessage({ type: "success", text: result.message || "All student data deleted" })
       } else {
         setMessage({ type: "error", text: result.error || "Delete failed" })
       }
-    } catch (error) {
+    } catch {
       setMessage({ type: "error", text: "Network error. Please try again." })
     } finally {
       setIsDeleting(false)
@@ -337,491 +277,243 @@ export default function AdminPage() {
   }
 
   const formatDateRange = (startDate: string, endDate: string) => {
-    // Format dates without timezone conversion
     const formatDate = (dateStr: string) => {
-      const [year, month, day] = dateStr.split('-').map(Number)
+      const [year, month, day] = dateStr.split("-").map(Number)
       const date = new Date(year, month - 1, day)
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
       return `${monthNames[date.getMonth()]} ${date.getDate()}`
     }
-    
-    const start = formatDate(startDate)
-    const end = formatDate(endDate)
-    return `${start} - ${end}`
+    return `${formatDate(startDate)} – ${formatDate(endDate)}`
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-2xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-red-100 rounded-full">
-              <Shield className="h-8 w-8 text-red-600" />
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Admin Panel</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold text-utsa-midnight">Upload & Settings</h1>
+        <p className="text-sm text-utsa-muted">Upload ALEKS Excel data and manage feature flags</p>
+      </div>
+
+      <form onSubmit={handleUpload} className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Exam period ({CURRENT_YEAR})</Label>
+            <Select
+              value={selectedPeriod}
+              onValueChange={setSelectedPeriod}
+              disabled={isUploading || isLoadingPeriods}
+            >
+              <SelectTrigger className="h-10 border-utsa-border">
+                <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(periods).map(([key, period]) => (
+                  <SelectItem key={key} value={key}>
+                    {period.name} · {formatDateRange(period.startDate, period.endDate)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <p className="text-slate-600">Upload Excel files with student ALEKS data</p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sectionNumber">Section number</Label>
+            <Input
+              id="sectionNumber"
+              type="text"
+              placeholder="e.g. 003"
+              value={sectionNumber}
+              onChange={(e) => setSectionNumber(e.target.value)}
+              disabled={isUploading}
+              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+            />
+          </div>
         </div>
 
-        {/* Upload Card */}
-        <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm mx-2 sm:mx-0">
-          <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100">
-            <CardTitle className="flex items-center gap-3 text-xl text-red-900">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <Database className="h-5 w-5 text-red-600" />
-              </div>
-              Excel File Upload & Processing
-            </CardTitle>
-            <CardDescription>
-              Upload an Excel file (.xlsx) containing student ALEKS data. The system will automatically process it and
-              store the data in the database.
-            </CardDescription>
-          </CardHeader>
+        {selectedPeriod && periods[selectedPeriod] && (
+          <div className="flex items-start gap-2 rounded border border-utsa-border bg-utsa-surface px-3 py-2 text-xs text-utsa-muted">
+            <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-utsa-orange" />
+            <span>
+              {periods[selectedPeriod].name} ·{" "}
+              {formatDateRange(periods[selectedPeriod].startDate, periods[selectedPeriod].endDate)} ·{" "}
+              {periods[selectedPeriod].excludedDates.length} exempt days
+            </span>
+          </div>
+        )}
 
-          <CardContent className="p-6">
-            <form onSubmit={handleUpload} className="space-y-6">
-              {/* Password Field */}
+        <div className="space-y-1.5">
+          <Label>Excel file</Label>
+          <div
+            className={`cursor-pointer rounded-md border border-dashed px-4 py-6 text-center transition-colors ${
+              isDragOver
+                ? "border-utsa-orange bg-utsa-orange/10"
+                : file
+                  ? "border-emerald-400 bg-emerald-50"
+                  : "border-utsa-border bg-utsa-surface hover:border-utsa-orange/50"
+            } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={!isUploading ? () => fileInputRef.current?.click() : undefined}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleInputChange}
+              className="hidden"
+              disabled={isUploading}
+            />
+            {file ? (
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                  Admin Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter admin password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500"
-                  disabled={isUploading}
-                />
-              </div>
-
-              {/* Period Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="period" className="text-sm font-medium text-slate-700">
-                  Exam Period ({CURRENT_YEAR})
-                </Label>
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={isUploading || isLoadingPeriods}>
-                  <SelectTrigger className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500">
-                    <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(periods).map(([key, period]) => (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{period.name}</span>
-                          <span className="text-xs text-slate-500">
-                            {formatDateRange(period.startDate, period.endDate)} • {period.excludedDates.length} exempt
-                            days
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Section Number */}
-              <div className="space-y-2">
-                <Label htmlFor="sectionNumber" className="text-sm font-medium text-slate-700">
-                  Section Number
-                </Label>
-                <Input
-                  id="sectionNumber"
-                  type="text"
-                  placeholder="e.g., 003, 006"
-                  value={sectionNumber}
-                  onChange={(e) => setSectionNumber(e.target.value)}
-                  disabled={isUploading}
-                  className="h-12 border-slate-200 focus:border-red-500 focus:ring-red-500"
-                />
-                <p className="text-xs text-slate-500">
-                  Enter the section number for this upload (e.g., 003, 006)
-                </p>
-              </div>
-
-              {selectedPeriod && periods[selectedPeriod] && (
-                  <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calendar className="h-3 w-3" />
-                      <span className="font-medium">Selected Period Details:</span>
-                    </div>
-                    <p>
-                      <strong>Period:</strong> {periods[selectedPeriod].name}
-                    </p>
-                    <p>
-                      <strong>Date Range:</strong>{" "}
-                      {formatDateRange(
-                        periods[selectedPeriod].startDate,
-                        periods[selectedPeriod].endDate,
-                      )}
-                    </p>
-                    <p>
-                      <strong>Exempt Dates:</strong>{" "}
-                      {periods[selectedPeriod].excludedDates.length > 0
-                        ? periods[selectedPeriod].excludedDates
-                            .map((date) => {
-                              const [year, month, day] = date.split('-').map(Number)
-                              const dateObj = new Date(year, month - 1, day)
-                              const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-                              return `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}`
-                            })
-                            .join(", ")
-                        : "None"}
-                    </p>
-                  </div>
-                )}
-
-              {/* Drag and Drop File Upload */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-slate-700">Excel File (.xlsx)</Label>
-                <div
-                  className={`relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200 ${
-                    isDragOver
-                      ? "border-red-400 bg-red-50"
-                      : file
-                        ? "border-green-400 bg-green-50"
-                        : "border-slate-300 bg-slate-50 hover:border-red-400 hover:bg-red-50"
-                  } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onDragOver={handleDragOver}
-                  onDragEnter={handleDragEnter}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={!isUploading ? handleDropZoneClick : undefined}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={handleInputChange}
-                    className="hidden"
-                    disabled={isUploading}
-                  />
-
-                  <div className="flex flex-col items-center gap-4">
-                    {file ? (
-                      <>
-                        <div className="p-3 bg-green-100 rounded-full">
-                          <CheckCircle className="h-8 w-8 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-lg font-semibold text-green-800">{file.name}</p>
-                          <p className="text-sm text-green-600">{(file.size / 1024).toFixed(1)} KB • Ready to upload</p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setFile(null)
-                            if (fileInputRef.current) fileInputRef.current.value = ""
-                          }}
-                          disabled={isUploading}
-                          className="text-red-600 border-red-200 hover:bg-red-50"
-                        >
-                          Remove File
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <div className={`p-3 rounded-full ${isDragOver ? "bg-red-100" : "bg-slate-100"}`}>
-                          <FileSpreadsheet className={`h-8 w-8 ${isDragOver ? "text-red-600" : "text-slate-600"}`} />
-                        </div>
-                        <div>
-                          <p className={`text-lg font-semibold ${isDragOver ? "text-red-800" : "text-slate-700"}`}>
-                            {isDragOver ? "Drop your Excel file here" : "Drag & drop your Excel file here"}
-                          </p>
-                          <p className="text-sm text-slate-500 mt-1">
-                            or <span className="text-red-600 font-medium">click to browse</span>
-                          </p>
-                          <p className="text-xs text-slate-400 mt-2">Supports .xlsx and .xls files</p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                disabled={isUploading || !password || !file}
-                className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-medium"
-              >
-                {isUploading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Processing & Uploading...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Upload className="h-4 w-4" />
-                    Process Excel & Upload to Database
-                  </div>
-                )}
-              </Button>
-            </form>
-
-            {/* Messages */}
-            {message && (
-              <Alert
-                className={`mt-6 ${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-              >
-                <div className="flex items-center gap-2">
-                  {message.type === "success" ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                  )}
-                  <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
-                    {message.text}
-                  </AlertDescription>
-                </div>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Delete All Data Card */}
-        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm border-red-200 mx-2 sm:mx-0">
-          <CardHeader className="bg-gradient-to-r from-red-50 to-orange-50 border-b border-red-100">
-            <CardTitle className="flex items-center gap-3 text-xl text-red-900">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <Trash2 className="h-5 w-5 text-red-600" />
-              </div>
-              Danger Zone
-            </CardTitle>
-            <CardDescription>
-              Permanently delete all uploaded student data from the database. This action cannot be undone.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="p-6">
-            {!showDeleteConfirm ? (
-              <div className="space-y-4">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-medium text-red-900 mb-1">Warning</h4>
-                      <p className="text-sm text-red-800">
-                        This will permanently delete ALL student data from the database, including:
-                      </p>
-                      <ul className="text-sm text-red-800 mt-2 ml-4 list-disc">
-                        <li>All uploaded Excel data</li>
-                        <li>Student progress records</li>
-                        <li>Coin calculations</li>
-                        <li>Daily log entries</li>
-                        <li>Student requests (redemptions and overrides)</li>
-                        <li>Coin adjustments</li>
-                        <li>Day overrides</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-                
+                <CheckCircle className="mx-auto h-5 w-5 text-emerald-600" />
+                <p className="text-sm font-medium text-emerald-800">{file.name}</p>
                 <Button
                   type="button"
-                  variant="destructive"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  disabled={isDeleting || isUploading}
-                  className="w-full h-12"
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFile(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ""
+                  }}
+                  disabled={isUploading}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete All Student Data
+                  Remove
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-6 w-6 text-red-700 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-bold text-red-900 mb-2">Final Confirmation</h4>
-                      <p className="text-red-800 font-medium">
-                        Are you absolutely sure you want to delete ALL student data? This action cannot be undone.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={handleDeleteAllData}
-                    disabled={isDeleting || isUploading || !password}
-                    className="flex-1 h-12"
-                  >
-                    {isDeleting ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Deleting...
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Trash2 className="h-4 w-4" />
-                        Yes, Delete Everything
-                      </div>
-                    )}
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={isDeleting}
-                    className="flex-1 h-12 border-red-200 text-red-700 hover:bg-red-50"
-                  >
-                    Cancel
-                  </Button>
-                </div>
+              <div className="space-y-1">
+                <FileSpreadsheet className="mx-auto h-5 w-5 text-utsa-muted" />
+                <p className="text-sm text-utsa-midnight">Drop Excel here or click to browse</p>
+                <p className="text-xs text-utsa-muted">.xlsx / .xls</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* System Settings */}
-        <Card className="mt-6 shadow-xl border-0 bg-white/90 backdrop-blur-sm mx-2 sm:mx-0">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
-            <CardTitle className="flex items-center gap-3 text-xl text-blue-900">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Settings className="h-5 w-5 text-blue-600" />
-              </div>
-              System Settings
-            </CardTitle>
-            <CardDescription>
-              Control system-wide features. When disabled, these features will be unavailable to all users.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="p-6">
-            <div className="space-y-6">
-              {/* Overrides Toggle */}
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Calendar className="h-4 w-4 text-slate-600" />
-                    <Label htmlFor="overrides-toggle" className="text-base font-semibold text-slate-900 cursor-pointer">
-                      Day Overrides
-                    </Label>
-                  </div>
-                  <p className="text-sm text-slate-600 ml-6">
-                    Allow students and admins to create day overrides. When disabled, no overrides can be created.
-                  </p>
-                </div>
-                <Switch
-                  id="overrides-toggle"
-                  checked={overridesEnabled}
-                  onCheckedChange={(checked) => updateSettings('overrides', checked)}
-                  disabled={isSavingSettings || isLoadingSettings || !password}
-                />
-              </div>
-
-              {/* Redemption Requests Toggle */}
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Coins className="h-4 w-4 text-slate-600" />
-                    <Label htmlFor="redemption-toggle" className="text-base font-semibold text-slate-900 cursor-pointer">
-                      Redemption Requests
-                    </Label>
-                  </div>
-                  <p className="text-sm text-slate-600 ml-6">
-                    Allow students to submit redemption requests (assignment/quiz replacements). When disabled, no redemption requests can be submitted.
-                  </p>
-                </div>
-                <Switch
-                  id="redemption-toggle"
-                  checked={redemptionRequestsEnabled}
-                  onCheckedChange={(checked) => updateSettings('redemption', checked)}
-                  disabled={isSavingSettings || isLoadingSettings || !password}
-                />
-              </div>
-
-              {!password && (
-                <Alert className="border-amber-200 bg-amber-50">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800">
-                    Please enter the admin password above to manage system settings.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Instructions */}
-        <Card className="mt-6 bg-blue-50 border-blue-200 mx-2 sm:mx-0">
-          <CardContent className="p-6">
-            <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              Excel File Requirements
-            </h3>
-            <div className="space-y-2 text-sm text-blue-800">
-              <p>• Excel file should contain columns for: Student ID, Name, Email</p>
-              <p>• Daily data columns: "Day 1 Minutes", "Day 1 Topics", "Day 2 Minutes", "Day 2 Topics", etc.</p>
-              <p>• The system will automatically process the file and calculate coins</p>
-              <p>• Exempt days are automatically excluded from progress calculations</p>
-              <p>• Data is stored securely in the Vercel Postgres database</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Admin Navigation */}
-        <div className="text-center mt-8 space-y-4">
-          <div className="flex flex-wrap justify-center gap-4">
-            <Button variant="outline" asChild>
-              <a href="/admin/email-students">
-                <Mail className="h-4 w-4 mr-2" />
-                Email Students
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/view-data">
-                <Database className="h-4 w-4 mr-2" />
-                View Data
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/view-overrides">
-                <Calendar className="h-4 w-4 mr-2" />
-                View Overrides
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/manage-periods">
-                <Calendar className="h-4 w-4 mr-2" />
-                Manage Periods
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/requests">
-                <Mail className="h-4 w-4 mr-2" />
-                Student Requests
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/coin-adjustments">
-                <Coins className="h-4 w-4 mr-2" />
-                Coin Adjustments
-              </a>
-            </Button>
-            <Button variant="outline" asChild>
-              <a href="/admin/dashboard">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Dashboard
-              </a>
-            </Button>
-          </div>
-          <div>
-            <Button variant="outline" asChild>
-              <a href="/">← Back to Student Portal</a>
-            </Button>
           </div>
         </div>
+
+        <Button
+          type="submit"
+          disabled={isUploading || !file}
+          className="w-full bg-utsa-orange hover:bg-utsa-accessible sm:w-auto"
+        >
+          {isUploading ? (
+            "Uploading…"
+          ) : (
+            <>
+              <Upload className="h-4 w-4" />
+              Upload
+            </>
+          )}
+        </Button>
+      </form>
+
+      {message && (
+        <Alert
+          className={
+            message.type === "success"
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-utsa-orange/30 bg-utsa-orange/10"
+          }
+        >
+          {message.type === "success" ? (
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
+          )}
+          <AlertDescription
+            className={message.type === "success" ? "text-emerald-800" : "text-utsa-accessible"}
+          >
+            {message.text}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
+        <h2 className="text-sm font-semibold text-utsa-midnight">Settings</h2>
+
+        <div className="flex items-center justify-between gap-4 border-b border-utsa-border py-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-utsa-midnight">
+              <Calendar className="h-3.5 w-3.5 text-utsa-muted" />
+              Day overrides
+            </div>
+            <p className="text-xs text-utsa-muted">Allow creating day overrides</p>
+          </div>
+          <Switch
+            id="overrides-toggle"
+            checked={overridesEnabled}
+            onCheckedChange={(checked) => updateSettings("overrides", checked)}
+            disabled={isSavingSettings || isLoadingSettings}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 py-1">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-utsa-midnight">
+              <Coins className="h-3.5 w-3.5 text-utsa-muted" />
+              Redemption requests
+            </div>
+            <p className="text-xs text-utsa-muted">Allow students to submit redemptions</p>
+          </div>
+          <Switch
+            id="redemption-toggle"
+            checked={redemptionRequestsEnabled}
+            onCheckedChange={(checked) => updateSettings("redemption", checked)}
+            disabled={isSavingSettings || isLoadingSettings}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-md border border-utsa-border bg-white p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Trash2 className="h-4 w-4 text-utsa-accessible" />
+          <h2 className="text-sm font-semibold text-utsa-midnight">Danger zone</h2>
+        </div>
+
+        {!showDeleteConfirm ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowDeleteConfirm(true)}
+            disabled={isDeleting || isUploading}
+            className="border-utsa-orange/40 text-utsa-accessible hover:bg-utsa-orange/10"
+          >
+            Delete all student data
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-utsa-accessible">
+              This permanently deletes all student data, requests, adjustments, and overrides.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={handleDeleteAllData}
+                disabled={isDeleting || isUploading}
+                className="bg-utsa-accessible hover:bg-utsa-orange"
+              >
+                {isDeleting ? "Deleting…" : "Yes, delete everything"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-md border border-utsa-border bg-utsa-surface p-4 text-xs text-utsa-muted">
+        <p className="mb-1 font-medium text-utsa-midnight">Excel tips</p>
+        <p>
+          Include Student ID, Name, Email, plus Day N Minutes / Day N Topics columns. Exempt days
+          come from the selected period.
+        </p>
       </div>
     </div>
   )

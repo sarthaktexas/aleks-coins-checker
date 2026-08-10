@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 type StudentData = {
   [studentId: string]: {
@@ -84,6 +85,9 @@ async function applyOverridesToStudentData(studentData: StudentData, studentId?:
 
 export async function POST(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const body = await request.json()
     const { studentIds } = body
 

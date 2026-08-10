@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -87,6 +88,9 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
 
 export async function GET(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { searchParams } = new URL(request.url)
     const period = searchParams.get("period")
     const sectionNumber = searchParams.get("sectionNumber")
@@ -416,13 +420,11 @@ async function deleteRelatedStudentRecords(period?: string, sectionNumber?: stri
 // DELETE - Delete student data (all or specific upload)
 export async function DELETE(request: NextRequest) {
   try {
-    // Check admin password
-    const body = await request.json()
-    const { password, uploadId } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { uploadId } = body
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {

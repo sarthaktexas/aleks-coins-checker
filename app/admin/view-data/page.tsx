@@ -1,36 +1,27 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   Database, 
   Search, 
   Users, 
-  Calendar,
-  ArrowLeft,
   Download,
   Eye,
-  Filter,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Shield,
-  AlertTriangle,
   Copy,
   CheckCircle,
   Trash2,
   EyeOff,
   ChevronDown,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
 } from "lucide-react"
-import Link from "next/link"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
@@ -54,11 +45,9 @@ type UploadRecord = {
   student_count: number
 }
 
+const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+
 export default function ViewDataPage() {
-  const [password, setPassword] = useState("")
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [authError, setAuthError] = useState("")
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedPeriod, setSelectedPeriod] = useState("")
   const [selectedSection, setSelectedSection] = useState("")
@@ -77,26 +66,9 @@ export default function ViewDataPage() {
   const [hideStudentData, setHideStudentData] = useHidePII()
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
 
-  // Load saved password from localStorage on component mount
   useEffect(() => {
-    const savedPassword = localStorage.getItem('adminPassword')
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
+    loadUploadRecords()
   }, [])
-
-  // Save password to localStorage when it changes
-  useEffect(() => {
-    if (password) {
-      localStorage.setItem('adminPassword', password)
-    }
-  }, [password])
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadUploadRecords()
-    }
-  }, [isAuthenticated])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -118,38 +90,14 @@ export default function ViewDataPage() {
     }
   }, [showExportDropdown])
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoadingAuth(true)
-    setAuthError("")
-
-    try {
-      const response = await fetch("/api/admin/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        setIsAuthenticated(true)
-      } else {
-        setAuthError(result.error || "Authentication failed")
-      }
-    } catch (error) {
-      setAuthError("Network error. Please try again.")
-    } finally {
-      setIsLoadingAuth(false)
-    }
-  }
-
   const loadUploadRecords = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/admin/student-data")
+      const response = await fetch("/api/admin/student-data", { credentials: "same-origin" })
+      if (response.status === 401) {
+        setError(SESSION_EXPIRED)
+        return
+      }
       const result = await response.json()
 
       if (response.ok) {
@@ -168,7 +116,14 @@ export default function ViewDataPage() {
     setIsLoading(true)
     setError("")
     try {
-      const response = await fetch(`/api/admin/student-data?period=${encodeURIComponent(period)}&sectionNumber=${encodeURIComponent(sectionNumber)}`)
+      const response = await fetch(
+        `/api/admin/student-data?period=${encodeURIComponent(period)}&sectionNumber=${encodeURIComponent(sectionNumber)}`,
+        { credentials: "same-origin" },
+      )
+      if (response.status === 401) {
+        setError(SESSION_EXPIRED)
+        return
+      }
       const result = await response.json()
 
       if (response.ok) {
@@ -194,11 +149,6 @@ export default function ViewDataPage() {
   }
 
   const deleteUpload = async (uploadId: number) => {
-    if (!password) {
-      setError("Please enter the admin password")
-      return
-    }
-
     if (!confirm("Are you sure you want to delete this upload? This action cannot be undone.")) {
       return
     }
@@ -212,8 +162,14 @@ export default function ViewDataPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ password, uploadId }),
+        credentials: "same-origin",
+        body: JSON.stringify({ uploadId }),
       })
+
+      if (response.status === 401) {
+        setError(SESSION_EXPIRED)
+        return
+      }
 
       const result = await response.json()
 
@@ -255,11 +211,6 @@ export default function ViewDataPage() {
   }
 
   const exportExtraCreditToCSV = async () => {
-    if (!password) {
-      setError("Please enter the admin password")
-      return
-    }
-
     setIsExporting(true)
     setError("")
     setShowExportDropdown(false)
@@ -313,11 +264,6 @@ export default function ViewDataPage() {
   }
 
   const copyExtraCreditToClipboard = async () => {
-    if (!password) {
-      setError("Please enter the admin password")
-      return
-    }
-
     setIsExporting(true)
     setError("")
     setShowExportDropdown(false)
@@ -372,11 +318,11 @@ Total: ${extraCreditStudents.length} students`
 
   const getSortIcon = (field: keyof StudentData | "studentId" | "status") => {
     if (sortField !== field) {
-      return <ArrowUpDown className="h-4 w-4 text-slate-400" />
+      return <ArrowUpDown className="h-4 w-4 text-utsa-muted" />
     }
     return sortDirection === "asc" ? 
-      <ArrowUp className="h-4 w-4 text-slate-600" /> : 
-      <ArrowDown className="h-4 w-4 text-slate-600" />
+      <ArrowUp className="h-4 w-4 text-utsa-midnight" /> : 
+      <ArrowDown className="h-4 w-4 text-utsa-midnight" />
   }
 
   const getStatusValue = (percentComplete: number) => {
@@ -493,184 +439,95 @@ Total: ${extraCreditStudents.length} students`
     window.URL.revokeObjectURL(url)
   }
 
-  // Show authentication form if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        <div className="container mx-auto px-4 py-8 max-w-md">
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                </div>
-                Admin Authentication
-              </CardTitle>
-              <CardDescription>
-                Enter admin password to view student data
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                    Admin Password
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoadingAuth}
-                    className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Enter admin password"
-                    required
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  disabled={isLoadingAuth || !password}
-                  className="w-full h-12 bg-blue-600 hover:bg-blue-700"
-                >
-                  {isLoadingAuth ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Authenticating...
-                    </div>
-                  ) : (
-                    "Authenticate"
-                  )}
-                </Button>
-                {authError && (
-                  <Alert className="border-red-200 bg-red-50">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800">
-                      {authError}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </form>
-            </CardContent>
-          </Card>
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold text-utsa-midnight">View Student Data</h1>
+        <p className="text-sm text-utsa-muted">Browse and search through uploaded student data</p>
+      </div>
 
-          {/* Back to Student Portal */}
-          <div className="text-center mt-8">
-            <Button variant="outline" asChild>
-              <Link href="/">← Back to Student Portal</Link>
-            </Button>
+      <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+        <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+          <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+            <Database className="h-4 w-4 text-utsa-orange" />
+            Available Data Sets
+          </h2>
+          <p className="text-xs text-utsa-muted mt-0.5">
+            Select a period to view student data (shows latest upload only)
+          </p>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {uploadRecords.map((record) => (
+              <div key={record.id} className="rounded-md border border-utsa-border p-4 hover:border-utsa-orange/50 transition-colors">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="text-xs border-utsa-border">
+                        {record.period}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        Section {record.section_number || 'default'}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-utsa-muted">
+                      {record.student_count} students
+                    </span>
+                  </div>
+                  <p className="text-sm text-utsa-muted">
+                    {formatDate(record.uploaded_at)}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedPeriod(record.period)
+                        setSelectedSection(record.section_number || 'default')
+                        loadStudentData(record.period, record.section_number || 'default')
+                      }}
+                      className="flex-1 bg-utsa-orange hover:bg-utsa-accessible"
+                      disabled={isLoading}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Data
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteUpload(record.id)}
+                      disabled={isLoading || deletingUploadId === record.id}
+                      className="px-3"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-    )
-  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/dashboard" className="flex items-center gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">View Student Data</h1>
-            <p className="text-slate-600">Browse and search through uploaded student data</p>
-          </div>
-        </div>
-
-        {/* Upload Records */}
-        <Card className="mb-8 bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Database className="h-5 w-5 text-green-600" />
+      {(selectedPeriod && selectedSection) && (
+        <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+          <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                  <Users className="h-4 w-4 text-utsa-orange" />
+                  Student Data - {selectedPeriod} - Section {selectedSection}
+                </h2>
+                <p className="text-xs text-utsa-muted mt-0.5">
+                  {Object.keys(studentData).length} students found
+                </p>
               </div>
-              Available Data Sets
-            </CardTitle>
-            <CardDescription>
-              Select a period to view student data (shows latest upload only)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {uploadRecords.map((record) => (
-                <Card key={record.id} className="border border-slate-200 hover:border-green-300 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {record.period}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            Section {record.section_number || 'default'}
-                          </Badge>
-                        </div>
-                        <span className="text-xs text-slate-500">
-                          {record.student_count} students
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600">
-                        {formatDate(record.uploaded_at)}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setSelectedPeriod(record.period)
-                            setSelectedSection(record.section_number || 'default')
-                            loadStudentData(record.period, record.section_number || 'default')
-                          }}
-                          className="flex-1 bg-green-600 hover:bg-green-700"
-                          disabled={isLoading}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Data
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => deleteUpload(record.id)}
-                          disabled={isLoading || deletingUploadId === record.id}
-                          className="px-3"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Student Data */}
-        {(selectedPeriod && selectedSection) && (
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Users className="h-5 w-5 text-blue-600" />
-                    </div>
-                    Student Data - {selectedPeriod} - Section {selectedSection}
-                  </CardTitle>
-                  <CardDescription>
-                    {Object.keys(studentData).length} students found
-                  </CardDescription>
-                </div>
-                
-                {/* Export Button - Only show when period is complete */}
+              
+              <div className="flex gap-2 items-center flex-wrap">
                 {isPeriodComplete && (
                   <div className="relative export-dropdown-container">
                     <Button
                       onClick={() => setShowExportDropdown(!showExportDropdown)}
-                      disabled={isExporting || !password || hideStudentData}
+                      disabled={isExporting || hideStudentData}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
                       {isExporting ? (
@@ -689,18 +546,18 @@ Total: ${extraCreditStudents.length} students`
                       )}
                     </Button>
                     {showExportDropdown && !isExporting && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-50">
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-utsa-border z-50">
                         <div className="py-1">
                           <button
                             onClick={exportExtraCreditToCSV}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+                            className="w-full text-left px-4 py-2 text-sm text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
                           >
                             <Download className="h-4 w-4" />
                             Export as CSV
                           </button>
                           <button
                             onClick={copyExtraCreditToClipboard}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+                            className="w-full text-left px-4 py-2 text-sm text-utsa-midnight hover:bg-utsa-surface flex items-center gap-2"
                           >
                             <Copy className="h-4 w-4" />
                             Copy to Clipboard
@@ -710,307 +567,274 @@ Total: ${extraCreditStudents.length} students`
                     )}
                   </div>
                 )}
-                <div className="flex gap-2 items-center">
-                  <HidePIIToggle hidePII={hideStudentData} onToggle={setHideStudentData} showAlert={false} />
-                  <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
-                </div>
+                <HidePIIToggle hidePII={hideStudentData} onToggle={setHideStudentData} showAlert={false} />
+                <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData} className="border-utsa-border">
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              {/* Search */}
-              <div className="mb-6 flex flex-col gap-2">
-                {hideStudentData && (
-                  <Alert className="border-amber-200 bg-amber-50">
-                    <EyeOff className="h-4 w-4 text-amber-600" />
-                    <AlertDescription className="text-amber-800">
-                      PII is hidden. Names, emails, and IDs are replaced with generated placeholder data for privacy (e.g., when presenting on screen).
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <div className="flex items-center gap-2">
-                  <Search className="h-4 w-4 text-slate-500" />
-                  <Input
-                    placeholder={hideStudentData ? "Search by placeholder name, email, or ID..." : "Search by name, email, or student ID..."}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="max-w-md"
-                  />
-                </div>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="mb-4 flex flex-col gap-2">
+              {hideStudentData && (
+                <Alert className="border-amber-200 bg-amber-50">
+                  <EyeOff className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    PII is hidden. Names, emails, and IDs are replaced with generated placeholder data for privacy (e.g., when presenting on screen).
+                  </AlertDescription>
+                </Alert>
+              )}
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-utsa-muted" />
+                <Input
+                  placeholder={hideStudentData ? "Search by placeholder name, email, or ID..." : "Search by name, email, or student ID..."}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="max-w-md border-utsa-border focus-visible:ring-utsa-orange"
+                />
               </div>
+            </div>
 
-              {/* Students Table - Condensed Layout */}
-              <div className="space-y-2">
-                {/* Header Row */}
-                <div className="flex items-center gap-4 p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-600">
-                  <div className="flex-shrink-0 w-6" />
-                  <button 
-                    onClick={() => handleSort("name")}
-                    className="flex-1 flex items-center gap-1 hover:text-slate-800 transition-colors"
+            <div className="space-y-2">
+              <div className="flex items-center gap-4 p-3 bg-utsa-surface border border-utsa-border rounded-md text-sm font-medium text-utsa-muted">
+                <div className="flex-shrink-0 w-6" />
+                <button 
+                  onClick={() => handleSort("name")}
+                  className="flex-1 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
+                >
+                  Name {getSortIcon("name")}
+                </button>
+                <button 
+                  onClick={() => handleSort("coins")}
+                  className="flex items-center gap-2 hover:text-utsa-midnight transition-colors"
+                >
+                  Coins {getSortIcon("coins")}
+                </button>
+                <button 
+                  onClick={() => handleSort("percentComplete")}
+                  className="w-12 text-center flex items-center justify-center gap-1 hover:text-utsa-midnight transition-colors"
+                >
+                  Progress {getSortIcon("percentComplete")}
+                </button>
+                <button 
+                  onClick={() => handleSort("status")}
+                  className="min-w-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
+                >
+                  Status {getSortIcon("status")}
+                </button>
+                <button 
+                  onClick={() => handleSort("percentComplete")}
+                  className="min-w-0 flex items-center gap-1 hover:text-utsa-midnight transition-colors"
+                >
+                  Extra Credit {getSortIcon("percentComplete")}
+                </button>
+                <button 
+                  onClick={() => handleSort("email")}
+                  className="hidden lg:flex min-w-0 flex-1 items-center gap-1 hover:text-utsa-midnight transition-colors"
+                >
+                  Email {getSortIcon("email")}
+                </button>
+              </div>
+              
+              {filteredAndSortedStudents.map(([studentId, data]) => {
+                const display = getDisplayData(studentId, data)
+                const isExpanded = expandedStudentId === studentId
+                const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
+                const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
+                const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
+                return (
+                <div key={studentId} className="bg-white border border-utsa-border rounded-md overflow-hidden">
+                  <div
+                    className="flex items-center gap-4 p-4 hover:bg-utsa-surface/50 transition-colors cursor-pointer"
+                    onClick={() => setExpandedStudentId(isExpanded ? null : studentId)}
                   >
-                    Name {getSortIcon("name")}
-                  </button>
-                  <button 
-                    onClick={() => handleSort("coins")}
-                    className="flex items-center gap-2 hover:text-slate-800 transition-colors"
-                  >
-                    Coins {getSortIcon("coins")}
-                  </button>
-                  <button 
-                    onClick={() => handleSort("percentComplete")}
-                    className="w-12 text-center flex items-center justify-center gap-1 hover:text-slate-800 transition-colors"
-                  >
-                    Progress {getSortIcon("percentComplete")}
-                  </button>
-                  <button 
-                    onClick={() => handleSort("status")}
-                    className="min-w-0 flex items-center gap-1 hover:text-slate-800 transition-colors"
-                  >
-                    Status {getSortIcon("status")}
-                  </button>
-                  <button 
-                    onClick={() => handleSort("percentComplete")}
-                    className="min-w-0 flex items-center gap-1 hover:text-slate-800 transition-colors"
-                  >
-                    Extra Credit {getSortIcon("percentComplete")}
-                  </button>
-                  <button 
-                    onClick={() => handleSort("email")}
-                    className="hidden lg:flex min-w-0 flex-1 items-center gap-1 hover:text-slate-800 transition-colors"
-                  >
-                    Email {getSortIcon("email")}
-                  </button>
-                </div>
-                
-                {filteredAndSortedStudents.map(([studentId, data]) => {
-                  const display = getDisplayData(studentId, data)
-                  const isExpanded = expandedStudentId === studentId
-                  const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
-                  const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
-                  const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
-                  return (
-                  <div key={studentId} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                    <div
-                      className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => setExpandedStudentId(isExpanded ? null : studentId)}
-                    >
-                      {/* Expand indicator */}
-                      <div className="flex-shrink-0 w-6 flex items-center justify-center text-slate-400">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </div>
-                      {/* Name and ID - Primary */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-900 truncate">{display.name}</p>
-                        <p className="text-xs text-slate-500 font-mono">{display.studentId}</p>
-                      </div>
+                    <div className="flex-shrink-0 w-6 flex items-center justify-center text-utsa-muted">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-utsa-midnight truncate">{display.name}</p>
+                      <p className="text-xs text-utsa-muted font-mono">{display.studentId}</p>
+                    </div>
 
-                      {/* Coins - Secondary */}
-                      <div className="flex items-center gap-2">
-                        <div className="text-2xl">🪙</div>
-                        <span className="text-xl font-bold text-amber-600">{data.coins}</span>
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-2xl">🪙</div>
+                      <span className="text-xl font-bold text-amber-600">{data.coins}</span>
+                    </div>
 
-                      {/* Circular Progress */}
-                      <div className="relative w-12 h-12">
-                        <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
-                          <path
-                            className="text-slate-200"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            fill="none"
-                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          />
-                          <path
-                            className={getProgressColor(data.percentComplete)}
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            fill="none"
-                            strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
-                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xs font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
-                        </div>
-                      </div>
-
-                      {/* Status Badge */}
-                      <div className="min-w-0">
-                        <Badge 
-                          className={
-                            data.percentComplete >= 90 
-                              ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
-                              : data.percentComplete >= 70 
-                              ? "bg-amber-500 hover:bg-amber-600 text-white"
-                              : "bg-rose-500 hover:bg-rose-600 text-white"
-                          }
-                        >
-                          {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
-                           data.percentComplete >= 70 ? "Good" : "Needs Work"}
-                        </Badge>
-                      </div>
-
-                      {/* Extra Credit Details */}
-                      <div className="min-w-0 text-center">
-                        {data.percentComplete >= 90 ? (
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
-                            <div className="text-xs text-emerald-600">
-                              {data.percentComplete.toFixed(1)}%
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="text-xs font-semibold text-slate-500">Not Qualified</div>
-                            <div className="text-xs text-slate-400">
-                              {data.percentComplete.toFixed(1)}% • Need 90%
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Email - Collapsible */}
-                      <div className="hidden lg:block min-w-0 flex-1">
-                        <p className="text-sm text-slate-600 truncate">{display.email}</p>
+                    <div className="relative w-12 h-12">
+                      <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                        <path
+                          className="text-utsa-border"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          fill="none"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path
+                          className={getProgressColor(data.percentComplete)}
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          fill="none"
+                          strokeDasharray={`${Math.min(data.percentComplete, 100)}, 100`}
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xs font-bold text-utsa-midnight">{data.percentComplete.toFixed(1)}%</span>
                       </div>
                     </div>
 
-                    {/* Expanded details panel */}
-                    {isExpanded && (
-                      <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 space-y-4">
-                        {/* Stats row - similar to student page */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          <Card className="bg-white border-slate-200">
-                            <CardContent className="p-3">
-                              <div className="text-xs text-slate-500 font-medium">Coins</div>
-                              <p className="text-xl font-bold text-amber-600">{data.coins}</p>
-                            </CardContent>
-                          </Card>
-                          <Card className="bg-white border-slate-200">
-                            <CardContent className="p-3">
-                              <div className="text-xs text-slate-500 font-medium">Qualified days</div>
-                              <p className="text-lg font-bold text-slate-900">{qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""} / {workingDays.length}</p>
-                            </CardContent>
-                          </Card>
-                          <Card className="bg-white border-slate-200">
-                            <CardContent className="p-3">
-                              <div className="text-xs text-slate-500 font-medium">Progress</div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${getProgressColor(data.percentComplete)}`}
-                                    style={{ width: `${Math.min(data.percentComplete, 100)}%` }}
-                                  />
-                                </div>
-                                <span className="text-sm font-bold text-slate-700">{data.percentComplete.toFixed(1)}%</span>
-                              </div>
-                            </CardContent>
-                          </Card>
-                          {data.dailyLog && data.dailyLog.length > 0 && (
-                            <Card className="bg-white border-slate-200">
-                              <CardContent className="p-3">
-                                <div className="text-xs text-slate-500 font-medium">Avg. min/day</div>
-                                <p className="text-lg font-bold text-slate-900">
-                                  {Math.round(
-                                    data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
-                                    (data.dailyLog.filter((d: any) => d.minutes > 0).length || 1)
-                                  )} min
-                                </p>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </div>
+                    <div className="min-w-0">
+                      <Badge 
+                        className={
+                          data.percentComplete >= 90 
+                            ? "bg-emerald-500 hover:bg-emerald-600 text-white" 
+                            : data.percentComplete >= 70 
+                            ? "bg-amber-500 hover:bg-amber-600 text-white"
+                            : "bg-rose-500 hover:bg-rose-600 text-white"
+                        }
+                      >
+                        {data.percentComplete >= 90 ? "🎉 Extra Credit!" : 
+                         data.percentComplete >= 70 ? "Good" : "Needs Work"}
+                      </Badge>
+                    </div>
 
-                        {/* Condensed calendar - single row with horizontal scroll */}
-                        {data.dailyLog && data.dailyLog.length > 0 && (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <CondensedCalendarView
-                              dailyLog={data.dailyLog}
-                              totalDays={data.totalDays}
-                              periodDays={data.periodDays}
-                            />
+                    <div className="min-w-0 text-center">
+                      {data.percentComplete >= 90 ? (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-emerald-700">QUALIFIED</div>
+                          <div className="text-xs text-emerald-600">
+                            {data.percentComplete.toFixed(1)}%
                           </div>
-                        )}
-
-                        {/* Open in new tab link */}
-                        <div className="flex justify-end pt-2">
-                          <a
-                            href={`/?studentId=${encodeURIComponent(studentId)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            Open student view in new tab
-                          </a>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="text-xs font-semibold text-utsa-muted">Not Qualified</div>
+                          <div className="text-xs text-utsa-muted">
+                            {data.percentComplete.toFixed(1)}% • Need 90%
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="hidden lg:block min-w-0 flex-1">
+                      <p className="text-sm text-utsa-muted truncate">{display.email}</p>
+                    </div>
                   </div>
-                )})}
-              </div>
 
-              {filteredAndSortedStudents.length === 0 && !isLoading && (
-                <div className="text-center py-8">
-                  {Object.keys(studentData).length === 0 ? (
-                    <div>
-                      <p className="text-slate-500 mb-2">No student data found for this period.</p>
-                      <p className="text-sm text-slate-400">
-                        Upload student data using the "Upload Student Data" tool first.
-                      </p>
+                  {isExpanded && (
+                    <div className="border-t border-utsa-border bg-utsa-surface px-4 py-4 space-y-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="bg-white border border-utsa-border rounded-md p-3">
+                          <div className="text-xs text-utsa-muted font-medium">Coins</div>
+                          <p className="text-xl font-bold text-amber-600">{data.coins}</p>
+                        </div>
+                        <div className="bg-white border border-utsa-border rounded-md p-3">
+                          <div className="text-xs text-utsa-muted font-medium">Qualified days</div>
+                          <p className="text-lg font-bold text-utsa-midnight">{qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""} / {workingDays.length}</p>
+                        </div>
+                        <div className="bg-white border border-utsa-border rounded-md p-3">
+                          <div className="text-xs text-utsa-muted font-medium">Progress</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 h-2 bg-utsa-border rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${getProgressColor(data.percentComplete)}`}
+                                style={{ width: `${Math.min(data.percentComplete, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-bold text-utsa-midnight">{data.percentComplete.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                        {data.dailyLog && data.dailyLog.length > 0 && (
+                          <div className="bg-white border border-utsa-border rounded-md p-3">
+                            <div className="text-xs text-utsa-muted font-medium">Avg. min/day</div>
+                            <p className="text-lg font-bold text-utsa-midnight">
+                              {Math.round(
+                                data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
+                                (data.dailyLog.filter((d: any) => d.minutes > 0).length || 1)
+                              )} min
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {data.dailyLog && data.dailyLog.length > 0 && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <CondensedCalendarView
+                            dailyLog={data.dailyLog}
+                            totalDays={data.totalDays}
+                            periodDays={data.periodDays}
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-2">
+                        <a
+                          href={`/?studentId=${encodeURIComponent(studentId)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-utsa-orange hover:bg-utsa-accessible text-white text-sm font-medium rounded-md transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Open student view in new tab
+                        </a>
+                      </div>
                     </div>
-                  ) : (
-                    <p className="text-slate-500">No students found matching your search criteria.</p>
                   )}
                 </div>
-              )}
+              )})}
+            </div>
 
-              {isLoading && (
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-slate-500">Loading student data...</p>
+            {filteredAndSortedStudents.length === 0 && !isLoading && (
+              <div className="text-center py-8">
+                {Object.keys(studentData).length === 0 ? (
+                  <div>
+                    <p className="text-utsa-muted mb-2">No student data found for this period.</p>
+                    <p className="text-sm text-utsa-muted">
+                      Upload student data using the &quot;Upload Student Data&quot; tool first.
+                    </p>
                   </div>
+                ) : (
+                  <p className="text-utsa-muted">No students found matching your search criteria.</p>
+                )}
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="text-center py-8">
+                <div className="inline-flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
+                  <p className="text-utsa-muted">Loading student data...</p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {error && (
-          <Card className="mt-6 border-red-200 bg-red-50">
-            <CardContent className="p-4">
-              <p className="text-red-800">{error}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Toast Notification */}
-        {showToast && (
-          <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
-            <Alert className="border-emerald-200 bg-emerald-50 shadow-lg">
-              <CheckCircle className="h-4 w-4 text-emerald-600" />
-              <AlertDescription className="text-emerald-800 font-medium">
-                {toastMessage}
-              </AlertDescription>
-            </Alert>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* Back to Student Portal */}
-        <div className="text-center mt-8">
-          <Button variant="outline" asChild>
-            <Link href="/">← Back to Student Portal</Link>
-          </Button>
         </div>
-      </div>
+      )}
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4">
+          <p className="text-red-800 text-sm">{error}</p>
+        </div>
+      )}
+
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
+          <Alert className="border-emerald-200 bg-emerald-50 shadow-lg">
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <AlertDescription className="text-emerald-800 font-medium">
+              {toastMessage}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
     </div>
   )
 }
+

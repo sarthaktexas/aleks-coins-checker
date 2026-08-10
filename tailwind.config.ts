@@ -53,6 +53,16 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        utsa: {
+          orange: "#F15A22",
+          accessible: "#D3430D",
+          midnight: "#032044",
+          mist: "#C8DCFF",
+          talavera: "#265BF7",
+          border: "#D4DDE8",
+          muted: "#5A6B7D",
+          surface: "#F7F9FC",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -5,12 +5,11 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Mail, Users, Filter, Edit3, Send, Copy, CheckCircle, AlertTriangle, Target, Percent, EyeOff } from "lucide-react"
+import { Mail, Users, Filter, Edit3, Send, Copy, CheckCircle, AlertTriangle, Target, EyeOff } from "lucide-react"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
@@ -494,460 +493,422 @@ export default function EmailStudentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-6xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Mail className="h-8 w-8 text-blue-600" />
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-utsa-midnight">Email Students</h1>
+          <p className="text-sm text-utsa-muted">Send targeted emails based on progress and criteria</p>
+        </div>
+        <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+            <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+              <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                <Target className="h-4 w-4 text-utsa-orange" />
+                Period & Section
+              </h2>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Email Students</h1>
+            <div className="p-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="period">Exam Period (Optional)</Label>
+                <Select value={selectedPeriod || "__ALL__"} onValueChange={setSelectedPeriod} disabled={isLoadingPeriods}>
+                  <SelectTrigger className="h-10 border-utsa-border text-left">
+                    <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__ALL__">All Periods</SelectItem>
+                    {Object.entries(periods).map(([key, period]) => (
+                      <SelectItem key={key} value={key}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{period.name}</span>
+                          <span className="text-xs text-utsa-muted">
+                            {formatDateRange(period.startDate, period.endDate)}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-utsa-muted">
+                  Select &quot;All Periods&quot; to load students from all periods
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="sectionNumber">Section Number (Optional)</Label>
+                <Input
+                  id="sectionNumber"
+                  type="text"
+                  placeholder="e.g., 003, 006 (leave empty for all sections)"
+                  value={sectionNumber}
+                  onChange={(e) => setSectionNumber(e.target.value)}
+                  className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                />
+                <p className="text-xs text-utsa-muted">
+                  Leave empty to load students from all sections for the selected period
+                </p>
+              </div>
+
+              <Button 
+                onClick={loadStudents}
+                disabled={isLoadingStudents}
+                className="w-full bg-utsa-orange hover:bg-utsa-accessible"
+              >
+                {isLoadingStudents ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Loading Students...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Load Students
+                  </div>
+                )}
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <p className="text-slate-600">Send targeted emails to students based on their progress and criteria</p>
-            <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+
+          <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+            <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+              <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                <Filter className="h-4 w-4 text-utsa-orange" />
+                Filter Students
+              </h2>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Min Progress %</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={filterCriteria.minProgress || ""}
+                    onChange={(e) => setFilterCriteria(prev => ({ 
+                      ...prev, 
+                      minProgress: e.target.value ? Number(e.target.value) : undefined 
+                    }))}
+                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Max Progress %</Label>
+                  <Input
+                    type="number"
+                    placeholder="100"
+                    value={filterCriteria.maxProgress || ""}
+                    onChange={(e) => setFilterCriteria(prev => ({ 
+                      ...prev, 
+                      maxProgress: e.target.value ? Number(e.target.value) : undefined 
+                    }))}
+                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Min Coins</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={filterCriteria.minCoins || ""}
+                    onChange={(e) => setFilterCriteria(prev => ({ 
+                      ...prev, 
+                      minCoins: e.target.value ? Number(e.target.value) : undefined 
+                    }))}
+                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Max Coins</Label>
+                  <Input
+                    type="number"
+                    placeholder="100"
+                    value={filterCriteria.maxCoins || ""}
+                    onChange={(e) => setFilterCriteria(prev => ({ 
+                      ...prev, 
+                      maxCoins: e.target.value ? Number(e.target.value) : undefined 
+                    }))}
+                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant={filterCriteria.hasProgress ? "default" : "outline"}
+                  size="sm"
+                  className={filterCriteria.hasProgress ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                  onClick={() => setFilterCriteria(prev => ({ 
+                    ...prev, 
+                    hasProgress: !prev.hasProgress,
+                    noProgress: false
+                  }))}
+                >
+                  Has Progress
+                </Button>
+                <Button
+                  variant={filterCriteria.noProgress ? "default" : "outline"}
+                  size="sm"
+                  className={filterCriteria.noProgress ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                  onClick={() => setFilterCriteria(prev => ({ 
+                    ...prev, 
+                    noProgress: !prev.noProgress,
+                    hasProgress: false
+                  }))}
+                >
+                  No Progress
+                </Button>
+              </div>
+
+              <div className="text-sm text-utsa-muted bg-utsa-surface p-3 rounded-md border border-utsa-border">
+                <strong className="text-utsa-midnight">Filtered Students:</strong> {filteredStudents.length} of {Object.keys(studentData).length}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+            <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+              <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                <Edit3 className="h-4 w-4 text-utsa-orange" />
+                Email Template
+              </h2>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label>Template</Label>
+                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                  <SelectTrigger className="h-10 border-utsa-border text-left">
+                    <SelectValue placeholder="Select email template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EMAIL_TEMPLATES.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{template.name}</span>
+                          <span className="text-xs text-utsa-muted">{template.criteria}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedTemplate && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Subject</Label>
+                    <Input
+                      value={customSubject}
+                      onChange={(e) => setCustomSubject(e.target.value)}
+                      className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                      placeholder="Email subject"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Message Body</Label>
+                    <Textarea
+                      value={customBody}
+                      onChange={(e) => setCustomBody(e.target.value)}
+                      rows={8}
+                      className="resize-none border-utsa-border focus-visible:ring-utsa-orange"
+                      placeholder="Email message body"
+                    />
+                  </div>
+
+                  <div className="text-xs text-utsa-muted bg-utsa-surface p-3 rounded-md border border-utsa-border">
+                    <strong className="text-utsa-midnight">Available placeholders:</strong> {"{{name}}"}, {"{{percentComplete}}"}, {"{{coins}}"}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Configuration */}
-          <div className="space-y-6">
-            {/* Period Selection */}
-            <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
-                <CardTitle className="flex items-center gap-3 text-xl text-blue-900">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Target className="h-5 w-5 text-blue-600" />
-                  </div>
-                  Select Period (Optional) & Section (Optional)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="period" className="text-sm font-medium text-slate-700">
-                    Exam Period (Optional)
-                  </Label>
-                  <Select value={selectedPeriod || "__ALL__"} onValueChange={setSelectedPeriod} disabled={isLoadingPeriods}>
-                    <SelectTrigger className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500 text-left">
-                      <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__ALL__">All Periods</SelectItem>
-                      {Object.entries(periods).map(([key, period]) => (
-                        <SelectItem key={key} value={key}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{period.name}</span>
-                            <span className="text-xs text-slate-500">
-                              {formatDateRange(period.startDate, period.endDate)}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-500">
-                    Select "All Periods" to load students from all periods
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="sectionNumber" className="text-sm font-medium text-slate-700">
-                    Section Number (Optional)
-                  </Label>
-                  <Input
-                    id="sectionNumber"
-                    type="text"
-                    placeholder="e.g., 003, 006 (leave empty for all sections)"
-                    value={sectionNumber}
-                    onChange={(e) => setSectionNumber(e.target.value)}
-                    className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Leave empty to load students from all sections for the selected period
-                  </p>
-                </div>
-
-                <Button 
-                  onClick={loadStudents}
-                  disabled={isLoadingStudents}
-                  className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                >
-                  {isLoadingStudents ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Loading Students...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Load Students
+        <div className="space-y-4">
+          <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+            <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+              <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                <Send className="h-4 w-4 text-utsa-orange" />
+                Send Email
+              </h2>
+            </div>
+            <div className="p-4 space-y-4">
+              {filteredStudents.length > 0 ? (
+                <>
+                  {hidePII && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm">
+                      <EyeOff className="h-4 w-4 flex-shrink-0" />
+                      <span>PII is hidden. Copy/send email actions are disabled. Turn off Hide PII to send emails.</span>
                     </div>
                   )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Filter Criteria */}
-            <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
-                <CardTitle className="flex items-center gap-3 text-xl text-green-900">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Filter className="h-5 w-5 text-green-600" />
-                  </div>
-                  Filter Students
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-slate-700">Min Progress %</Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={filterCriteria.minProgress || ""}
-                      onChange={(e) => setFilterCriteria(prev => ({ 
-                        ...prev, 
-                        minProgress: e.target.value ? Number(e.target.value) : undefined 
-                      }))}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-slate-700">Max Progress %</Label>
-                    <Input
-                      type="number"
-                      placeholder="100"
-                      value={filterCriteria.maxProgress || ""}
-                      onChange={(e) => setFilterCriteria(prev => ({ 
-                        ...prev, 
-                        maxProgress: e.target.value ? Number(e.target.value) : undefined 
-                      }))}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-slate-700">Min Coins</Label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={filterCriteria.minCoins || ""}
-                      onChange={(e) => setFilterCriteria(prev => ({ 
-                        ...prev, 
-                        minCoins: e.target.value ? Number(e.target.value) : undefined 
-                      }))}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium text-slate-700">Max Coins</Label>
-                    <Input
-                      type="number"
-                      placeholder="100"
-                      value={filterCriteria.maxCoins || ""}
-                      onChange={(e) => setFilterCriteria(prev => ({ 
-                        ...prev, 
-                        maxCoins: e.target.value ? Number(e.target.value) : undefined 
-                      }))}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant={filterCriteria.hasProgress ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterCriteria(prev => ({ 
-                      ...prev, 
-                      hasProgress: !prev.hasProgress,
-                      noProgress: false
-                    }))}
-                  >
-                    Has Progress
-                  </Button>
-                  <Button
-                    variant={filterCriteria.noProgress ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilterCriteria(prev => ({ 
-                      ...prev, 
-                      noProgress: !prev.noProgress,
-                      hasProgress: false
-                    }))}
-                  >
-                    No Progress
-                  </Button>
-                </div>
-
-                <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
-                  <strong>Filtered Students:</strong> {filteredStudents.length} of {Object.keys(studentData).length}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Email Template */}
-            <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100">
-                <CardTitle className="flex items-center gap-3 text-xl text-purple-900">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Edit3 className="h-5 w-5 text-purple-600" />
-                  </div>
-                  Email Template
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-slate-700">Template</Label>
-                  <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                    <SelectTrigger className="h-12 border-slate-200 focus:border-purple-500 focus:ring-purple-500 text-left">
-                      <SelectValue placeholder="Select email template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EMAIL_TEMPLATES.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{template.name}</span>
-                            <span className="text-xs text-slate-500">{template.criteria}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedTemplate && (
-                  <>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-slate-700">Subject</Label>
-                      <Input
-                        value={customSubject}
-                        onChange={(e) => setCustomSubject(e.target.value)}
-                        className="h-10"
-                        placeholder="Email subject"
-                      />
+                  <div className="bg-utsa-surface border border-utsa-border rounded-md p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="h-4 w-4 text-utsa-orange" />
+                      <span className="font-medium text-utsa-midnight text-sm">Recipients ({filteredStudents.length})</span>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-slate-700">Message Body</Label>
-                      <Textarea
-                        value={customBody}
-                        onChange={(e) => setCustomBody(e.target.value)}
-                        rows={8}
-                        className="resize-none"
-                        placeholder="Email message body"
-                      />
+                    <div className="text-sm text-utsa-muted max-h-64 overflow-y-auto">
+                      <table className="w-full">
+                        <thead className="text-left border-b border-utsa-border">
+                          <tr>
+                            {!hidePII && <th className="pb-2 pr-4 text-xs">Student ID</th>}
+                            <th className="pb-2 pr-4 text-xs">Name</th>
+                            <th className="pb-2 pr-4 text-xs">Email</th>
+                            <th className="pb-2 pr-4 text-right text-xs">Coins</th>
+                            <th className="pb-2 text-xs">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredStudents.map((student) => {
+                            const display = hidePII ? getFakeDataForStudent(student.id) : { name: student.data.name, email: student.data.email, studentId: student.id }
+                            const coins = (selectedPeriod && selectedPeriod !== '__ALL__')
+                              ? (student.data.coins || 0)
+                              : (student.data.totalBalance !== undefined ? student.data.totalBalance : 0)
+                            return (
+                              <tr key={student.id} className="border-b border-utsa-border">
+                                {!hidePII && (
+                                  <td className="py-2 pr-4 font-mono text-xs">{display.studentId}</td>
+                                )}
+                                <td className="py-2 pr-4">{display.name}</td>
+                                <td className="py-2 pr-4">{display.email}</td>
+                                <td className="py-2 pr-4 text-right font-medium">{coins}</td>
+                                <td className="py-2">{getStatusBadge(student.data.percentComplete)}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-
-                    <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
-                      <strong>Available placeholders:</strong> {"{{name}}"}, {"{{percentComplete}}"}, {"{{coins}}"}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column - Preview & Actions */}
-          <div className="space-y-6">
-            {/* Email Actions */}
-            <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-              <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b border-orange-100">
-                <CardTitle className="flex items-center gap-3 text-xl text-orange-900">
-                  <div className="p-2 bg-orange-100 rounded-lg">
-                    <Send className="h-5 w-5 text-orange-600" />
                   </div>
-                  Send Email
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                {filteredStudents.length > 0 ? (
-                  <>
-                    {hidePII && (
-                      <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
-                        <EyeOff className="h-4 w-4 flex-shrink-0" />
-                        <span>PII is hidden. Copy/send email actions are disabled. Turn off Hide PII to send emails.</span>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={copyEmailsToClipboard}
+                      variant="outline"
+                      className="flex-1 border-utsa-border"
+                      disabled={hidePII}
+                    >
+                      {copiedEmails ? (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          Copied!
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Copy className="h-4 w-4" />
+                          Copy Emails
+                        </div>
+                      )}
+                    </Button>
+                  </div>
+
+                  {selectedTemplate && customSubject && customBody && (
+                    <div className="space-y-3">
+                      <div className="bg-utsa-surface border border-utsa-border rounded-md p-3">
+                        <div className="text-xs text-utsa-muted">
+                          <strong className="text-utsa-midnight">Email Options:</strong>
+                          <ul className="mt-1 space-y-1">
+                            <li>• <strong className="text-utsa-midnight">Individual:</strong> Opens separate email for each student (personalized with names & progress)</li>
+                            <li>• <strong className="text-utsa-midnight">All in BCC:</strong> One generic email to all students (no names, progress, or personal info)</li>
+                          </ul>
+                        </div>
                       </div>
-                    )}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Users className="h-4 w-4 text-blue-600" />
-                        <span className="font-medium text-blue-900">Recipients ({filteredStudents.length})</span>
-                      </div>
-                      <div className="text-sm text-blue-800 max-h-64 overflow-y-auto">
-                        <table className="w-full">
-                          <thead className="text-left border-b border-blue-300">
-                            <tr>
-                              {!hidePII && <th className="pb-2 pr-4">Student ID</th>}
-                              <th className="pb-2 pr-4">Name</th>
-                              <th className="pb-2 pr-4">Email</th>
-                              <th className="pb-2 pr-4 text-right">Coins</th>
-                              <th className="pb-2">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredStudents.map((student, index) => {
-                              const display = hidePII ? getFakeDataForStudent(student.id) : { name: student.data.name, email: student.data.email, studentId: student.id }
-                              // Show period coins if period is selected, otherwise show total balance (includes all adjustments)
-                              // totalBalance includes: sum of (period coins + period adjustments) + global adjustments (redemptions)
-                              const coins = (selectedPeriod && selectedPeriod !== '__ALL__')
-                                ? (student.data.coins || 0)
-                                : (student.data.totalBalance !== undefined ? student.data.totalBalance : 0)
-                              return (
-                                <tr key={student.id} className="border-b border-blue-200">
-                                  {!hidePII && (
-                                    <td className="py-2 pr-4 font-mono text-xs">{display.studentId}</td>
-                                  )}
-                                  <td className="py-2 pr-4">{display.name}</td>
-                                  <td className="py-2 pr-4">{display.email}</td>
-                                  <td className="py-2 pr-4 text-right font-medium">{coins}</td>
-                                  <td className="py-2">{getStatusBadge(student.data.percentComplete)}</td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
 
-                    <div className="flex gap-2">
                       <Button
-                        onClick={copyEmailsToClipboard}
-                        variant="outline"
-                        className="flex-1"
+                        onClick={openIndividualEmails}
+                        className="w-full bg-utsa-orange hover:bg-utsa-accessible"
                         disabled={hidePII}
                       >
-                        {copiedEmails ? (
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            Copied!
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <Copy className="h-4 w-4" />
-                            Copy Emails
-                          </div>
-                        )}
-                      </Button>
-                    </div>
-
-                    {selectedTemplate && customSubject && customBody && (
-                      <div className="space-y-3">
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                          <div className="text-xs text-blue-800">
-                            <strong>Email Options:</strong>
-                            <ul className="mt-1 space-y-1">
-                              <li>• <strong>Individual:</strong> Opens separate email for each student (personalized with names & progress)</li>
-                              <li>• <strong>All in BCC:</strong> One generic email to all students (no names, progress, or personal info)</li>
-                            </ul>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          Open Individual Emails ({filteredStudents.length} separate windows)
                         </div>
+                      </Button>
 
+                      {hidePII ? (
                         <Button
-                          onClick={openIndividualEmails}
-                          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                          disabled={hidePII}
+                          className="w-full bg-utsa-accessible hover:bg-utsa-orange opacity-50 cursor-not-allowed"
+                          disabled
                         >
                           <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4" />
-                            Open Individual Emails ({filteredStudents.length} separate windows)
+                            Open Email Client (All in BCC: {filteredStudents.length} recipients)
                           </div>
                         </Button>
-
-                        {hidePII ? (
-                          <Button
-                            className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-medium opacity-50 cursor-not-allowed"
-                            disabled
-                          >
+                      ) : (
+                        <Button asChild className="w-full bg-utsa-accessible hover:bg-utsa-orange">
+                          <a href={generateBCCMailtoLink()}>
                             <div className="flex items-center gap-2">
                               <Mail className="h-4 w-4" />
                               Open Email Client (All in BCC: {filteredStudents.length} recipients)
                             </div>
-                          </Button>
-                        ) : (
-                          <Button asChild className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-medium">
-                            <a href={generateBCCMailtoLink()}>
-                              <div className="flex items-center gap-2">
-                                <Mail className="h-4 w-4" />
-                                Open Email Client (All in BCC: {filteredStudents.length} recipients)
-                              </div>
-                            </a>
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-slate-500">
-                    <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                    <p>No students match the current criteria</p>
-                    <p className="text-sm">Adjust your filters or load student data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Email Preview */}
-            {selectedTemplate && customSubject && customBody && filteredStudents.length > 0 && (
-              <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-                <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100">
-                  <CardTitle className="flex items-center gap-3 text-xl text-indigo-900">
-                    <div className="p-2 bg-indigo-100 rounded-lg">
-                      <Edit3 className="h-5 w-5 text-indigo-600" />
+                          </a>
+                        </Button>
+                      )}
                     </div>
-                    Email Preview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-sm font-medium text-slate-700">Subject</Label>
-                      <div className="mt-1 p-3 bg-slate-50 rounded-lg border text-sm">
-                        {generateEmailContent(filteredStudents[0]).subject}
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium text-slate-700">
-                        Body (Preview for {hidePII ? getFakeDataForStudent(filteredStudents[0].id).name : filteredStudents[0].data.name})
-                      </Label>
-                      <div className="mt-1 p-3 bg-slate-50 rounded-lg border text-sm whitespace-pre-wrap max-h-64 overflow-y-auto">
-                        {generateEmailContent(filteredStudents[0]).body}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-
-        {/* Messages */}
-        {message && (
-          <Alert
-            className={`mt-6 ${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
-          >
-            <div className="flex items-center gap-2">
-              {message.type === "success" ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                  )}
+                </>
               ) : (
-                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <div className="text-center py-8 text-utsa-muted">
+                  <Users className="h-12 w-12 mx-auto mb-4 text-utsa-muted/50" />
+                  <p>No students match the current criteria</p>
+                  <p className="text-sm">Adjust your filters or load student data</p>
+                </div>
               )}
-              <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
-                {message.text}
-              </AlertDescription>
             </div>
-          </Alert>
-        )}
+          </div>
 
-        {/* Back to Admin */}
-        <div className="text-center mt-8">
-          <Button variant="outline" asChild>
-            <a href="/admin">← Back to Admin Panel</a>
-          </Button>
+          {selectedTemplate && customSubject && customBody && filteredStudents.length > 0 && (
+            <div className="rounded-md border border-utsa-border bg-white overflow-hidden">
+              <div className="border-b border-utsa-border bg-utsa-surface px-4 py-3">
+                <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                  <Edit3 className="h-4 w-4 text-utsa-orange" />
+                  Email Preview
+                </h2>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <Label className="text-sm font-medium text-utsa-midnight">Subject</Label>
+                  <div className="mt-1 p-3 bg-utsa-surface rounded-md border border-utsa-border text-sm text-utsa-muted">
+                    {generateEmailContent(filteredStudents[0]).subject}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-utsa-midnight">
+                    Body (Preview for {hidePII ? getFakeDataForStudent(filteredStudents[0].id).name : filteredStudents[0].data.name})
+                  </Label>
+                  <div className="mt-1 p-3 bg-utsa-surface rounded-md border border-utsa-border text-sm text-utsa-muted whitespace-pre-wrap max-h-64 overflow-y-auto">
+                    {generateEmailContent(filteredStudents[0]).body}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {message && (
+        <Alert
+          className={`${message.type === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}
+        >
+          <div className="flex items-center gap-2">
+            {message.type === "success" ? (
+              <CheckCircle className="h-4 w-4 text-green-600" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+            )}
+            <AlertDescription className={message.type === "success" ? "text-green-800" : "text-red-800"}>
+              {message.text}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
     </div>
   )
 }
+

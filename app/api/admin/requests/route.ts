@@ -1,18 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { bustStudentDataCache } from "@/lib/student-cache"
 
 export const dynamic = "force-dynamic"
 
 // GET - Fetch all student requests for admin view
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const password = searchParams.get("password")
-
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -60,13 +57,11 @@ export async function GET(request: NextRequest) {
 // PUT - Update a student request status
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, requestId, status, adminNotes, processedBy } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { requestId, status, adminNotes } = body
 
     // Validate input
     if (!requestId || !status) {
@@ -218,7 +213,7 @@ export async function PUT(request: NextRequest) {
         status = ${status},
         admin_notes = ${adminNotes || null},
         processed_at = CURRENT_TIMESTAMP,
-        processed_by = ${processedBy || 'admin'}
+        processed_by = ${session.displayName}
       WHERE id = ${requestId}
       RETURNING id, status, processed_at
     `
@@ -235,6 +230,8 @@ export async function PUT(request: NextRequest) {
     } else if (status === 'rejected') {
       message = "Request rejected successfully"
     }
+
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,
@@ -258,13 +255,11 @@ export async function PUT(request: NextRequest) {
 // POST - Fast approve all pending requests for a specific student
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, studentId, adminNotes } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { studentId, adminNotes } = body
 
     // Validate input
     if (!studentId) {
@@ -373,7 +368,7 @@ export async function POST(request: NextRequest) {
             status = 'approved',
             admin_notes = ${adminNotes || 'Fast approved all requests'},
             processed_at = CURRENT_TIMESTAMP,
-            processed_by = 'admin'
+            processed_by = ${session.displayName}
           WHERE id = ${requestData.id}
         `
 
@@ -383,6 +378,8 @@ export async function POST(request: NextRequest) {
         // Continue with other requests even if one fails
       }
     }
+
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,

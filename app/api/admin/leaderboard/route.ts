@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -110,17 +111,14 @@ function calculateAvgMinutesPerDay(dailyLog: DailyLog[]): number {
 
 export async function GET(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { searchParams } = new URL(request.url)
-    const password = searchParams.get("password")
     const period = searchParams.get("period")
     const sectionNumber = searchParams.get("sectionNumber")
     const page = parseInt(searchParams.get("page") || "1")
     const pageSize = parseInt(searchParams.get("pageSize") || "20")
-
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
 
     // Validate input
     if (!period || !sectionNumber) {

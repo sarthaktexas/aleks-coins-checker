@@ -56,7 +56,7 @@ export function DayOverrideModal({
   useEffect(() => {
     if (isOpen) {
       setIsCheckingSettings(true)
-      fetch("/api/settings")
+      fetch("/api/settings", { cache: "no-store" })
         .then((res) => res.json())
         .then((data) => {
           setOverridesEnabled(data.overridesEnabled ?? true)

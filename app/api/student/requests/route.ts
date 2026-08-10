@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { bustStudentDataCache } from "@/lib/student-cache"
 
 export const dynamic = "force-dynamic"
 
@@ -183,11 +184,15 @@ export async function POST(request: NextRequest) {
       try {
         const normalizedStudentId = studentId.toLowerCase().trim()
         
-        // Get student's current total coins across all periods
-        // Use the same approach as the student route to ensure consistency
+        // Get only this student's JSON slices (avoid downloading entire class blobs)
         const studentDataResult = await sql`
-          SELECT data, period, section_number, uploaded_at
+          SELECT
+            data->${normalizedStudentId} AS student,
+            period,
+            COALESCE(section_number, 'default') AS section_number,
+            uploaded_at
           FROM student_data
+          WHERE data ? ${normalizedStudentId}
           ORDER BY uploaded_at DESC
         `
         
@@ -196,14 +201,11 @@ export async function POST(request: NextRequest) {
         const processedPeriods = new Set<string>()
         
         for (const row of studentDataResult.rows) {
-          let rowData: any
-          if (typeof row.data === "string") {
-            rowData = JSON.parse(row.data)
-          } else {
-            rowData = row.data
+          let student = row.student
+          if (typeof student === "string") {
+            student = JSON.parse(student)
           }
           
-          const student = rowData[normalizedStudentId]
           if (student) {
             const periodKey = `${row.period}_${row.section_number || 'default'}`
             // Only process the latest upload for each period/section combination
@@ -379,6 +381,8 @@ export async function POST(request: NextRequest) {
         // Don't throw - let the request be created so admin can see it in the reject-failed list
       }
     }
+
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,

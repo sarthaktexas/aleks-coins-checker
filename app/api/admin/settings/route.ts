@@ -1,18 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
 // GET - Fetch admin settings
 export async function GET(request: NextRequest) {
   try {
-    // Check admin password
-    const { searchParams } = new URL(request.url)
-    const password = searchParams.get("password")
-
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -68,13 +64,11 @@ export async function GET(request: NextRequest) {
 // PUT - Update admin settings
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, overridesEnabled, redemptionRequestsEnabled } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { overridesEnabled, redemptionRequestsEnabled } = body
 
     // Validate input
     if (typeof overridesEnabled !== "boolean" && overridesEnabled !== undefined) {

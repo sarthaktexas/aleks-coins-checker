@@ -1,386 +1,138 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  Shield, 
-  Upload, 
-  Database, 
+import {
+  Upload,
+  Database,
   Calendar,
-  FileSpreadsheet,
-  CheckCircle,
-  AlertTriangle,
-  Lock,
   Settings,
   Mail,
   Coins,
   MessageSquare,
-  Clock,
-  Gift,
-  Trophy
+  Trophy,
+  Bug,
 } from "lucide-react"
 import Link from "next/link"
 
 export default function AdminDashboard() {
-  const [password, setPassword] = useState("")
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
   const [stats, setStats] = useState({
     totalStudents: 0,
     dataUploads: 0,
     activePeriods: 0,
     overrideRequests: 0,
-    redemptionRequests: 0
+    redemptionRequests: 0,
   })
   const [statsLoading, setStatsLoading] = useState(false)
 
-  // Load saved password from localStorage on component mount
   useEffect(() => {
-    const savedPassword = localStorage.getItem('adminPassword')
-    if (savedPassword) {
-      setPassword(savedPassword)
-    }
+    loadStats()
   }, [])
-
-  // Save password to localStorage when it changes
-  useEffect(() => {
-    if (password) {
-      localStorage.setItem('adminPassword', password)
-    }
-  }, [password])
 
   const loadStats = async () => {
     setStatsLoading(true)
+    setError("")
     try {
-      // Load student data stats
-      const studentDataResponse = await fetch("/api/admin/student-data")
+      const studentDataResponse = await fetch("/api/admin/student-data", {
+        credentials: "same-origin",
+      })
+      if (studentDataResponse.status === 401) {
+        setError("Session expired — refresh and sign in again.")
+        return
+      }
       const studentDataResult = await studentDataResponse.json()
 
-      // Load request stats
-      const requestStatsResponse = await fetch(`/api/admin/request-stats?password=${encodeURIComponent(password)}`)
+      const requestStatsResponse = await fetch("/api/admin/request-stats", {
+        credentials: "same-origin",
+      })
+      if (requestStatsResponse.status === 401) {
+        setError("Session expired — refresh and sign in again.")
+        return
+      }
       const requestStatsResult = await requestStatsResponse.json()
 
       if (studentDataResponse.ok) {
         const uploadRecords = studentDataResult.uploadRecords || []
-        
-        // Use the unique student count provided by the API
         const totalStudents = studentDataResult.uniqueStudentCount || 0
-
-        // Count unique periods
         const uniquePeriods = new Set(uploadRecords.map((record: any) => record.period))
-        const activePeriods = uniquePeriods.size
-
-        // Get request counts
-        const overrideRequests = requestStatsResponse.ok ? requestStatsResult.overrideRequests || 0 : 0
-        const redemptionRequests = requestStatsResponse.ok ? requestStatsResult.redemptionRequests || 0 : 0
+        const overrideRequests = requestStatsResponse.ok
+          ? requestStatsResult.overrideRequests || 0
+          : 0
+        const redemptionRequests = requestStatsResponse.ok
+          ? requestStatsResult.redemptionRequests || 0
+          : 0
 
         setStats({
           totalStudents,
           dataUploads: uploadRecords.length,
-          activePeriods: activePeriods,
+          activePeriods: uniquePeriods.size,
           overrideRequests,
-          redemptionRequests
+          redemptionRequests,
         })
       }
-    } catch (error) {
-      console.error("Failed to load stats:", error)
+    } catch (err) {
+      console.error("Failed to load stats:", err)
     } finally {
       setStatsLoading(false)
     }
   }
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-
-    try {
-      const response = await fetch("/api/admin/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ password }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        setIsAuthenticated(true)
-        setError("")
-        // Load stats after successful authentication
-        loadStats()
-      } else {
-        setError(result.error || "Invalid password")
-      }
-    } catch (error) {
-      setError("Network error. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-sm">
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="p-3 bg-red-100 rounded-full">
-                <Shield className="h-8 w-8 text-red-600" />
-              </div>
-              <h1 className="text-2xl font-bold text-slate-900">Admin Access</h1>
-            </div>
-            <CardDescription>
-              Enter the admin password to access the dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Admin Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter admin password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-12"
-                />
-              </div>
-              <Button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full h-12 bg-red-600 hover:bg-red-700"
-              >
-                {isLoading ? "Authenticating..." : "Access Dashboard"}
-              </Button>
-              {error && (
-                <Alert className="border-red-200 bg-red-50">
-                  <AlertTriangle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-800">{error}</AlertDescription>
-                </Alert>
-              )}
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  const adminTools = [
-    {
-      title: "Upload & Settings",
-      description: "Upload Excel files with student data, manage system settings, and configure exam periods",
-      icon: Upload,
-      href: "/admin",
-      color: "bg-blue-500 hover:bg-blue-600",
-      iconColor: "text-blue-600",
-      bgColor: "bg-blue-50",
-    },
-    {
-      title: "View Student Data",
-      description: "Browse and search through uploaded student data and progress",
-      icon: Database,
-      href: "/admin/view-data",
-      color: "bg-green-500 hover:bg-green-600",
-      iconColor: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
-      title: "Manage Exam Periods",
-      description: "Edit exam period dates, excluded dates, and period configurations",
-      icon: Calendar,
-      href: "/admin/manage-periods",
-      color: "bg-purple-500 hover:bg-purple-600",
-      iconColor: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
-      title: "View Day Overrides",
-      description: "View and manage student day overrides and exceptions",
-      icon: Settings,
-      href: "/admin/view-overrides",
-      color: "bg-orange-500 hover:bg-orange-600",
-      iconColor: "text-orange-600",
-      bgColor: "bg-orange-50",
-    },
-    {
-      title: "Email Students",
-      description: "Send targeted emails to students based on progress and criteria",
-      icon: Mail,
-      href: "/admin/email-students",
-      color: "bg-indigo-500 hover:bg-indigo-600",
-      iconColor: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-    },
-    {
-      title: "Student Requests",
-      description: "View and manage student requests for replacements and other ALEKS matters",
-      icon: MessageSquare,
-      href: "/admin/requests",
-      color: "bg-cyan-500 hover:bg-cyan-600",
-      iconColor: "text-cyan-600",
-      bgColor: "bg-cyan-50",
-    },
-    {
-      title: "Coin Adjustments",
-      description: "Add, view, and manage manual coin adjustments (fudge points) for students",
-      icon: Coins,
-      href: "/admin/coin-adjustments",
-      color: "bg-amber-500 hover:bg-amber-600",
-      iconColor: "text-amber-600",
-      bgColor: "bg-amber-50",
-    },
-    {
-      title: "Leaderboard",
-      description: "View student rankings by period and section with pagination",
-      icon: Trophy,
-      href: "/admin/leaderboard",
-      color: "bg-yellow-500 hover:bg-yellow-600",
-      iconColor: "text-yellow-600",
-      bgColor: "bg-yellow-50",
-    },
+  const tools = [
+    { title: "Upload & Settings", href: "/admin", icon: Upload },
+    { title: "Student Data", href: "/admin/view-data", icon: Database },
+    { title: "Exam Periods", href: "/admin/manage-periods", icon: Calendar },
+    { title: "Day Overrides", href: "/admin/view-overrides", icon: Settings },
+    { title: "Student Requests", href: "/admin/requests", icon: MessageSquare },
+    { title: "Bug Reports", href: "/admin/bug-reports", icon: Bug },
+    { title: "Coin Adjustments", href: "/admin/coin-adjustments", icon: Coins },
+    { title: "Email Students", href: "/admin/email-students", icon: Mail },
+    { title: "Leaderboard", href: "/admin/leaderboard", icon: Trophy },
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-red-100 rounded-full">
-              <Shield className="h-8 w-8 text-red-600" />
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">Admin Dashboard</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold text-utsa-midnight">Dashboard</h1>
+        <p className="text-sm text-utsa-muted">ALEKS Points Portal admin</p>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {[
+          { label: "Students", value: stats.totalStudents },
+          { label: "Uploads", value: stats.dataUploads },
+          { label: "Periods", value: stats.activePeriods },
+          { label: "Overrides", value: stats.overrideRequests },
+          { label: "Redemptions", value: stats.redemptionRequests },
+        ].map((s) => (
+          <div key={s.label} className="rounded-md border border-utsa-border bg-white px-3 py-2">
+            <p className="text-xs text-utsa-muted">{s.label}</p>
+            <p className="text-lg font-semibold text-utsa-midnight">
+              {statsLoading ? "…" : s.value}
+            </p>
           </div>
-          <p className="text-slate-600">Manage the ALEKS Points Portal system</p>
-        </div>
+        ))}
+      </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Database className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Total Students</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {statsLoading ? "..." : stats.totalStudents}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <FileSpreadsheet className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Data Uploads</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {statsLoading ? "..." : stats.dataUploads}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Calendar className="h-6 w-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Active Periods</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {statsLoading ? "..." : stats.activePeriods}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <Clock className="h-6 w-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Override Requests</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {statsLoading ? "..." : stats.overrideRequests}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 rounded-lg">
-                  <Gift className="h-6 w-6 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Redemption Requests</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {statsLoading ? "..." : stats.redemptionRequests}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Admin Tools Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {adminTools.map((tool, index) => {
-            const IconComponent = tool.icon
-            return (
-              <Link key={index} href={tool.href}>
-                <Card className="h-full bg-white/90 backdrop-blur-sm border-0 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 cursor-pointer">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-3 ${tool.bgColor} rounded-lg`}>
-                        <IconComponent className={`h-6 w-6 ${tool.iconColor}`} />
-                      </div>
-                      <CardTitle className="text-lg text-slate-900">{tool.title}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-slate-600 mb-4">
-                      {tool.description}
-                    </CardDescription>
-                    <Button className={`w-full ${tool.color} text-white`}>
-                      Access Tool
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
-
-        {/* Back to Home */}
-        <div className="text-center mt-8">
-          <Button variant="outline" asChild>
-            <Link href="/">← Back to Student Portal</Link>
-          </Button>
-        </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {tools.map((tool) => {
+          const Icon = tool.icon
+          return (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="flex items-center gap-3 rounded-md border border-utsa-border bg-white px-3 py-3 transition-colors hover:border-utsa-orange/50 hover:bg-utsa-orange/5"
+            >
+              <Icon className="h-4 w-4 text-utsa-orange" />
+              <span className="text-sm font-medium text-utsa-midnight">{tool.title}</span>
+            </Link>
+          )
+        })}
       </div>
     </div>
   )

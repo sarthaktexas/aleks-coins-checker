@@ -1,27 +1,91 @@
 import { type NextRequest, NextResponse } from "next/server"
+import {
+  bootstrapAdminUsersIfNeeded,
+  buildSession,
+  clearSessionCookie,
+  findActiveUserByUsername,
+  getSessionFromRequest,
+  setSessionCookie,
+  verifyPin,
+} from "@/lib/admin-auth"
 
+export const dynamic = "force-dynamic"
+
+/** GET — current session (if any) */
+export async function GET(request: NextRequest) {
+  try {
+    await bootstrapAdminUsersIfNeeded()
+    const session = getSessionFromRequest(request)
+    if (!session) {
+      return NextResponse.json({ authenticated: false }, { status: 401 })
+    }
+    return NextResponse.json({
+      authenticated: true,
+      user: {
+        id: session.userId,
+        username: session.username,
+        displayName: session.displayName,
+        role: session.role,
+      },
+    })
+  } catch (error) {
+    console.error("Session check error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to check session",
+        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
+      },
+      { status: 500 },
+    )
+  }
+}
+
+/** POST — login with username + PIN */
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json()
+    await bootstrapAdminUsersIfNeeded()
 
-    if (!password) {
-      return NextResponse.json({ error: "Password is required" }, { status: 400 })
+    const body = await request.json()
+    const username = typeof body.username === "string" ? body.username : ""
+    const pin = typeof body.pin === "string" ? body.pin : typeof body.password === "string" ? body.password : ""
+
+    if (!username || !pin) {
+      return NextResponse.json({ error: "Username and PIN are required" }, { status: 400 })
     }
 
-    // Check against the server-side admin password
-    if (password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
+    const user = await findActiveUserByUsername(username)
+    if (!user || !verifyPin(pin, user.pinSalt, user.pinHash)) {
+      return NextResponse.json({ error: "Invalid username or PIN" }, { status: 401 })
     }
 
-    return NextResponse.json({
+    const session = buildSession(user)
+    const response = NextResponse.json({
       success: true,
-      message: "Authentication successful"
+      message: "Authentication successful",
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+      },
     })
+    setSessionCookie(response, session)
+    return response
   } catch (error) {
     console.error("Auth error:", error)
     return NextResponse.json(
-      { error: "Authentication failed" },
-      { status: 500 }
+      {
+        error: "Authentication failed",
+        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
+      },
+      { status: 500 },
     )
   }
+}
+
+/** DELETE — logout */
+export async function DELETE() {
+  const response = NextResponse.json({ success: true })
+  clearSessionCookie(response)
+  return response
 }

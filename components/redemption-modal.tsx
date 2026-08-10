@@ -46,7 +46,7 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
   useEffect(() => {
     if (isOpen) {
       setIsCheckingSettings(true)
-      fetch("/api/settings")
+      fetch("/api/settings", { cache: "no-store" })
         .then((res) => res.json())
         .then((data) => {
           setRedemptionRequestsEnabled(data.redemptionRequestsEnabled ?? true)

@@ -48,6 +48,9 @@ NODE_ENV="development"
 ### Optional Variables
 
 - **`NODE_ENV`**: Set to "development" for local development
+- **`BUG_REPORT_EMAIL`**: Defaults to `sarthaktexas@gmail.com` if unset
+- **`RESEND_API_KEY`**: Required for email notifications — free at [resend.com](https://resend.com). Without it, bug reports still save to Admin → Bugs
+- **`BUG_REPORT_FROM_EMAIL`**: Optional From address (defaults to `onboarding@resend.dev`). With Resend's free onboarding domain you can only send **to** the email on your Resend account (verify `sarthaktexas@gmail.com` there, or add a custom domain)
 
 ## Database Setup
 
@@ -55,12 +58,15 @@ If you don't have a database yet, the application will still work but:
 - Student data uploads will fail
 - Student lookups will show demo data only
 
-### Vercel Postgres (Recommended)
+### Postgres (Recommended: Neon free tier)
 
-1. Go to your Vercel dashboard
-2. Navigate to Storage → Postgres
-3. Create a new database
-4. Copy the connection string to `POSTGRES_URL`
+Vercel Postgres is deprecated. For a free always-on database that fits this app's size:
+
+1. Create a free project at [neon.tech](https://neon.tech) (or use an existing Neon DB already linked in Vercel)
+2. Copy the connection string to `POSTGRES_URL`
+3. In Vercel → Project → Settings → Environment Variables, set the same value for Production
+
+This app's data footprint is small (course-scale JSON uploads), so Neon's free tier is typically enough. No need for a paid DB plan.
 
 ### Local Development Without Database
 

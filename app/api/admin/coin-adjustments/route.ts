@@ -1,11 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { bustStudentDataCache } from "@/lib/student-cache"
 
 export const dynamic = "force-dynamic"
 
 // GET - Fetch all coin adjustments or for a specific student
 export async function GET(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const period = searchParams.get("period")
@@ -92,13 +97,11 @@ export async function GET(request: NextRequest) {
 // POST - Create a new coin adjustment
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, studentId, studentName, period, sectionNumber, adjustmentAmount, reason, createdBy } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { studentId, studentName, period, sectionNumber, adjustmentAmount, reason } = body
 
     // Validate input
     if (!studentId || !studentName || !period || !sectionNumber || adjustmentAmount === undefined || !reason) {
@@ -134,11 +137,13 @@ export async function POST(request: NextRequest) {
         ${sectionNumber}, 
         ${adjustmentAmount}, 
         ${reason},
-        ${createdBy || 'admin'},
+        ${session.displayName},
         true
       )
       RETURNING id, created_at
     `
+
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,
@@ -161,13 +166,11 @@ export async function POST(request: NextRequest) {
 // DELETE - Soft delete a coin adjustment (set is_active to false)
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, adjustmentId } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { adjustmentId } = body
 
     // Validate input
     if (!adjustmentId) {
@@ -190,6 +193,8 @@ export async function DELETE(request: NextRequest) {
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "Adjustment not found" }, { status: 404 })
     }
+
+    bustStudentDataCache()
 
     return NextResponse.json({
       success: true,

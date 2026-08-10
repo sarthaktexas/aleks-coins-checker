@@ -24,10 +24,12 @@ import {
   Lock,
   BarChart3,
   Trophy,
+  Bug,
 } from "lucide-react"
 import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
 import { RequestHistory } from "@/components/request-history"
+import { BugReportModal } from "@/components/bug-report-modal"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 
@@ -126,6 +128,7 @@ export default function StudentLookup() {
     isOpen: boolean
     type: "assignment" | "quiz"
   }>({ isOpen: false, type: "assignment" })
+  const [bugReportOpen, setBugReportOpen] = useState(false)
   const [selectedPeriodHistory, setSelectedPeriodHistory] = useState<number | null>(null)
   const [leaderboardData, setLeaderboardData] = useState<{
     rank: number | null
@@ -298,7 +301,7 @@ export default function StudentLookup() {
 
   // Load redemption settings when component mounts
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/settings", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         setRedemptionRequestsEnabled(data.redemptionRequestsEnabled ?? true)
@@ -1194,16 +1197,18 @@ export default function StudentLookup() {
         {/* Footer */}
         <div className="mt-8 sm:mt-12 text-center space-y-4">
           <p className="text-sm sm:text-base text-slate-600">
-            Questions? Contact Sarthak at{" "}
-            <a
-              href="mailto:sarthak.mohanty@utsa.edu"
-              className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors"
+            Something broken?{" "}
+            <button
+              type="button"
+              onClick={() => setBugReportOpen(true)}
+              className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors inline-flex items-center gap-1"
             >
-              sarthak.mohanty@utsa.edu
-            </a>
+              <Bug className="h-3.5 w-3.5" />
+              Report a bug
+            </button>
           </p>
           <p className="text-xs sm:text-sm text-slate-500">
-            🔒 Your data is secure and only accessible with your student ID
+            Your data is only accessible with your student ID
           </p>
 
           {/* Admin Access */}
@@ -1232,6 +1237,12 @@ export default function StudentLookup() {
           />
         )}
 
+        <BugReportModal
+          isOpen={bugReportOpen}
+          onClose={() => setBugReportOpen(false)}
+          studentId={studentId}
+          studentEmail={!hidePII && studentInfo ? studentInfo.email : ""}
+        />
       </div>
     </div>
   )

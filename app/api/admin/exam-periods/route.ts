@@ -1,9 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 // GET - Fetch all exam periods
 export async function GET(request: NextRequest) {
   try {
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
+
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
       console.log("No database URL configured - returning empty periods")
@@ -68,13 +72,11 @@ export async function GET(request: NextRequest) {
 // POST - Create or update an exam period
 export async function POST(request: NextRequest) {
   try {
-    // Check admin password
-    const body = await request.json()
-    const { password, periodKey, name, startDate, endDate, excludedDates } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { periodKey, name, startDate, endDate, excludedDates } = body
 
     // Validate required fields
     if (!periodKey || !name || !startDate || !endDate) {
@@ -134,12 +136,11 @@ export async function POST(request: NextRequest) {
 // PATCH - Change a period's key (updates all references across tables)
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, oldPeriodKey, newPeriodKey } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { oldPeriodKey, newPeriodKey } = body
 
     if (!oldPeriodKey || !newPeriodKey) {
       return NextResponse.json({ error: "Both oldPeriodKey and newPeriodKey are required" }, { status: 400 })
@@ -212,13 +213,11 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete an exam period
 export async function DELETE(request: NextRequest) {
   try {
-    // Check admin password
-    const body = await request.json()
-    const { password, periodKey } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { periodKey } = body
 
     if (!periodKey) {
       return NextResponse.json({ error: "Period key is required" }, { status: 400 })

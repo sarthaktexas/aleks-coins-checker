@@ -5,18 +5,16 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { 
-  Shield, 
   Trophy,
   ChevronLeft,
   ChevronRight,
   Coins,
-  BarChart3,
-  EyeOff
+  EyeOff,
+  Lock,
+  AlertTriangle,
 } from "lucide-react"
-import Link from "next/link"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
@@ -201,309 +199,264 @@ export default function AdminLeaderboardPage() {
     if (rank === 1) return "bg-yellow-500 hover:bg-yellow-600"
     if (rank === 2) return "bg-gray-400 hover:bg-gray-500"
     if (rank === 3) return "bg-amber-600 hover:bg-amber-700"
-    return "bg-blue-500 hover:bg-blue-600"
+    return "bg-utsa-orange hover:bg-utsa-accessible"
   }
 
-  // Show authentication form if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        <div className="container mx-auto px-4 py-8 max-w-md">
-          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Shield className="h-5 w-5 text-blue-600" />
-                </div>
-                Admin Authentication
-              </CardTitle>
-              <CardDescription>
-                Enter admin password to view leaderboard
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">
-                    Admin Password
-                  </Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoadingAuth}
-                    className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Enter admin password"
-                    required
-                  />
-                </div>
-                {authError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-700 text-sm font-medium">{authError}</p>
-                  </div>
-                )}
-                <Button
-                  type="submit"
-                  disabled={isLoadingAuth}
-                  className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {isLoadingAuth ? "Authenticating..." : "Authenticate"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+      <div className="mx-auto max-w-sm space-y-4 pt-8">
+        <div className="flex items-center gap-2">
+          <Lock className="h-5 w-5 text-utsa-orange" />
+          <h1 className="text-lg font-semibold text-utsa-midnight">Admin login</h1>
         </div>
+        <form onSubmit={handleLogin} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoadingAuth}
+              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+              placeholder="Admin password"
+              required
+            />
+          </div>
+          {authError && (
+            <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
+              <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
+              <AlertDescription className="text-utsa-accessible">{authError}</AlertDescription>
+            </Alert>
+          )}
+          <Button
+            type="submit"
+            disabled={isLoadingAuth}
+            className="w-full bg-utsa-orange hover:bg-utsa-accessible"
+          >
+            {isLoadingAuth ? "Checking…" : "Continue"}
+          </Button>
+        </form>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Leaderboard</h1>
-            <p className="text-slate-600">View student rankings by period and section</p>
-          </div>
-          <Link href="/admin/dashboard">
-            <Button variant="outline" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
-          </Link>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold text-utsa-midnight">Leaderboard</h1>
+        <p className="text-sm text-utsa-muted">View student rankings by period and section</p>
+      </div>
 
-        {/* Period and Section Selection */}
-        <Card className="mb-6 shadow-lg border-0 bg-white/90 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-lg">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Trophy className="h-5 w-5 text-blue-600" />
-              </div>
-              Select Period & Section
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="period" className="text-sm font-medium text-slate-700">
-                  Period
-                </Label>
-                <select
-                  id="period"
-                  value={selectedPeriod}
-                  onChange={(e) => {
-                    setSelectedPeriod(e.target.value)
-                    // Reset section when period changes
-                    const sections = getAvailableSections(e.target.value)
-                    if (sections.length > 0) {
-                      setSelectedSection(sections[0])
-                    } else {
-                      setSelectedSection("")
-                    }
-                  }}
-                  className="w-full h-10 px-3 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select a period</option>
-                  {getAvailablePeriods().map(period => (
-                    <option key={period} value={period}>
-                      {period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="section" className="text-sm font-medium text-slate-700">
-                  Section
-                </Label>
-                <select
-                  id="section"
-                  value={selectedSection}
-                  onChange={(e) => setSelectedSection(e.target.value)}
-                  disabled={!selectedPeriod}
-                  className="w-full h-10 px-3 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
-                >
-                  <option value="">Select a section</option>
-                  {selectedPeriod && getAvailableSections(selectedPeriod).map(section => (
-                    <option key={section} value={section}>
-                      Section {section}
-                    </option>
-                  ))}
-                </select>
+      <div className="rounded-md border border-utsa-border bg-white p-4 space-y-4">
+        <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-utsa-orange" />
+          Select Period & Section
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="period">Period</Label>
+            <select
+              id="period"
+              value={selectedPeriod}
+              onChange={(e) => {
+                setSelectedPeriod(e.target.value)
+                const sections = getAvailableSections(e.target.value)
+                if (sections.length > 0) {
+                  setSelectedSection(sections[0])
+                } else {
+                  setSelectedSection("")
+                }
+              }}
+              className="w-full h-10 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange"
+            >
+              <option value="">Select a period</option>
+              {getAvailablePeriods().map(period => (
+                <option key={period} value={period}>
+                  {period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="section">Section</Label>
+            <select
+              id="section"
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              disabled={!selectedPeriod}
+              className="w-full h-10 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange disabled:bg-utsa-surface disabled:cursor-not-allowed"
+            >
+              <option value="">Select a section</option>
+              {selectedPeriod && getAvailableSections(selectedPeriod).map(section => (
+                <option key={section} value={section}>
+                  Section {section}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-4">
+          <p className="text-red-800 text-sm font-medium">{error}</p>
+        </div>
+      )}
+
+      {selectedPeriod && selectedSection && (
+        <div className="rounded-md border border-utsa-border bg-white">
+          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-utsa-border bg-utsa-surface px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-yellow-500" />
+                Leaderboard
+              </h2>
+              <p className="text-xs text-utsa-muted mt-0.5">
+                {selectedPeriod.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • Section {selectedSection}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+              <div className="text-right">
+                <p className="text-xs text-utsa-muted">Total Students: {totalStudents}</p>
+                <p className="text-xs text-utsa-muted">Page {currentPage} of {totalPages}</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Error Message */}
-        {error && (
-          <Card className="mb-6 border-red-200 bg-red-50">
-            <CardContent className="pt-6">
-              <p className="text-red-700 font-medium">{error}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Leaderboard Table */}
-        {selectedPeriod && selectedSection && (
-          <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <CardTitle className="flex items-center gap-3 text-lg">
-                    <Trophy className="h-5 w-5 text-yellow-500" />
-                    Leaderboard
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    {selectedPeriod.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • Section {selectedSection}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-4">
-                  <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
-                  <div className="text-right">
-                    <p className="text-sm text-slate-600">Total Students: {totalStudents}</p>
-                    <p className="text-sm text-slate-600">Page {currentPage} of {totalPages}</p>
-                  </div>
-                </div>
+          </div>
+          <div className="p-4">
+            {hidePII && (
+              <Alert className="mb-4 border-amber-200 bg-amber-50">
+                <EyeOff className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800">
+                  PII is hidden. Names, emails, and IDs are replaced with placeholder data.
+                </AlertDescription>
+              </Alert>
+            )}
+            {isLoading ? (
+              <div className="py-12 text-center">
+                <p className="text-utsa-muted">Loading leaderboard...</p>
               </div>
-            </CardHeader>
-            <CardContent>
-              {hidePII && (
-                <Alert className="mb-6 border-amber-200 bg-amber-50">
-                  <EyeOff className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800">
-                    PII is hidden. Names, emails, and IDs are replaced with placeholder data.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {isLoading ? (
-                <div className="py-12 text-center">
-                  <p className="text-slate-600">Loading leaderboard...</p>
-                </div>
-              ) : students.length === 0 ? (
-                <div className="py-12 text-center">
-                  <p className="text-slate-600">No students found for this period and section.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Rank</th>
-                          {!hidePII && <th className="text-left py-3 px-4 font-semibold text-slate-700">Student ID</th>}
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Name</th>
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Email</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-700">Total Coins</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-700">Avg Mins/Day</th>
-                          <th className="text-right py-3 px-4 font-semibold text-slate-700">Progress</th>
+            ) : students.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-utsa-muted">No students found for this period and section.</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-utsa-border">
+                        <th className="text-left py-3 px-4 font-semibold text-utsa-muted text-sm">Rank</th>
+                        {!hidePII && <th className="text-left py-3 px-4 font-semibold text-utsa-muted text-sm">Student ID</th>}
+                        <th className="text-left py-3 px-4 font-semibold text-utsa-muted text-sm">Name</th>
+                        <th className="text-left py-3 px-4 font-semibold text-utsa-muted text-sm">Email</th>
+                        <th className="text-right py-3 px-4 font-semibold text-utsa-muted text-sm">Total Coins</th>
+                        <th className="text-right py-3 px-4 font-semibold text-utsa-muted text-sm">Avg Mins/Day</th>
+                        <th className="text-right py-3 px-4 font-semibold text-utsa-muted text-sm">Progress</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((student) => {
+                        const display = hidePII ? getFakeDataForStudent(student.studentId) : { name: student.name, email: student.email, studentId: student.studentId }
+                        return (
+                        <tr key={student.studentId} className="border-b border-utsa-border hover:bg-utsa-surface/50">
+                          <td className="py-3 px-4">
+                            <Badge className={getRankBadgeColor(student.rank)}>
+                              #{student.rank}
+                            </Badge>
+                          </td>
+                          {!hidePII && (
+                            <td className="py-3 px-4 text-sm text-utsa-muted font-mono">
+                              {display.studentId}
+                            </td>
+                          )}
+                          <td className="py-3 px-4 font-medium text-utsa-midnight">
+                            {display.name}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-utsa-muted">
+                            {display.email}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-utsa-midnight">
+                            <div className="flex items-center justify-end gap-1">
+                              <Coins className="h-4 w-4 text-yellow-500" />
+                              {student.totalCoins}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm text-utsa-muted">
+                            {Math.round(student.avgMinutesPerDay)} mins
+                          </td>
+                          <td className="py-3 px-4 text-right text-sm">
+                            <Badge variant="outline" className="bg-utsa-surface border-utsa-border">
+                              {student.percentComplete.toFixed(1)}%
+                            </Badge>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {students.map((student) => {
-                          const display = hidePII ? getFakeDataForStudent(student.studentId) : { name: student.name, email: student.email, studentId: student.studentId }
-                          return (
-                          <tr key={student.studentId} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="py-3 px-4">
-                              <Badge className={getRankBadgeColor(student.rank)}>
-                                #{student.rank}
-                              </Badge>
-                            </td>
-                            {!hidePII && (
-                              <td className="py-3 px-4 text-sm text-slate-600 font-mono">
-                                {display.studentId}
-                              </td>
-                            )}
-                            <td className="py-3 px-4 font-medium text-slate-900">
-                              {display.name}
-                            </td>
-                            <td className="py-3 px-4 text-sm text-slate-600">
-                              {display.email}
-                            </td>
-                            <td className="py-3 px-4 text-right font-bold text-slate-900">
-                              <div className="flex items-center justify-end gap-1">
-                                <Coins className="h-4 w-4 text-yellow-500" />
-                                {student.totalCoins}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 text-right text-sm text-slate-600">
-                              {Math.round(student.avgMinutesPerDay)} mins
-                            </td>
-                            <td className="py-3 px-4 text-right text-sm">
-                              <Badge variant="outline" className="bg-slate-50">
-                                {student.percentComplete.toFixed(1)}%
-                              </Badge>
-                            </td>
-                          </tr>
-                        )})}
-                      </tbody>
-                    </table>
-                  </div>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
 
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                    <div className="mt-6 flex items-center justify-between">
-                      <div className="text-sm text-slate-600">
-                        Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalStudents)} of {totalStudents} students
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          disabled={currentPage === 1 || isLoading}
-                          className="flex items-center gap-1"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          Previous
-                        </Button>
-                        <div className="flex items-center gap-1">
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            let pageNum: number
-                            if (totalPages <= 5) {
-                              pageNum = i + 1
-                            } else if (currentPage <= 3) {
-                              pageNum = i + 1
-                            } else if (currentPage >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i
-                            } else {
-                              pageNum = currentPage - 2 + i
-                            }
-                            return (
-                              <Button
-                                key={pageNum}
-                                variant={currentPage === pageNum ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => handlePageChange(pageNum)}
-                                disabled={isLoading}
-                                className={currentPage === pageNum ? "bg-blue-600 hover:bg-blue-700" : ""}
-                              >
-                                {pageNum}
-                              </Button>
-                            )
-                          })}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          disabled={currentPage === totalPages || isLoading}
-                          className="flex items-center gap-1"
-                        >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
+                {totalPages > 1 && (
+                  <div className="mt-6 flex items-center justify-between">
+                    <div className="text-sm text-utsa-muted">
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalStudents)} of {totalStudents} students
                     </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || isLoading}
+                        className="flex items-center gap-1 border-utsa-border"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum: number
+                          if (totalPages <= 5) {
+                            pageNum = i + 1
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i
+                          } else {
+                            pageNum = currentPage - 2 + i
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handlePageChange(pageNum)}
+                              disabled={isLoading}
+                              className={currentPage === pageNum ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                            >
+                              {pageNum}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages || isLoading}
+                        className="flex items-center gap-1 border-utsa-border"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

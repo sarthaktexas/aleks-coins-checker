@@ -1,16 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 // POST - Reject redemption requests that didn't get coins deducted
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password } = body
-
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -74,7 +70,7 @@ export async function POST(request: NextRequest) {
             status = 'rejected',
             admin_notes = ${adminNote},
             processed_at = CURRENT_TIMESTAMP,
-            processed_by = 'system'
+            processed_by = ${session.displayName}
           WHERE id = ${req.id}
         `
 

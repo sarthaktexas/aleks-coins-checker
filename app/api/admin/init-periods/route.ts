@@ -1,17 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 // POST - Initialize exam periods with default data
 export async function POST(request: NextRequest) {
   try {
-    // Check admin password
-    const body = await request.json()
-    const { password } = body
-
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {

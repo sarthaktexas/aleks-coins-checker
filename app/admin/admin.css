@@ -1,0 +1,12 @@
+.admin-shell {
+  --admin-orange: #f15a22;
+  --admin-orange-accessible: #d3430d;
+  --admin-midnight: #032044;
+  --admin-mist: #c8dcff;
+  --admin-surface: #f7f9fc;
+  --admin-border: #d4dde8;
+  --admin-muted: #5a6b7d;
+  background: var(--admin-surface);
+  color: var(--admin-midnight);
+  min-height: 100vh;
+}

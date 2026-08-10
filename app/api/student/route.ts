@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
+import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 
 type DailyLog = {
   day: number
@@ -186,121 +188,105 @@ function generateDemoData(): any {
   }
 }
 
-async function loadStudentDataFromDB(studentId?: string): Promise<{ studentData: StudentData, periodInfo: any, studentPeriods?: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> }> {
-  try {
-    // Check if database URL is available
-    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      return { studentData: {}, periodInfo: null }
+type PeriodEntry = {
+  period: string
+  section: string
+  data: StudentData[string]
+  uploadedAt: string
+}
+
+type StudentLoadResult = {
+  studentData: StudentData
+  periodInfo: {
+    period: string
+    section_number: string
+    uploaded_at: string
+  } | null
+  /** Plain array so unstable_cache can serialize it (Maps become {}) */
+  periods: PeriodEntry[]
+}
+
+/**
+ * Pull only one student's JSON slice from each upload row.
+ * Previously this selected the entire class blob on every lookup (huge Neon egress).
+ */
+async function loadStudentSliceFromDB(studentId: string): Promise<StudentLoadResult> {
+  if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+    return { studentData: {}, periodInfo: null, periods: [] }
+  }
+
+  // data->id returns only that student's object; data ? id filters rows that contain them
+  const result = await sql`
+    SELECT
+      data->${studentId} AS student,
+      period,
+      COALESCE(section_number, 'default') AS section_number,
+      uploaded_at
+    FROM student_data
+    WHERE data ? ${studentId}
+    ORDER BY uploaded_at DESC
+  `
+
+  if (result.rows.length === 0) {
+    return { studentData: {}, periodInfo: null, periods: [] }
+  }
+
+  const periods: PeriodEntry[] = []
+  const processedPeriods = new Set<string>()
+  let studentData: StudentData = {}
+  let latestPeriodInfo: StudentLoadResult["periodInfo"] = null
+
+  for (const row of result.rows) {
+    const periodKey = `${row.period}_${row.section_number || "default"}`
+    if (processedPeriods.has(periodKey)) continue
+    processedPeriods.add(periodKey)
+
+    let student = row.student
+    if (typeof student === "string") {
+      student = JSON.parse(student)
     }
+    if (!student) continue
 
-    // First, check if the table exists and has data
-    const tableCheck = await sql`
-      SELECT COUNT(*) as count FROM student_data
-    `
-
-    if (tableCheck.rows[0].count === 0) {
-      return { studentData: {}, periodInfo: null }
-    }
-
-    // Optimize: If we're looking for a specific student, we can filter at database level
-    // However, since data is stored as JSON, we need to load all records and filter in memory
-    // But we can still optimize by only processing what we need
-    // Get all data from all sections and merge them
-    const result = await sql`
-      SELECT data, period, section_number, uploaded_at FROM student_data 
-      ORDER BY uploaded_at DESC
-    `
-
-    if (result.rows.length === 0) {
-      return { studentData: {}, periodInfo: null }
-    }
-
-    console.log(`Found ${result.rows.length} data uploads, processing from newest to oldest`)
-    console.log(`Data replacement strategy: Keep all exam periods per student, replace data for same period/section`)
-    
-    // Log all uploads to see what periods we have
-    result.rows.forEach((row, index) => {
-      console.log(`Upload ${index + 1}: period=${row.period}, section=${row.section_number}, uploaded_at=${row.uploaded_at}`)
+    periods.push({
+      period: row.period,
+      section: row.section_number || "default",
+      data: student,
+      uploadedAt: row.uploaded_at,
     })
 
-    // Track multiple periods per student
-    const studentPeriods = new Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>>()
-    
-    // Load student data - keep most recent upload, but track all periods per student
-    let studentData: StudentData = {}
-    let latestPeriodInfo: any = null
-    const processedPeriods = new Set<string>()
-
-    for (const row of result.rows) {
-      
-      // Parse the JSON data for this row
-      let rowStudentData: StudentData
-      if (typeof row.data === "string") {
-        rowStudentData = JSON.parse(row.data)
-      } else {
-        rowStudentData = row.data as StudentData
-      }
-
-      // Create a unique key for this period and section combination
-      const periodKey = `${row.period}_${row.section_number || 'default'}`
-      
-      // Only process this data if we haven't seen this period/section combination yet
-      // Since we're processing newest first, this ensures we get the latest data for each period
-      if (!processedPeriods.has(periodKey)) {
-        // Add all students from this period/section to the period tracking
-        Object.keys(rowStudentData).forEach(studentId => {
-          if (!studentPeriods.has(studentId)) {
-            studentPeriods.set(studentId, [])
-          }
-          
-          studentPeriods.get(studentId)!.push({
-            period: row.period,
-            section: row.section_number || 'default',
-            data: rowStudentData[studentId],
-            uploadedAt: row.uploaded_at
-          })
-          
-          // For backward compatibility, keep the latest upload in the main studentData object
-          if (!studentData[studentId]) {
-            studentData[studentId] = rowStudentData[studentId]
-          }
-        })
-        
-        processedPeriods.add(periodKey)
-        console.log(`Loaded data for period: ${row.period}, section: ${row.section_number || 'default'} (uploaded at ${row.uploaded_at})`)
-        
-      }
-
-      // Keep track of the most recent period info
-      if (!latestPeriodInfo || new Date(row.uploaded_at) > new Date(latestPeriodInfo.uploaded_at)) {
-        latestPeriodInfo = {
-          period: row.period,
-          section_number: row.section_number,
-          uploaded_at: row.uploaded_at
-        }
-      }
+    if (!studentData[studentId]) {
+      studentData[studentId] = student
     }
 
-    console.log(`Processed ${processedPeriods.size} unique period/section combinations: ${Array.from(processedPeriods).join(', ')}`)
-
-
-    // Return student data with period info and all periods per student
-    return { 
-      studentData,
-      periodInfo: latestPeriodInfo,
-      studentPeriods
+    if (!latestPeriodInfo || new Date(row.uploaded_at) > new Date(latestPeriodInfo.uploaded_at)) {
+      latestPeriodInfo = {
+        period: row.period,
+        section_number: row.section_number || "default",
+        uploaded_at: row.uploaded_at,
+      }
     }
+  }
+
+  return { studentData, periodInfo: latestPeriodInfo, periods }
+}
+
+async function loadStudentDataFromDB(studentId: string): Promise<StudentLoadResult> {
+  try {
+    return await unstable_cache(
+      () => loadStudentSliceFromDB(studentId),
+      ["student-slice", studentId],
+      { revalidate: 300, tags: [STUDENT_DATA_CACHE_TAG, `student-${studentId}`] }
+    )()
   } catch (error) {
     console.error("Error loading student data from database:", error)
 
-    // If it's a connection error or table doesn't exist error, return empty data
     if (error instanceof Error) {
       if (
         error.message.includes("missing_connection_string") ||
         error.message.includes('relation "student_data" does not exist') ||
         error.message.includes("POSTGRES_URL")
       ) {
-        return { studentData: {}, periodInfo: null }
+        return { studentData: {}, periodInfo: null, periods: [] }
       }
     }
 
@@ -308,97 +294,86 @@ async function loadStudentDataFromDB(studentId?: string): Promise<{ studentData:
   }
 }
 
-async function applyOverridesToStudentData(studentData: StudentData, studentId?: string): Promise<StudentData> {
-  try {
-    // Optimize: Only get overrides for students in the studentData object
-    // If a specific studentId is provided, only query that student's overrides
-    const studentIds = Object.keys(studentData)
-    
-    if (studentIds.length === 0) {
-      return studentData
+function applyOverridesInMemory(
+  studentData: StudentData,
+  overrides: Array<{
+    student_id: string
+    day_number: number
+    date: string
+    override_type: string
+    reason: string
+  }>
+): StudentData {
+  const overridesMap = new Map<string, Map<string, (typeof overrides)[number]>>()
+
+  overrides.forEach((override) => {
+    if (!overridesMap.has(override.student_id)) {
+      overridesMap.set(override.student_id, new Map())
     }
+    overridesMap.get(override.student_id)!.set(override.date, override)
+  })
 
-    // Get overrides only for the students we're processing
-    let overridesResult
-    if (studentId && studentIds.includes(studentId.toLowerCase())) {
-      // Query only for the specific student - this is a major optimization!
-      overridesResult = await sql`
-        SELECT student_id, day_number, date, override_type, reason
-        FROM student_day_overrides
-        WHERE student_id = ${studentId.toLowerCase()}
-      `
-    } else {
-      // Query for all students in the dataset
-      // The override table is typically much smaller than student_data, so querying all overrides
-      // and filtering in memory is still acceptable. The key optimization is the single-student case above.
-      const allOverrides = await sql`
-        SELECT student_id, day_number, date, override_type, reason
-        FROM student_day_overrides
-      `
-      // Filter to only students in our dataset - this is still an optimization
-      const studentIdsSet = new Set(studentIds.map(id => id.toLowerCase()))
-      overridesResult = {
-        rows: allOverrides.rows.filter(row => studentIdsSet.has(row.student_id.toLowerCase()))
-      }
-    }
+  // Clone so we never mutate objects stored in unstable_cache
+  const updatedStudentData: StudentData = JSON.parse(JSON.stringify(studentData))
 
-    // Group overrides by student_id and date (not day_number, since day numbers are period-specific)
-    const overridesMap = new Map<string, Map<string, any>>()
-    
-    overridesResult.rows.forEach(override => {
-      if (!overridesMap.has(override.student_id)) {
-        overridesMap.set(override.student_id, new Map())
-      }
-      // Use date as the key instead of day_number to match the correct period
-      overridesMap.get(override.student_id)!.set(override.date, override)
-    })
+  Object.keys(updatedStudentData).forEach((id) => {
+    const student = updatedStudentData[id]
+    const studentOverrides = overridesMap.get(id)
 
-    // Apply overrides to each student's daily log
-    const updatedStudentData = { ...studentData }
-    
-    Object.keys(updatedStudentData).forEach(studentId => {
-      const student = updatedStudentData[studentId]
-      const studentOverrides = overridesMap.get(studentId)
-      
-      if (student.dailyLog) {
-        // Apply overrides to daily log by matching date (not day_number) if they exist
-        if (studentOverrides) {
-          student.dailyLog = student.dailyLog.map(day => {
-            const override = studentOverrides.get(day.date)
-            if (override) {
-              return {
-                ...day,
-                qualified: override.override_type === "qualified",
-                reason: override.reason || day.reason
-              }
-            }
-            return day
-          })
+    if (!student.dailyLog) return
+
+    if (studentOverrides) {
+      student.dailyLog = student.dailyLog.map((day) => {
+        const override = studentOverrides.get(day.date)
+        if (override) {
+          return {
+            ...day,
+            qualified: override.override_type === "qualified",
+            reason: override.reason || day.reason,
+          }
         }
+        return day
+      })
+    }
 
-        // Always recalculate totals based on daily log (with or without overrides)
-        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
-        const completedWorkingDays = workingDayLogs.length
-        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-        
-        // Calculate exempt day credits (from days that would have qualified on exempt days)
-        const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
-        
-        // Include exempt day credits in percentage to allow over 100% for extra credit
-        const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
-        
-        // Don't overwrite totalDays - it should remain the max day number with data
-        // student.totalDays should stay as the original value (max day number with data)
-        student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays + exemptDayCredits
-        student.exemptDayCredits = exemptDayCredits
-      }
-    })
+    const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
+    const completedWorkingDays = workingDayLogs.length
+    const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+    const exemptDayCredits = student.dailyLog.filter(
+      (d) => d.isExcluded && d.wouldHaveQualified
+    ).length
+    const percentComplete =
+      completedWorkingDays > 0
+        ? Math.round(
+            ((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10
+          ) / 10
+        : 0
 
-    return updatedStudentData
+    student.percentComplete = percentComplete
+    student.coins = qualifiedWorkingDays + exemptDayCredits
+    student.exemptDayCredits = exemptDayCredits
+  })
+
+  return updatedStudentData
+}
+
+async function fetchStudentOverrides(studentId: string) {
+  try {
+    const overridesResult = await sql`
+      SELECT student_id, day_number, date, override_type, reason
+      FROM student_day_overrides
+      WHERE student_id = ${studentId}
+    `
+    return overridesResult.rows as Array<{
+      student_id: string
+      day_number: number
+      date: string
+      override_type: string
+      reason: string
+    }>
   } catch (error) {
     console.error("Error applying overrides:", error)
-    return studentData // Return original data if override application fails
+    return []
   }
 }
 
@@ -430,16 +405,18 @@ export async function POST(request: NextRequest) {
     // Load student data from database
     let studentData: StudentData
     let periodInfo: any
-    let studentPeriods: Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>> | undefined
+    let allPeriods: PeriodEntry[] = []
+    let overrides: Awaited<ReturnType<typeof fetchStudentOverrides>> = []
 
     try {
       const result = await loadStudentDataFromDB(normalizedId)
       studentData = result.studentData
       periodInfo = result.periodInfo
-      studentPeriods = result.studentPeriods
-      
-      // Apply overrides to student data - pass studentId for optimization
-      studentData = await applyOverridesToStudentData(studentData, normalizedId)
+      allPeriods = result.periods
+
+      // One overrides query for this student, applied to all periods in memory
+      overrides = await fetchStudentOverrides(normalizedId)
+      studentData = applyOverridesInMemory(studentData, overrides)
     } catch (dbError) {
       console.error("Database error:", dbError)
 
@@ -489,10 +466,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all periods for this student
-    const allPeriods = studentPeriods?.get(normalizedId) || []
-    
-    // Sort periods by upload date (most recent first)
-    allPeriods.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+    allPeriods = [...allPeriods].sort(
+      (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+    )
     
     // Get coin adjustments for this student
     let coinAdjustments: any[] = []
@@ -535,31 +511,38 @@ export async function POST(request: NextRequest) {
       }
     })
     
-    // Fetch exam period names for display (period_key -> name)
+    // Fetch exam period names for display (period_key -> name) — cached
     const periodNamesMap = new Map<string, string>()
     try {
-      const periodsResult = await sql`
-        SELECT period_key, name FROM exam_periods
-      `
-      periodsResult.rows.forEach((row: { period_key: string; name: string }) => {
+      const periodRows = await unstable_cache(
+        async () => {
+          const periodsResult = await sql`
+            SELECT period_key, name FROM exam_periods
+          `
+          return periodsResult.rows as Array<{ period_key: string; name: string }>
+        },
+        ["exam-period-names"],
+        { revalidate: 3600, tags: [STUDENT_DATA_CACHE_TAG, "exam-periods"] }
+      )()
+      periodRows.forEach((row) => {
         periodNamesMap.set(row.period_key, row.name)
       })
     } catch (e) {
       console.error("Error fetching period names:", e)
     }
 
-    // Format periods data with overrides applied
-    const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
-      // Apply overrides to this period's data - pass studentId for optimization
+    // Format periods data with overrides applied once (no extra DB round-trips)
+    const periodsData = allPeriods.map((periodData) => {
       const tempStudentData = { [normalizedId]: periodData.data }
-      const overriddenData = await applyOverridesToStudentData(tempStudentData, normalizedId)
+      const overriddenData = applyOverridesInMemory(tempStudentData, overrides)
       const studentWithOverrides = overriddenData[normalizedId]
-      
-      // Add coin adjustments for this period
+
       const periodKey = `${periodData.period}_${periodData.section}`
       const adjustment = adjustmentsByPeriod.get(periodKey) || 0
-      const periodName = periodNamesMap.get(periodData.period) ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-      
+      const periodName =
+        periodNamesMap.get(periodData.period) ??
+        periodData.period.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
+
       return {
         period: periodData.period,
         section: periodData.section,
@@ -573,9 +556,9 @@ export async function POST(request: NextRequest) {
         periodDays: studentWithOverrides.periodDays,
         percentComplete: studentWithOverrides.percentComplete,
         dailyLog: studentWithOverrides.dailyLog,
-        exemptDayCredits: studentWithOverrides.exemptDayCredits
+        exemptDayCredits: studentWithOverrides.exemptDayCredits,
       }
-    }))
+    })
 
     // Calculate total coins across all periods with period-specific adjustments
     // Then add global adjustments (redemptions) which deduct from the total, not individual periods
@@ -593,35 +576,12 @@ export async function POST(request: NextRequest) {
     const currentPeriodKey = `${periodInfo?.period || 'Unknown'}_${studentSectionNumber}`
     const currentPeriodAdjustment = adjustmentsByPeriod.get(currentPeriodKey) || 0
     
-    // Get pending requests for this student (all periods — do not filter by current period)
-    let pendingRequests = []
+    // Get all requests for this student in one query
+    let pendingRequests: any[] = []
+    let approvedRequests: any[] = []
+    let rejectedRequests: any[] = []
     try {
       const requestsResult = await sql`
-        SELECT 
-          id,
-          request_type,
-          request_details,
-          submitted_at,
-          status,
-          period,
-          section_number,
-          day_number,
-          override_date
-        FROM student_requests
-        WHERE student_id = ${normalizedId} AND status = 'pending'
-        ORDER BY submitted_at DESC
-      `
-      pendingRequests = requestsResult.rows
-    } catch (requestError) {
-      console.error("Error fetching pending requests:", requestError)
-      // Continue without pending requests if there's an error
-    }
-    
-    // Get approved and rejected requests for this student
-    let approvedRequests = []
-    let rejectedRequests = []
-    try {
-      const allRequestsResult = await sql`
         SELECT 
           id,
           request_type,
@@ -632,16 +592,18 @@ export async function POST(request: NextRequest) {
           processed_at,
           processed_by,
           period,
-          section_number
+          section_number,
+          day_number,
+          override_date
         FROM student_requests
-        WHERE student_id = ${normalizedId} AND status IN ('approved', 'rejected')
+        WHERE student_id = ${normalizedId}
         ORDER BY submitted_at DESC
       `
-      approvedRequests = allRequestsResult.rows.filter(r => r.status === 'approved')
-      rejectedRequests = allRequestsResult.rows.filter(r => r.status === 'rejected')
+      pendingRequests = requestsResult.rows.filter((r) => r.status === "pending")
+      approvedRequests = requestsResult.rows.filter((r) => r.status === "approved")
+      rejectedRequests = requestsResult.rows.filter((r) => r.status === "rejected")
     } catch (requestError) {
-      console.error("Error fetching approved/rejected requests:", requestError)
-      // Continue without approved/rejected requests if there's an error
+      console.error("Error fetching student requests:", requestError)
     }
     
     // Return the student's data including all periods

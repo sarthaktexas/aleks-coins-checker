@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 // Helper: load minutes for a student day by preferring override_date + period
 async function getMinutesForRequest(
@@ -63,13 +64,11 @@ async function getMinutesForRequest(
 // POST - Magic approve day overrides with 31+ minutes
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { password, studentId, adminNotes } = body
+    const session = requireAdmin(request)
+    if (!isSession(session)) return session
 
-    // Check admin password
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 })
-    }
+    const body = await request.json()
+    const { studentId, adminNotes } = body
 
     // Validate input
     if (!studentId) {
@@ -201,7 +200,7 @@ export async function POST(request: NextRequest) {
               status = 'approved',
               admin_notes = ${adminNotes || `Magic approved: ${minutes} minutes logged`},
               processed_at = CURRENT_TIMESTAMP,
-              processed_by = 'admin'
+              processed_by = ${session.displayName}
             WHERE id = ${requestData.id}
           `
 
