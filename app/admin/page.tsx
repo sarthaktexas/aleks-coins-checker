@@ -16,6 +16,8 @@ import {
   FileSpreadsheet,
   Trash2,
   Coins,
+  Download,
+  RefreshCw,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
@@ -40,6 +42,9 @@ export default function AdminPage() {
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeletingSection, setIsDeletingSection] = useState(false)
+  const [showDeleteSectionConfirm, setShowDeleteSectionConfirm] = useState(false)
+  const [isPulling, setIsPulling] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [overridesEnabled, setOverridesEnabled] = useState(true)
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
@@ -315,6 +320,74 @@ export default function AdminPage() {
     }
   }
 
+  const handleDeleteSectionData = async () => {
+    if (!selectedPeriod || !sectionNumber.trim()) {
+      setMessage({ type: "error", text: "Select a period and enter a section number first" })
+      return
+    }
+
+    setIsDeletingSection(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/admin/student-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          period: selectedPeriod,
+          sectionNumber: sectionNumber.trim(),
+        }),
+      })
+      if (response.status === 401) {
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage({ type: "success", text: result.message || "Section data deleted" })
+      } else {
+        setMessage({ type: "error", text: result.error || "Delete failed" })
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error. Please try again." })
+    } finally {
+      setIsDeletingSection(false)
+      setShowDeleteSectionConfirm(false)
+    }
+  }
+
+  const handlePullFromAleks = async () => {
+    setIsPulling(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/admin/aleks-sync/trigger", {
+        method: "POST",
+        credentials: "same-origin",
+      })
+      if (response.status === 401) {
+        setMessage({ type: "error", text: SESSION_EXPIRED })
+        return
+      }
+      const result = await response.json()
+
+      if (response.ok) {
+        setMessage({
+          type: "success",
+          text: result.message || "ALEKS pull started. Check GitHub Actions for progress.",
+        })
+      } else {
+        setMessage({ type: "error", text: result.error || "Failed to start ALEKS pull" })
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error. Please try again." })
+    } finally {
+      setIsPulling(false)
+    }
+  }
+
   const formatDateRange = (startDate: string, endDate: string) => {
     const formatDate = (dateStr: string) => {
       const [year, month, day] = dateStr.split("-").map(Number)
@@ -467,6 +540,84 @@ export default function AdminPage() {
           </AlertDescription>
         </Alert>
       )}
+
+      <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-utsa-midnight">ALEKS auto-sync (test)</h2>
+          <p className="text-xs text-utsa-muted">
+            Delete a period/section, then pull fresh Time and Topic data via GitHub Actions.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {!showDeleteSectionConfirm ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                isDeletingSection ||
+                isPulling ||
+                isUploading ||
+                !selectedPeriod ||
+                !sectionNumber.trim()
+              }
+              onClick={() => setShowDeleteSectionConfirm(true)}
+              className="border-utsa-orange/40 text-utsa-accessible"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete this period/section
+            </Button>
+          ) : (
+            <div className="flex w-full flex-wrap items-center gap-2 rounded border border-utsa-orange/30 bg-utsa-orange/5 px-3 py-2">
+              <p className="text-xs text-utsa-accessible sm:mr-auto">
+                Delete data for <span className="font-medium">{selectedPeriod}</span> / section{" "}
+                <span className="font-medium">{sectionNumber.trim()}</span>?
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={isDeletingSection}
+                onClick={handleDeleteSectionData}
+              >
+                {isDeletingSection ? "Deleting…" : "Confirm delete"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDeletingSection}
+                onClick={() => setShowDeleteSectionConfirm(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            disabled={isPulling || isDeletingSection || isUploading}
+            onClick={handlePullFromAleks}
+          >
+            {isPulling ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Starting pull…
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Pull from ALEKS now
+              </>
+            )}
+          </Button>
+        </div>
+
+        <p className="text-xs text-utsa-muted">
+          Uses the period/section fields above for delete. Pull runs the GitHub Action for all
+          classes in <code className="rounded bg-utsa-surface px-1">ALEKS_CLASSES</code>.
+        </p>
+      </div>
 
       <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
         <h2 className="text-sm font-semibold text-utsa-midnight">Settings</h2>

@@ -85,3 +85,162 @@ export const EXAM_PERIODS = {
 
 export type ExamPeriodKey = keyof typeof EXAM_PERIODS
 export type ExamPeriod = typeof EXAM_PERIODS[ExamPeriodKey]
+
+export type SemesterSeason = "spring" | "summer" | "fall" | "winter"
+
+export type ParsedPeriodKey = {
+  season: SemesterSeason
+  year: number
+  examSuffix: string | null
+  semesterLabel: string
+  semesterKey: string
+}
+
+const SEASON_ORDER: Record<SemesterSeason, number> = {
+  spring: 1,
+  summer: 2,
+  fall: 3,
+  winter: 4,
+}
+
+const SEASON_LABELS: Record<SemesterSeason, string> = {
+  spring: "Spring",
+  summer: "Summer",
+  fall: "Fall",
+  winter: "Winter",
+}
+
+const PERIOD_KEY_RE = /^(spring|summer|fall|winter)(\d{4})(?:_(.+))?$/i
+
+/** Parse a period key like `spring2025_exam2` into season, year, and exam suffix. */
+export function parsePeriodKey(periodKey: string): ParsedPeriodKey | null {
+  const match = periodKey.trim().match(PERIOD_KEY_RE)
+  if (!match) return null
+
+  const season = match[1].toLowerCase() as SemesterSeason
+  const year = Number(match[2])
+  const examSuffix = match[3] ?? null
+
+  return {
+    season,
+    year,
+    examSuffix,
+    semesterLabel: `${SEASON_LABELS[season]} ${year}`,
+    semesterKey: `${season}${year}`,
+  }
+}
+
+/** Human-readable exam label from a period key (e.g. Exam 2, Final). */
+export function getExamLabel(periodKey: string): string {
+  const parsed = parsePeriodKey(periodKey)
+  if (!parsed) return periodKey
+
+  if (!parsed.examSuffix) return "Exam 1"
+  if (parsed.examSuffix === "final") return "Final"
+  const examMatch = parsed.examSuffix.match(/^exam(\d+)$/i)
+  if (examMatch) return `Exam ${examMatch[1]}`
+  return parsed.examSuffix.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/** Sort key for exam order within a semester (Exam 1 → Exam 2 → … → Final). */
+export function getExamSortOrder(periodKey: string): number {
+  const parsed = parsePeriodKey(periodKey)
+  if (!parsed) return 999
+  if (!parsed.examSuffix) return 1
+  if (parsed.examSuffix === "final") return 100
+  const examMatch = parsed.examSuffix.match(/^exam(\d+)$/i)
+  if (examMatch) return Number(examMatch[1])
+  return 50
+}
+
+export type SemesterGroup<T> = {
+  semesterKey: string
+  semesterLabel: string
+  season: SemesterSeason | "other"
+  year: number
+  items: T[]
+}
+
+/**
+ * Group items by semester/year parsed from a period key.
+ * Semesters are sorted newest-first; items within a semester use `getItemKey` for exam order when possible.
+ */
+export function groupBySemester<T>(
+  items: T[],
+  getPeriodKey: (item: T) => string,
+): SemesterGroup<T>[] {
+  const groups = new Map<string, SemesterGroup<T>>()
+
+  for (const item of items) {
+    const periodKey = getPeriodKey(item)
+    const parsed = parsePeriodKey(periodKey)
+    const semesterKey = parsed?.semesterKey ?? `other:${periodKey}`
+    const existing = groups.get(semesterKey)
+
+    if (existing) {
+      existing.items.push(item)
+    } else {
+      groups.set(semesterKey, {
+        semesterKey,
+        semesterLabel: parsed?.semesterLabel ?? periodKey,
+        season: parsed?.season ?? "other",
+        year: parsed?.year ?? 0,
+        items: [item],
+      })
+    }
+  }
+
+  const sorted = Array.from(groups.values()).sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year
+    const aOrder = a.season === "other" ? 99 : SEASON_ORDER[a.season]
+    const bOrder = b.season === "other" ? 99 : SEASON_ORDER[b.season]
+    return bOrder - aOrder
+  })
+
+  for (const group of sorted) {
+    group.items.sort((a, b) => getExamSortOrder(getPeriodKey(a)) - getExamSortOrder(getPeriodKey(b)))
+  }
+
+  return sorted
+}
+
+export type ExamType = "exam1" | "exam2" | "exam3" | "final"
+
+export const EXAM_TYPE_OPTIONS: { value: ExamType; label: string; suffix: string }[] = [
+  { value: "exam1", label: "Exam 1", suffix: "" },
+  { value: "exam2", label: "Exam 2", suffix: "_exam2" },
+  { value: "exam3", label: "Exam 3", suffix: "_exam3" },
+  { value: "final", label: "Final", suffix: "_final" },
+]
+
+export const SEMESTER_OPTIONS: { value: SemesterSeason; label: string }[] = [
+  { value: "spring", label: "Spring" },
+  { value: "summer", label: "Summer" },
+  { value: "fall", label: "Fall" },
+  { value: "winter", label: "Winter" },
+]
+
+/** Build a period key from semester parts, e.g. spring + 2026 + exam2 → spring2026_exam2 */
+export function buildPeriodKey(season: SemesterSeason, year: number, examType: ExamType): string {
+  const option = EXAM_TYPE_OPTIONS.find((o) => o.value === examType)
+  return `${season}${year}${option?.suffix ?? ""}`
+}
+
+/** Build a display name from semester parts */
+export function buildPeriodName(season: SemesterSeason, year: number, examType: ExamType): string {
+  const option = EXAM_TYPE_OPTIONS.find((o) => o.value === examType)
+  const examLabel = option?.label ?? "Exam"
+  const periodLabel = examType === "final" ? "Final Exam Period" : `${examLabel} Period`
+  return `${SEASON_LABELS[season]} ${year} - ${periodLabel}`
+}
+
+/** Infer exam type from a period key */
+export function getExamTypeFromKey(periodKey: string): ExamType {
+  const parsed = parsePeriodKey(periodKey)
+  if (!parsed?.examSuffix) return "exam1"
+  if (parsed.examSuffix === "final") return "final"
+  const examMatch = parsed.examSuffix.match(/^exam(\d+)$/i)
+  if (examMatch?.[1] === "2") return "exam2"
+  if (examMatch?.[1] === "3") return "exam3"
+  return "exam1"
+}

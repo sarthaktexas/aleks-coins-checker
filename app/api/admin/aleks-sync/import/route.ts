@@ -1,27 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { parseAleksWorkbook, processExcelData, saveStudentData } from "@/lib/aleks-excel"
+import { isAuthorized, requireImportToken } from "@/lib/import-token"
 
+export const dynamic = "force-dynamic"
+
+/**
+ * POST /api/admin/aleks-sync/import
+ * Auth: Bearer IMPORT_API_TOKEN
+ * Form fields: file, examPeriod, sectionNumber
+ */
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
-    if (!isSession(session)) return session
+    const auth = requireImportToken(request)
+    if (!isAuthorized(auth)) return auth
 
     const formData = await request.formData()
-    const file = formData.get("file") as File
-    const examPeriod = formData.get("examPeriod") as string
-    const sectionNumber = formData.get("sectionNumber") as string
+    const file = formData.get("file") as File | null
+    const examPeriod = String(formData.get("examPeriod") || "")
+    const sectionNumber = String(formData.get("sectionNumber") || "")
 
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
     }
-
     if (!examPeriod) {
-      return NextResponse.json({ error: "No exam period selected" }, { status: 400 })
+      return NextResponse.json({ error: "examPeriod is required" }, { status: 400 })
     }
-
     if (!sectionNumber) {
-      return NextResponse.json({ error: "Section number is required" }, { status: 400 })
+      return NextResponse.json({ error: "sectionNumber is required" }, { status: 400 })
     }
 
     const fileBuffer = await file.arrayBuffer()
@@ -38,28 +43,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No valid student data found in file" }, { status: 400 })
     }
 
-    try {
-      await saveStudentData(studentData, examPeriod, sectionNumber)
-    } catch (insertError) {
-      console.error("Insert error:", insertError)
-      return NextResponse.json({ error: "Failed to save data to database" }, { status: 500 })
-    }
+    await saveStudentData(studentData, examPeriod, sectionNumber)
 
     console.log(
-      `✅ Successfully replaced data for period ${examPeriod}, section ${sectionNumber} with ${studentCount} students`,
+      `✅ ALEKS sync imported period=${examPeriod} section=${sectionNumber} students=${studentCount}`,
     )
 
     return NextResponse.json({
       success: true,
-      message: "Excel file processed and student data uploaded successfully",
+      message: "ALEKS report imported successfully",
       studentCount,
       examPeriod,
+      sectionNumber,
     })
   } catch (error) {
-    console.error("Upload error:", error)
+    console.error("ALEKS sync import error:", error)
     return NextResponse.json(
       {
-        error: "Failed to process and upload data",
+        error: "Failed to import ALEKS report",
         details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
       },
       { status: 500 },

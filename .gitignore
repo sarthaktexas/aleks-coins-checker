@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+scripts/aleks-sync/node_modules
+scripts/aleks-sync/.downloads
 
 # next.js
 /.next/

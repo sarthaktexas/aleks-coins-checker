@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { bustStudentDataCache } from "@/lib/student-cache"
 
 export const dynamic = "force-dynamic"
 
@@ -424,7 +425,7 @@ export async function DELETE(request: NextRequest) {
     if (!isSession(session)) return session
 
     const body = await request.json()
-    const { uploadId } = body
+    const { uploadId, period, sectionNumber } = body
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -445,14 +446,42 @@ export async function DELETE(request: NextRequest) {
         }, { status: 404 })
       }
 
-      const { period, section_number: sectionNumber } = result.rows[0]
-      const relatedDeleted = await deleteRelatedStudentRecords(period, sectionNumber)
+      const { period: deletedPeriod, section_number: deletedSection } = result.rows[0]
+      const relatedDeleted = await deleteRelatedStudentRecords(deletedPeriod, deletedSection)
+      bustStudentDataCache()
 
       return NextResponse.json({ 
         success: true, 
-        message: `Successfully deleted upload for period ${period}, section ${sectionNumber}`,
+        message: `Successfully deleted upload for period ${deletedPeriod}, section ${deletedSection}`,
         deletedCount: result.rows.length,
         deletedRecord: result.rows[0],
+        relatedDeleted,
+      })
+    }
+
+    if (period && sectionNumber) {
+      const relatedDeleted = await deleteRelatedStudentRecords(period, sectionNumber)
+      const result = await sql`
+        DELETE FROM student_data
+        WHERE period = ${period} AND section_number = ${sectionNumber}
+        RETURNING id, period, section_number, uploaded_at
+      `
+      bustStudentDataCache()
+
+      if (result.rows.length === 0) {
+        return NextResponse.json({
+          success: true,
+          message: `No student data found for period ${period}, section ${sectionNumber}`,
+          deletedCount: 0,
+          relatedDeleted,
+        })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Deleted data for period ${period}, section ${sectionNumber} (${result.rows.length} upload${result.rows.length === 1 ? "" : "s"})`,
+        deletedCount: result.rows.length,
+        deletedRecords: result.rows,
         relatedDeleted,
       })
     }
@@ -464,6 +493,8 @@ export async function DELETE(request: NextRequest) {
       DELETE FROM student_data
       RETURNING id, period, uploaded_at
     `
+
+    bustStudentDataCache()
 
     const totalDeleted =
       result.rows.length +

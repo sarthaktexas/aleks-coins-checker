@@ -64,6 +64,9 @@ NODE_ENV="development"
 - **`BUG_REPORT_EMAIL`**: Defaults to `sarthaktexas@gmail.com` if unset
 - **`RESEND_API_KEY`**: Required for email notifications — free at [resend.com](https://resend.com). Without it, bug reports still save to Admin → Bugs
 - **`BUG_REPORT_FROM_EMAIL`**: Optional From address (defaults to `onboarding@resend.dev`). With Resend's free onboarding domain you can only send **to** the email on your Resend account (verify `sarthaktexas@gmail.com` there, or add a custom domain)
+- **`IMPORT_API_TOKEN`**: A random secret **you generate** (e.g. `openssl rand -hex 32`). Not an ALEKS credential. Same value goes in Vercel and the GitHub `IMPORT_API_TOKEN` secret so Actions can POST reports to `/api/admin/aleks-sync/import`. See `scripts/aleks-sync/README.md`
+- **`GITHUB_SYNC_PAT`** (optional): GitHub PAT with Actions write access so Admin → “Pull from ALEKS now” can dispatch the workflow. Pair with `GITHUB_REPO=owner/repo` if not on Vercel git metadata.
+- **`GITHUB_REPO`** (optional): `owner/repo` for the sync trigger button
 
 ## Database Setup
 
