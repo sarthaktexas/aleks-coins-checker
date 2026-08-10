@@ -11,10 +11,13 @@ import {
   MessageSquare,
   Trophy,
   Bug,
+  Users,
 } from "lucide-react"
 import Link from "next/link"
+import { useAdminAuth } from "@/components/admin-auth-provider"
 
 export default function AdminDashboard() {
+  const { user } = useAdminAuth()
   const [error, setError] = useState("")
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -87,6 +90,9 @@ export default function AdminDashboard() {
     { title: "Coin Adjustments", href: "/admin/coin-adjustments", icon: Coins },
     { title: "Email Students", href: "/admin/email-students", icon: Mail },
     { title: "Leaderboard", href: "/admin/leaderboard", icon: Trophy },
+    ...(user.role === "professor"
+      ? [{ title: "Staff Accounts", href: "/admin/users", icon: Users }]
+      : []),
   ]
 
   return (
@@ -110,7 +116,7 @@ export default function AdminDashboard() {
           { label: "Overrides", value: stats.overrideRequests },
           { label: "Redemptions", value: stats.redemptionRequests },
         ].map((s) => (
-          <div key={s.label} className="rounded-md border border-utsa-border bg-white px-3 py-2">
+          <div key={s.label} className="rounded-md bg-white px-3 py-2">
             <p className="text-xs text-utsa-muted">{s.label}</p>
             <p className="text-lg font-semibold text-utsa-midnight">
               {statsLoading ? "…" : s.value}
@@ -126,7 +132,7 @@ export default function AdminDashboard() {
             <Link
               key={tool.href}
               href={tool.href}
-              className="flex items-center gap-3 rounded-md border border-utsa-border bg-white px-3 py-3 transition-colors hover:border-utsa-orange/50 hover:bg-utsa-orange/5"
+              className="flex items-center gap-3 rounded-md bg-white px-3 py-3 transition-colors hover:bg-utsa-orange/5"
             >
               <Icon className="h-4 w-4 text-utsa-orange" />
               <span className="text-sm font-medium text-utsa-midnight">{tool.title}</span>

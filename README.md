@@ -17,7 +17,8 @@ cd aleks-coins-checker
 
 ```bash
 # Required
-ADMIN_PASSWORD="your-secure-password"
+ADMIN_PASSWORD="your-secure-bootstrap-pin"
+ADMIN_SESSION_SECRET="generate-a-long-random-string"
 
 # Optional (app works with demo data if not provided)
 POSTGRES_URL="postgres://..."
@@ -99,6 +100,19 @@ CREATE TABLE student_requests (
   admin_notes TEXT,
   processed_at TIMESTAMPTZ,
   processed_by VARCHAR(255)
+);
+
+-- Staff accounts (username + hashed PIN)
+CREATE TABLE admin_users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(64) UNIQUE NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  pin_hash VARCHAR(255) NOT NULL,
+  pin_salt VARCHAR(64) NOT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'ta',  -- ta | professor
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Manual coin adjustments
@@ -388,15 +402,11 @@ AdminRequestsPage Component
 
 ### Admin Authentication
 
-```typescript
-// Server-side password validation
-if (password !== process.env.ADMIN_PASSWORD) {
-  return NextResponse.json({ error: "Invalid password" }, { status: 401 });
-}
+Staff sign in with **username + PIN**. Accounts live in the `admin_users` table (hashed PINs). A successful login sets an **httpOnly session cookie** signed with `ADMIN_SESSION_SECRET`. Admin APIs require that session — the PIN is not stored in `localStorage` or sent on every request.
 
-// Client-side password persistence
-localStorage.setItem('adminPassword', password);
-```
+The first professor account is bootstrapped from `ADMIN_PASSWORD` (username `admin`) when the table is empty. Professors manage TAs under **Admin → Staff**.
+
+Audit fields (`processed_by`, `created_by`) use the signed-in user's display name.
 
 ### Student Data Access
 
@@ -503,6 +513,7 @@ extraCreditEligible = percentComplete >= 90
 ```bash
 # Vercel deployment
 vercel env add ADMIN_PASSWORD
+vercel env add ADMIN_SESSION_SECRET
 vercel env add POSTGRES_URL
 ```
 

@@ -23,7 +23,7 @@ export type AdminAuthUser = {
 }
 
 type AdminAuthContextValue = {
-  user: AdminAuthUser | null
+  user: AdminAuthUser
   loading: boolean
   refresh: () => Promise<void>
   logout: () => Promise<void>
