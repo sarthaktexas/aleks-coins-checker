@@ -243,28 +243,58 @@ async function openClassDropdown(page) {
 }
 
 async function expandArchivedInClassMenu(page) {
-  const hiddenArchived = page.locator(
-    "#sim_nav_sel_searchbar_1 tr.listed_elementSB.archive .sim_sb_entry_tag_left",
-  )
-  const anyHidden = await hiddenArchived.count()
-  if (anyHidden === 0) {
-    // Might already be expanded, or no archived rows
-    const header = page.locator("#sim_nav_sel_searchbar_1 tr.archive .openclose, #sim_nav_sel_searchbar_1 .openclose").first()
-    if (await header.isVisible().catch(() => false)) {
-      await header.click().catch(() => {})
-      await page.waitForTimeout(400)
-    }
-    return
-  }
+  const header = page
+    .locator("#sim_nav_sel_searchbar_1 tr.archive.unselectable .openclose, #sim_nav_sel_searchbar_1 tr.archive .openclose")
+    .first()
+  if (!(await header.count())) return
 
-  // If entries exist but are display:none, click Archived open/close
-  const firstVisible = await hiddenArchived.first().isVisible().catch(() => false)
-  if (!firstVisible) {
-    await page.locator("#sim_nav_sel_searchbar_1 tr.archive .openclose").first().click().catch(async () => {
-      await page.locator("#sim_nav_sel_searchbar_1 .openclose").first().click()
+  const needsExpand = await page.evaluate(() => {
+    const rows = [
+      ...document.querySelectorAll(
+        "#sim_nav_sel_searchbar_1 tr.listed_elementSB.archive .sim_sb_entry_tag_left",
+      ),
+    ]
+    if (rows.length === 0) return true
+    return rows.some((el) => {
+      const tr = el.closest("tr")
+      return tr && tr.style.display === "none"
     })
-    await page.waitForTimeout(400)
+  })
+
+  if (needsExpand) {
+    await header.click({ force: true }).catch(() => {})
+    await page.waitForTimeout(500)
   }
+}
+
+function scoreClassForSync(cls) {
+  let score = 0
+  const name = cls.aleksName || ""
+  if (/Su26|Sum\s*26|SP26|Sp26|F26|Fall\s*26|Spring\s*26/i.test(name)) score += 20
+  if (/Su25|Sum\s*25|SP25|Sp25|F25|Fall\s*25|Spring\s*25/i.test(name)) score += 5
+  if (!cls.archived) score += 2
+  return score
+}
+
+/** One class per section — prefer current-term names (e.g. Su26 over Sum 25). */
+function dedupeClassesBySection(classes, knownSections = []) {
+  const filtered =
+    knownSections.length > 0
+      ? classes.filter((c) => knownSections.includes(c.sectionNumber))
+      : classes
+
+  const bySection = new Map()
+  for (const cls of filtered.length > 0 ? filtered : classes) {
+    const prev = bySection.get(cls.sectionNumber)
+    if (!prev || scoreClassForSync(cls) > scoreClassForSync(prev)) {
+      bySection.set(cls.sectionNumber, cls)
+    }
+  }
+  return [...bySection.values()]
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
 /**
@@ -311,15 +341,11 @@ async function discoverClasses(page, downloadDir, knownSections = []) {
     throw new Error("No classes found in ALEKS CLASS menu (active or archived)")
   }
 
-  // Prefer classes that map to known portal sections when we have them
-  if (knownSections.length > 0) {
-    const matched = classes.filter((c) => knownSections.includes(c.sectionNumber))
-    if (matched.length > 0) {
-      console.log(`Filtering to ${matched.length}/${classes.length} class(es) matching known sections`)
-      return matched
-    }
+  const picked = dedupeClassesBySection(classes, knownSections)
+  if (picked.length > 0) {
+    console.log(`Using ${picked.length}/${classes.length} class(es) after section/term filter`)
+    return picked
   }
-
   return classes
 }
 
@@ -329,17 +355,23 @@ async function selectClass(page, { aleksName, archived }, downloadDir) {
   if (archived) await expandArchivedInClassMenu(page)
 
   const classOption = page
-    .locator("#sim_nav_sel_searchbar_1 .sim_sb_entry_tag_left, .sim_sb_entry_tag_left")
-    .filter({ hasText: aleksName })
+    .locator("#sim_nav_sel_searchbar_1 tr.listed_elementSB .sim_sb_entry_tag_left")
+    .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(aleksName)}\\s*$`) })
     .first()
 
   try {
-    await classOption.waitFor({ state: "visible", timeout: 10000 })
-    await classOption.click()
+    if (!(await classOption.isVisible().catch(() => false))) {
+      await expandArchivedInClassMenu(page)
+    }
+    // Archived rows may remain display:none until expand; force click is reliable
+    await classOption.click({ force: true, timeout: 10000 })
   } catch (err) {
-    // Fallback: any visible text match
     try {
-      await page.getByText(aleksName, { exact: false }).first().click({ timeout: 5000 })
+      await page
+        .locator(".sim_sb_entry_tag_left")
+        .filter({ hasText: aleksName })
+        .first()
+        .click({ force: true, timeout: 5000 })
     } catch {
       await screenshot(page, downloadDir, `class-not-found-${aleksName.replace(/\W+/g, "_")}`)
       throw new Error(`Could not select class "${aleksName}": ${err.message}`)
@@ -426,22 +458,42 @@ async function downloadExcel(page, downloadDir, sectionNumber) {
     'button:has-text("Download Excel Spreadsheet")',
     'text=/Download\\s*Excel/i',
   ])
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(800)
 
-  const [download] = await Promise.all([
-    page.waitForEvent("download", { timeout: 120000 }),
-    clickFirst(page, [
-      'text=/Excel\\s*2007\\s*or\\s*later/i',
-      'a:has-text("Excel 2007 or later")',
-      'text=/\\.xlsx/i',
-      'a:has-text("Excel 2007")',
-    ]),
-  ])
+  const xlsxLink = page
+    .locator('a')
+    .filter({ hasText: /Excel\s*2007.*later|\.xlsx/i })
+    .first()
 
   const safe = String(sectionNumber).replace(/\W+/g, "_")
   const target = path.join(downloadDir, `time-and-topic-section-${safe}.xlsx`)
-  await download.saveAs(target)
-  return target
+
+  try {
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 120000 }),
+      xlsxLink.click({ force: true, timeout: 15000 }),
+    ])
+    await download.saveAs(target)
+    return target
+  } catch (err) {
+    // Fallback: fetch the .xlsx href directly (ALEKS sometimes marks the popup link "hidden")
+    const href = await xlsxLink.getAttribute("href").catch(() => null)
+    if (!href) throw err
+    const url = new URL(href, page.url()).toString()
+    console.log(`Download click failed; fetching ${url.slice(0, 120)}…`)
+    const cookies = await page.context().cookies()
+    const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ")
+    const res = await fetch(url, {
+      headers: {
+        Cookie: cookieHeader,
+        Referer: page.url(),
+      },
+    })
+    if (!res.ok) throw new Error(`Direct xlsx fetch failed (${res.status}): ${err.message}`)
+    const buf = Buffer.from(await res.arrayBuffer())
+    await fs.writeFile(target, buf)
+    return target
+  }
 }
 
 async function main() {
