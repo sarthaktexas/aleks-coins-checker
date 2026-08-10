@@ -4,9 +4,9 @@
  * Required env:
  *   ALEKS_USERNAME, ALEKS_PASSWORD
  *   APP_URL, IMPORT_API_TOKEN
- *   EXAM_PERIOD
- *   ALEKS_CLASSES — JSON array:
- *     [{"aleksName":"Class display name","sectionNumber":"003","archived":false}]
+ *
+ * Exam period comes from the app (latest uploaded student_data period).
+ * Classes are scraped from the ALEKS Class dropdown (active + archived).
  *
  * Optional:
  *   HEADED=1 — show browser
@@ -21,33 +21,24 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const CLASS_MENU_NOISE = new Set([
+  "class",
+  "classes",
+  "archived",
+  "archive",
+  "active",
+  "current",
+  "select a class",
+  "select class",
+  "show archived",
+  "hide archived",
+  "view archived",
+])
+
 function requireEnv(name) {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Missing required env: ${name}`)
   return value
-}
-
-function parseClasses() {
-  const raw = requireEnv("ALEKS_CLASSES")
-  let parsed
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    throw new Error("ALEKS_CLASSES must be valid JSON")
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error("ALEKS_CLASSES must be a non-empty JSON array")
-  }
-  return parsed.map((item, i) => {
-    if (!item?.aleksName || !item?.sectionNumber) {
-      throw new Error(`ALEKS_CLASSES[${i}] needs aleksName and sectionNumber`)
-    }
-    return {
-      aleksName: String(item.aleksName),
-      sectionNumber: String(item.sectionNumber),
-      archived: Boolean(item.archived),
-    }
-  })
 }
 
 /** YYYY-MM-DD → M/D/YYYY (ALEKS date fields) */
@@ -56,8 +47,36 @@ function toAleksDate(iso) {
   return `${m}/${d}/${y}`
 }
 
-async function fetchSyncConfig(appUrl, token, period) {
-  const url = `${appUrl.replace(/\/$/, "")}/api/admin/aleks-sync/config?period=${encodeURIComponent(period)}`
+/** Derive portal section number from an ALEKS class label. */
+function sectionFromClassName(aleksName, knownSections = []) {
+  const name = String(aleksName || "").trim()
+  const secMatch = name.match(/(?:section|sec\.?)\s*[:#-]?\s*(\d{1,4})/i)
+  if (secMatch) {
+    const raw = secMatch[1]
+    const padded = raw.padStart(3, "0")
+    if (knownSections.includes(raw)) return raw
+    if (knownSections.includes(padded)) return padded
+    return knownSections.length ? (knownSections.includes(raw) ? raw : padded) : padded
+  }
+
+  const nums = [...name.matchAll(/\b(\d{2,4})\b/g)].map((m) => m[1])
+  for (let i = nums.length - 1; i >= 0; i--) {
+    const n = nums[i]
+    const padded = n.padStart(3, "0")
+    if (knownSections.includes(n)) return n
+    if (knownSections.includes(padded)) return padded
+  }
+  if (nums.length > 0) {
+    const n = nums[nums.length - 1]
+    return n.length <= 3 ? n.padStart(3, "0") : n
+  }
+
+  // Last resort: slug (keeps sync working even without a numeric section)
+  return name.replace(/\s+/g, "_").slice(0, 40)
+}
+
+async function fetchSyncConfig(appUrl, token) {
+  const url = `${appUrl.replace(/\/$/, "")}/api/admin/aleks-sync/config`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -135,7 +154,6 @@ async function fillFirst(page, selectors, value, { timeout = 10000 } = {}) {
 async function login(page, username, password) {
   await page.goto("https://www.aleks.com/", { waitUntil: "domcontentloaded", timeout: 60000 })
 
-  // Registered Users box on homepage
   await fillFirst(page, [
     'input[name="login_name"]',
     'input[name="loginName"]',
@@ -158,7 +176,6 @@ async function login(page, username, password) {
   ])
 
   await page.waitForLoadState("networkidle", { timeout: 60000 }).catch(() => {})
-  // Wait until we are past the login form
   await page.waitForTimeout(2000)
 }
 
@@ -173,17 +190,130 @@ async function openClassDropdown(page) {
   ])
 }
 
+function normalizeClassLabel(text) {
+  return String(text || "").replace(/\s+/g, " ").trim()
+}
+
+function isNoiseClassLabel(text) {
+  const t = normalizeClassLabel(text).toLowerCase()
+  if (!t || t.length < 2) return true
+  if (CLASS_MENU_NOISE.has(t)) return true
+  if (/^show\b|^hide\b|^view\b/i.test(t) && /archiv/i.test(t)) return true
+  return false
+}
+
+async function collectVisibleClassLabels(page) {
+  const labels = await page.evaluate(() => {
+    const out = []
+    const nodes = document.querySelectorAll(
+      '[role="menuitem"], [role="option"], li, a, button, .class_name, .className, td',
+    )
+    for (const el of nodes) {
+      if (!(el instanceof HTMLElement)) continue
+      const style = window.getComputedStyle(el)
+      if (style.display === "none" || style.visibility === "hidden") continue
+      const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim()
+      if (!text || text.length > 120) continue
+      // Prefer leaf-ish nodes (avoid giant containers)
+      if (el.children.length > 3) continue
+      out.push(text)
+    }
+    return out
+  })
+
+  const unique = []
+  const seen = new Set()
+  for (const raw of labels) {
+    const text = normalizeClassLabel(raw)
+    if (isNoiseClassLabel(text)) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(text)
+  }
+  return unique
+}
+
+async function toggleArchived(page, wantArchived) {
+  const archivedControl = page.getByText(/archiv/i).first()
+  if (!(await archivedControl.isVisible().catch(() => false))) return false
+  const label = normalizeClassLabel(await archivedControl.innerText().catch(() => ""))
+  const looksOpen = /hide|active classes|current/i.test(label)
+  if (wantArchived && looksOpen) return true
+  if (!wantArchived && !looksOpen && /show|view|archived/i.test(label)) {
+    // already on active list
+    return true
+  }
+  await archivedControl.click().catch(() => {})
+  await page.waitForTimeout(600)
+  return true
+}
+
+/**
+ * Scrape Class dropdown: active classes, then archived classes.
+ */
+async function discoverClasses(page, downloadDir, knownSections = []) {
+  await openClassDropdown(page)
+  await page.waitForTimeout(800)
+
+  const activeLabels = await collectVisibleClassLabels(page)
+  await screenshot(page, downloadDir, "classes-active")
+
+  let archivedLabels = []
+  const hasArchived = await toggleArchived(page, true)
+  if (hasArchived) {
+    await page.waitForTimeout(500)
+    archivedLabels = await collectVisibleClassLabels(page)
+    await screenshot(page, downloadDir, "classes-archived")
+    // return to active if possible
+    await toggleArchived(page, false)
+  }
+
+  // Close dropdown (Escape)
+  await page.keyboard.press("Escape").catch(() => {})
+  await page.waitForTimeout(300)
+
+  const classes = []
+  const seen = new Set()
+
+  for (const aleksName of activeLabels) {
+    const key = aleksName.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    classes.push({
+      aleksName,
+      sectionNumber: sectionFromClassName(aleksName, knownSections),
+      archived: false,
+    })
+  }
+  for (const aleksName of archivedLabels) {
+    const key = aleksName.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    classes.push({
+      aleksName,
+      sectionNumber: sectionFromClassName(aleksName, knownSections),
+      archived: true,
+    })
+  }
+
+  // Prefer classes that map to known portal sections when we have them
+  if (knownSections.length > 0) {
+    const matched = classes.filter((c) => knownSections.includes(c.sectionNumber))
+    if (matched.length > 0) return matched
+  }
+
+  return classes
+}
+
 async function selectClass(page, { aleksName, archived }, downloadDir) {
   await openClassDropdown(page)
   await page.waitForTimeout(800)
 
   if (archived) {
-    // Prefer archived list when testing / archived sections
-    const archivedToggle = page.getByText(/archived/i).first()
-    if (await archivedToggle.isVisible().catch(() => false)) {
-      await archivedToggle.click().catch(() => {})
-      await page.waitForTimeout(500)
-    }
+    await toggleArchived(page, true)
+  } else {
+    await toggleArchived(page, false)
   }
 
   const classOption = page.getByText(aleksName, { exact: false }).first()
@@ -200,7 +330,6 @@ async function selectClass(page, { aleksName, archived }, downloadDir) {
 }
 
 async function openTimeAndTopic(page) {
-  // Hover Reports, then Time and Topic
   const reports = page.getByText(/^Reports$/i).first()
   await reports.waitFor({ state: "visible", timeout: 20000 })
   await reports.hover()
@@ -227,7 +356,6 @@ async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
   const start = toAleksDate(startIso)
   const end = toAleksDate(endIso)
 
-  // Common ALEKS field patterns; fall back to first two date-looking inputs
   try {
     await fillFirst(page, [
       'input[name*="start" i]',
@@ -266,7 +394,6 @@ async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
 }
 
 async function downloadExcel(page, downloadDir, sectionNumber) {
-  // Open download menu
   await clickFirst(page, [
     'text=/Download\\s*Excel\\s*Spreadsheet/i',
     'a:has-text("Download Excel Spreadsheet")',
@@ -285,7 +412,8 @@ async function downloadExcel(page, downloadDir, sectionNumber) {
     ]),
   ])
 
-  const target = path.join(downloadDir, `time-and-topic-section-${sectionNumber}.xlsx`)
+  const safe = String(sectionNumber).replace(/\W+/g, "_")
+  const target = path.join(downloadDir, `time-and-topic-section-${safe}.xlsx`)
   await download.saveAs(target)
   return target
 }
@@ -295,17 +423,21 @@ async function main() {
   const password = requireEnv("ALEKS_PASSWORD")
   const appUrl = requireEnv("APP_URL")
   const token = requireEnv("IMPORT_API_TOKEN")
-  const examPeriod = requireEnv("EXAM_PERIOD")
-  const classes = parseClasses()
   const dryRun = process.env.DRY_RUN === "1"
   const headed = process.env.HEADED === "1"
   const downloadDir = process.env.DOWNLOAD_DIR || path.join(__dirname, ".downloads")
 
   await fs.mkdir(downloadDir, { recursive: true })
 
-  console.log(`Fetching sync config for period=${examPeriod}…`)
-  const config = await fetchSyncConfig(appUrl, token, examPeriod)
+  console.log("Fetching sync config (active period from DB)…")
+  const config = await fetchSyncConfig(appUrl, token)
+  const examPeriod = config.period?.key
+  if (!examPeriod) throw new Error("Config did not return a period key")
+
   console.log(JSON.stringify({
+    source: config.source,
+    latestUploadAt: config.latestUploadAt,
+    knownSections: config.knownSections,
     period: config.period,
     today: config.today,
     shouldSync: config.shouldSync,
@@ -334,6 +466,15 @@ async function main() {
     await login(page, username, password)
     await screenshot(page, downloadDir, "01-after-login")
 
+    console.log("Discovering classes from ALEKS Class menu…")
+    const classes = await discoverClasses(page, downloadDir, config.knownSections || [])
+    console.log(`Found ${classes.length} class(es):`)
+    console.log(JSON.stringify(classes, null, 2))
+
+    if (classes.length === 0) {
+      throw new Error("No classes found in ALEKS Class dropdown")
+    }
+
     let dateRangeSet = false
 
     for (const cls of classes) {
@@ -348,7 +489,6 @@ async function main() {
           await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
           dateRangeSet = true
         } else {
-          // Date range persists; open report for the newly selected class
           await openTimeAndTopic(page)
           await page.waitForTimeout(1500)
         }
@@ -359,7 +499,13 @@ async function main() {
 
         if (dryRun) {
           console.log("DRY_RUN=1 — skipping import")
-          results.push({ sectionNumber: cls.sectionNumber, ok: true, dryRun: true, filePath })
+          results.push({
+            aleksName: cls.aleksName,
+            sectionNumber: cls.sectionNumber,
+            ok: true,
+            dryRun: true,
+            filePath,
+          })
         } else {
           const imported = await importReport(appUrl, token, {
             filePath,
@@ -368,6 +514,7 @@ async function main() {
           })
           console.log(`Imported: ${imported.studentCount} students`)
           results.push({
+            aleksName: cls.aleksName,
             sectionNumber: cls.sectionNumber,
             ok: true,
             studentCount: imported.studentCount,
@@ -375,8 +522,13 @@ async function main() {
         }
       } catch (err) {
         console.error(`Failed for ${cls.aleksName}:`, err.message)
-        await screenshot(page, downloadDir, `error-${cls.sectionNumber}`)
-        results.push({ sectionNumber: cls.sectionNumber, ok: false, error: err.message })
+        await screenshot(page, downloadDir, `error-${String(cls.sectionNumber).replace(/\W+/g, "_")}`)
+        results.push({
+          aleksName: cls.aleksName,
+          sectionNumber: cls.sectionNumber,
+          ok: false,
+          error: err.message,
+        })
       }
     }
   } finally {

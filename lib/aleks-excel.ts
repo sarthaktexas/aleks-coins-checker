@@ -349,6 +349,72 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
   }
 }
 
+/**
+ * Active period = period of the most recently uploaded student_data row.
+ * Falls back to an exam_periods row whose date range includes today (Central).
+ */
+export async function resolveActivePeriod(): Promise<{
+  period: PeriodDateInfo
+  source: "latest_upload" | "date_range"
+  latestUploadAt: string | null
+  knownSections: string[]
+} | null> {
+  if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+    throw new Error("Database not configured")
+  }
+
+  await ensureStudentDataTable()
+
+  const latest = await sql`
+    SELECT period, section_number, uploaded_at
+    FROM student_data
+    ORDER BY uploaded_at DESC
+    LIMIT 1
+  `
+
+  let periodKey: string | null = null
+  let source: "latest_upload" | "date_range" = "latest_upload"
+  let latestUploadAt: string | null = null
+
+  if (latest.rows.length > 0) {
+    periodKey = String(latest.rows[0].period)
+    latestUploadAt = new Date(latest.rows[0].uploaded_at as string).toISOString()
+    source = "latest_upload"
+  } else {
+    const today = todayInCentral()
+    const byDate = await sql`
+      SELECT period_key
+      FROM exam_periods
+      WHERE start_date <= ${today}::date AND end_date >= ${today}::date
+      ORDER BY start_date DESC
+      LIMIT 1
+    `
+    if (byDate.rows.length > 0) {
+      periodKey = String(byDate.rows[0].period_key)
+      source = "date_range"
+    }
+  }
+
+  if (!periodKey) return null
+
+  const period = await getPeriodDates(periodKey)
+  if (!period) return null
+
+  const sections = await sql`
+    SELECT DISTINCT COALESCE(section_number, 'default') as section_number
+    FROM student_data
+    WHERE period = ${periodKey}
+    ORDER BY section_number
+  `
+
+  return {
+    period,
+    source,
+    latestUploadAt,
+    knownSections: sections.rows.map((r) => String(r.section_number)),
+  }
+}
+
 /** Calendar date in America/Chicago (UTSA). */
 export function todayInCentral(): string {
   return new Intl.DateTimeFormat("en-CA", {

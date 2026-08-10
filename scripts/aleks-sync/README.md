@@ -7,7 +7,6 @@ Automates downloading **Time and Topic** Excel reports from ALEKS and importing 
 It is **not** from ALEKS. You invent it — a long random password that proves the GitHub Action is allowed to write into your app.
 
 ```bash
-# generate one
 openssl rand -hex 32
 ```
 
@@ -20,11 +19,13 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 
 ## How it works
 
-1. GitHub Actions runs daily (or via **Run workflow**)
-2. Playwright logs into ALEKS, opens each configured class, downloads Time and Topic `.xlsx`
-3. Date range = exam period start → today (Central), capped at period end  
-   - If today is **after** the period end → sync is skipped
-4. Each file is `POST`ed to `/api/admin/aleks-sync/import`
+1. GitHub Actions runs daily (or via Admin → **Pull from ALEKS now** / Actions → Run workflow)
+2. App config API picks the **active exam period** from the latest `student_data` upload
+3. Playwright logs into ALEKS and scrapes the **Class** dropdown (active + archived)
+4. For each class: Reports → Time and Topic → date range (period start → today) → download `.xlsx`
+5. Each file is `POST`ed to `/api/admin/aleks-sync/import`
+
+Section numbers are derived from the ALEKS class name (e.g. “Section 003” → `003`), preferring values that already exist for that period in the DB.
 
 Manual admin upload still works as a fallback.
 
@@ -32,47 +33,30 @@ Manual admin upload still works as a fallback.
 
 ### 1. App env (Vercel)
 
-Add:
-
 ```bash
-IMPORT_API_TOKEN="generate-a-long-random-string"
+IMPORT_API_TOKEN="…"          # shared with GitHub
+GITHUB_SYNC_PAT="…"           # optional; enables Admin pull button
+GITHUB_REPO="owner/repo"      # optional if Vercel git metadata exists
+APP_URL="https://aleks-coins.vercel.app"
 ```
 
-Redeploy after adding it.
-
 ### 2. GitHub repository secrets
-
-Repo → **Settings → Secrets and variables → Actions** → New repository secret:
 
 | Secret | Value |
 |---|---|
 | `ALEKS_USERNAME` | ALEKS login name |
 | `ALEKS_PASSWORD` | ALEKS password |
-| `APP_URL` | Production URL, e.g. `https://your-app.vercel.app` |
-| `IMPORT_API_TOKEN` | Same value as Vercel `IMPORT_API_TOKEN` |
-| `EXAM_PERIOD` | Period key from Admin → Manage Periods, e.g. `fall2025` |
-| `ALEKS_CLASSES` | JSON array (see below) |
+| `APP_URL` | Production URL |
+| `IMPORT_API_TOKEN` | Same as Vercel |
 
-#### `ALEKS_CLASSES` example
+### 3. Deploy + run
 
-```json
-[
-  {"aleksName": "Exact class name in ALEKS dropdown", "sectionNumber": "001", "archived": false},
-  {"aleksName": "Another class", "sectionNumber": "002", "archived": true}
-]
-```
+Deploy so `/api/admin/aleks-sync/config` is live, then:
 
-- `aleksName` must match (or uniquely contain) the label in the ALEKS Class dropdown
-- `sectionNumber` is your portal section (same as manual upload)
-- `archived: true` opens the Archived list first (useful while classes are archived)
+**Actions → ALEKS daily sync → Run workflow**  
+or Admin → **Pull from ALEKS now**
 
-### 3. Enable the workflow
-
-Push to `main` (or merge this branch). Then:
-
-**Actions → ALEKS daily sync → Run workflow**
-
-On failure, download the `aleks-sync-debug` artifact (screenshots + any partial downloads) to see where the UI selector broke.
+On failure, download the `aleks-sync-debug` artifact (screenshots).
 
 ## Local test
 
@@ -85,14 +69,6 @@ export ALEKS_USERNAME=...
 export ALEKS_PASSWORD=...
 export APP_URL=http://localhost:3000
 export IMPORT_API_TOKEN=...
-export EXAM_PERIOD=fall2025
-export ALEKS_CLASSES='[{"aleksName":"My Class","sectionNumber":"001","archived":true}]'
 
-# Optional: watch the browser / skip posting
 HEADED=1 DRY_RUN=1 npm run sync
 ```
-
-## Updating period / classes
-
-When a new exam period starts, update the `EXAM_PERIOD` secret.  
-When class names or sections change, update `ALEKS_CLASSES`. No code change required.

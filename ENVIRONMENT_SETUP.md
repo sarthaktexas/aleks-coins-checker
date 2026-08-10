@@ -67,6 +67,9 @@ NODE_ENV="development"
 - **`IMPORT_API_TOKEN`**: A random secret **you generate** (e.g. `openssl rand -hex 32`). Not an ALEKS credential. Same value goes in Vercel and the GitHub `IMPORT_API_TOKEN` secret so Actions can POST reports to `/api/admin/aleks-sync/import`. See `scripts/aleks-sync/README.md`
 - **`GITHUB_SYNC_PAT`** (optional): GitHub PAT with Actions write access so Admin → “Pull from ALEKS now” can dispatch the workflow. Pair with `GITHUB_REPO=owner/repo` if not on Vercel git metadata.
 - **`GITHUB_REPO`** (optional): `owner/repo` for the sync trigger button
+- **`APP_URL`** (optional on Vercel): Production URL used by docs/local tooling; GitHub Actions reads `APP_URL` from repo secrets
+
+GitHub Actions also needs secrets `ALEKS_USERNAME` and `ALEKS_PASSWORD`. Exam period and class list are discovered automatically (DB + ALEKS Class menu).
 
 ## Database Setup
 

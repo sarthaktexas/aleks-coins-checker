@@ -614,8 +614,8 @@ export default function AdminPage() {
         </div>
 
         <p className="text-xs text-utsa-muted">
-          Uses the period/section fields above for delete. Pull runs the GitHub Action for all
-          classes in <code className="rounded bg-utsa-surface px-1">ALEKS_CLASSES</code>.
+          Uses the period/section fields above for delete. Pull runs the GitHub Action, which
+          auto-detects the active exam period and scrapes classes from ALEKS.
         </p>
       </div>
 
