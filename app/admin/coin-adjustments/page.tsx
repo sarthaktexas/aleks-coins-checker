@@ -259,7 +259,7 @@ export default function AdminCoinAdjustmentsPage() {
         </div>
         <Button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-utsa-orange hover:bg-utsa-accessible"
+          className=""
         >
           <Plus className="h-4 w-4 mr-2" />
           Add Adjustment
@@ -386,7 +386,7 @@ export default function AdminCoinAdjustmentsPage() {
               <Button
                 type="submit"
                 disabled={isAdding || !studentData || !adjustmentAmount || !reason}
-                className="flex-1 bg-utsa-orange hover:bg-utsa-accessible"
+                className="flex-1"
               >
                 {isAdding ? "Adding..." : "Add Adjustment"}
               </Button>
@@ -416,7 +416,7 @@ export default function AdminCoinAdjustmentsPage() {
           )}
           {adjustments.length === 0 ? (
             <div className="p-12 text-center">
-              <Coins className="h-12 w-12 text-utsa-muted mx-auto mb-4" />
+              <Coins className="h-8 w-12 text-utsa-muted mx-auto mb-4" />
               <p className="text-utsa-midnight text-lg">No coin adjustments yet</p>
               <p className="text-utsa-muted text-sm mt-2">Click &quot;Add Adjustment&quot; to create one</p>
             </div>

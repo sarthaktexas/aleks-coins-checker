@@ -45,7 +45,26 @@ export default function AdminPage() {
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [settingsFlash, setSettingsFlash] = useState<"overrides" | "redemption" | null>(null)
   const loadSettingsAbortRef = useRef<AbortController | null>(null)
+  const settingsFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Bumped on every toggle so in-flight loads can't overwrite optimistic state
+  const settingsEpochRef = useRef(0)
+
+  const showSettingsFlash = (setting: "overrides" | "redemption") => {
+    if (settingsFlashTimeoutRef.current) clearTimeout(settingsFlashTimeoutRef.current)
+    setSettingsFlash(setting)
+    settingsFlashTimeoutRef.current = setTimeout(() => {
+      setSettingsFlash(null)
+      settingsFlashTimeoutRef.current = null
+    }, 2200)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (settingsFlashTimeoutRef.current) clearTimeout(settingsFlashTimeoutRef.current)
+    }
+  }, [])
 
   const loadPeriods = async () => {
     try {
@@ -79,6 +98,7 @@ export default function AdminPage() {
     const controller = new AbortController()
     loadSettingsAbortRef.current = controller
     const signal = controller.signal
+    const epoch = settingsEpochRef.current
 
     setIsLoadingSettings(true)
     try {
@@ -87,25 +107,24 @@ export default function AdminPage() {
         credentials: "same-origin",
         cache: "no-store",
       })
-      if (signal.aborted) return
+      if (signal.aborted || settingsEpochRef.current !== epoch) return
       if (response.status === 401) {
         setMessage({ type: "error", text: SESSION_EXPIRED })
         return
       }
       const data = await response.json()
-      if (signal.aborted) return
+      if (signal.aborted || settingsEpochRef.current !== epoch) return
       if (response.ok && data.success) {
-        setOverridesEnabled(data.settings.overridesEnabled)
-        setRedemptionRequestsEnabled(data.settings.redemptionRequestsEnabled)
+        setOverridesEnabled(Boolean(data.settings.overridesEnabled))
+        setRedemptionRequestsEnabled(Boolean(data.settings.redemptionRequestsEnabled))
       } else {
         setMessage({ type: "error", text: data.error || "Failed to load settings" })
       }
     } catch (error) {
-      if (signal.aborted) return
+      if (signal.aborted || settingsEpochRef.current !== epoch) return
       console.error("Error loading settings:", error)
       setMessage({ type: "error", text: "Failed to load settings" })
     } finally {
-      // Only the latest in-flight load may clear the loading flag
       if (loadSettingsAbortRef.current === controller) {
         setIsLoadingSettings(false)
       }
@@ -113,6 +132,9 @@ export default function AdminPage() {
   }
 
   const updateSettings = async (setting: "overrides" | "redemption", value: boolean) => {
+    // Invalidate any in-flight load so it can't snap the switch back
+    settingsEpochRef.current += 1
+    const epoch = settingsEpochRef.current
     loadSettingsAbortRef.current?.abort()
 
     if (setting === "overrides") setOverridesEnabled(value)
@@ -132,6 +154,8 @@ export default function AdminPage() {
         body: JSON.stringify(updates),
       })
 
+      if (settingsEpochRef.current !== epoch) return
+
       if (response.status === 401) {
         if (setting === "overrides") setOverridesEnabled(!value)
         else setRedemptionRequestsEnabled(!value)
@@ -140,22 +164,37 @@ export default function AdminPage() {
       }
 
       const result = await response.json()
+      if (settingsEpochRef.current !== epoch) return
 
       if (response.ok && result.success) {
-        setOverridesEnabled(result.settings.overridesEnabled)
-        setRedemptionRequestsEnabled(result.settings.redemptionRequestsEnabled)
-        setMessage({ type: "success", text: "Settings updated" })
+        // Keep the value we just wrote — never re-apply a re-parsed DB read for
+        // the toggled field (that was snapping the switch back to on).
+        if (setting === "overrides") {
+          setOverridesEnabled(value)
+          if (typeof result.settings?.redemptionRequestsEnabled === "boolean") {
+            setRedemptionRequestsEnabled(result.settings.redemptionRequestsEnabled)
+          }
+        } else {
+          setRedemptionRequestsEnabled(value)
+          if (typeof result.settings?.overridesEnabled === "boolean") {
+            setOverridesEnabled(result.settings.overridesEnabled)
+          }
+        }
+        showSettingsFlash(setting)
       } else {
         if (setting === "overrides") setOverridesEnabled(!value)
         else setRedemptionRequestsEnabled(!value)
         setMessage({ type: "error", text: result.error || "Failed to update settings" })
       }
     } catch {
+      if (settingsEpochRef.current !== epoch) return
       if (setting === "overrides") setOverridesEnabled(!value)
       else setRedemptionRequestsEnabled(!value)
       setMessage({ type: "error", text: "Network error. Please try again." })
     } finally {
-      setIsSavingSettings(false)
+      if (settingsEpochRef.current === epoch) {
+        setIsSavingSettings(false)
+      }
     }
   }
 
@@ -302,7 +341,7 @@ export default function AdminPage() {
               onValueChange={setSelectedPeriod}
               disabled={isUploading || isLoadingPeriods}
             >
-              <SelectTrigger className="h-10 border-utsa-border">
+              <SelectTrigger className="h-8 border-utsa-border">
                 <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
               </SelectTrigger>
               <SelectContent>
@@ -324,7 +363,7 @@ export default function AdminPage() {
               value={sectionNumber}
               onChange={(e) => setSectionNumber(e.target.value)}
               disabled={isUploading}
-              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+              className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
             />
           </div>
         </div>
@@ -395,7 +434,7 @@ export default function AdminPage() {
         <Button
           type="submit"
           disabled={isUploading || !file}
-          className="w-full bg-utsa-orange hover:bg-utsa-accessible sm:w-auto"
+          className="w-full sm:w-auto"
         >
           {isUploading ? (
             "Uploading…"
@@ -440,12 +479,23 @@ export default function AdminPage() {
             </div>
             <p className="text-xs text-utsa-muted">Allow creating day overrides</p>
           </div>
-          <Switch
-            id="overrides-toggle"
-            checked={overridesEnabled}
-            onCheckedChange={(checked) => updateSettings("overrides", checked)}
-            disabled={isSavingSettings || isLoadingSettings}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              aria-live="polite"
+              className={`flex items-center gap-1 text-xs font-medium text-emerald-600 transition-opacity duration-300 ${
+                settingsFlash === "overrides" ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+              Settings updated
+            </span>
+            <Switch
+              id="overrides-toggle"
+              checked={overridesEnabled}
+              onCheckedChange={(checked) => updateSettings("overrides", checked)}
+              disabled={isSavingSettings || isLoadingSettings}
+            />
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 py-1">
@@ -456,12 +506,23 @@ export default function AdminPage() {
             </div>
             <p className="text-xs text-utsa-muted">Allow students to submit redemptions</p>
           </div>
-          <Switch
-            id="redemption-toggle"
-            checked={redemptionRequestsEnabled}
-            onCheckedChange={(checked) => updateSettings("redemption", checked)}
-            disabled={isSavingSettings || isLoadingSettings}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              aria-live="polite"
+              className={`flex items-center gap-1 text-xs font-medium text-emerald-600 transition-opacity duration-300 ${
+                settingsFlash === "redemption" ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+              Settings updated
+            </span>
+            <Switch
+              id="redemption-toggle"
+              checked={redemptionRequestsEnabled}
+              onCheckedChange={(checked) => updateSettings("redemption", checked)}
+              disabled={isSavingSettings || isLoadingSettings}
+            />
+          </div>
         </div>
       </div>
 
@@ -477,7 +538,7 @@ export default function AdminPage() {
             variant="outline"
             onClick={() => setShowDeleteConfirm(true)}
             disabled={isDeleting || isUploading}
-            className="border-utsa-orange/40 text-utsa-accessible hover:bg-utsa-orange/10"
+            className="border-utsa-orange/40 text-utsa-accessible"
           >
             Delete all student data
           </Button>
@@ -489,9 +550,9 @@ export default function AdminPage() {
             <div className="flex gap-2">
               <Button
                 type="button"
+                variant="destructive"
                 onClick={handleDeleteAllData}
                 disabled={isDeleting || isUploading}
-                className="bg-utsa-accessible hover:bg-utsa-orange"
               >
                 {isDeleting ? "Deleting…" : "Yes, delete everything"}
               </Button>

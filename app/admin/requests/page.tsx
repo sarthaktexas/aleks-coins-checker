@@ -325,7 +325,7 @@ export default function AdminRequestsPage() {
       case 'pending':
         return <Badge className="bg-yellow-500 hover:bg-yellow-600">Pending</Badge>
       case 'approved':
-        return <Badge className="bg-green-500 hover:bg-green-600">Approved</Badge>
+        return <Badge className="btn-tactile-success text-white">Approved</Badge>
       case 'rejected':
         return <Badge className="bg-red-500 hover:bg-red-600">Rejected</Badge>
       default:
@@ -361,7 +361,7 @@ export default function AdminRequestsPage() {
       case 'quiz_replacement':
         return 'bg-green-500 hover:bg-green-600'
       case 'override_request':
-        return 'bg-utsa-orange hover:bg-utsa-accessible'
+        return 'bg-utsa-orange'
       default:
         return 'bg-slate-500 hover:bg-slate-600'
     }
@@ -463,7 +463,7 @@ export default function AdminRequestsPage() {
       <div className="space-y-4">
         {filteredRequests.length === 0 ? (
           <div className="rounded-md border border-utsa-border bg-white p-12 text-center">
-            <Mail className="h-12 w-12 text-utsa-muted mx-auto mb-4" />
+            <Mail className="h-8 w-12 text-utsa-muted mx-auto mb-4" />
             <p className="text-utsa-midnight text-lg">No requests found</p>
             <p className="text-utsa-muted text-sm mt-2">
               {selectedSection !== "all" || selectedStatus !== "all" 
@@ -540,7 +540,7 @@ export default function AdminRequestsPage() {
                             size="sm"
                             onClick={() => handleMagicApprove(studentId)}
                             disabled={magicApproving === studentId || fastApproving === studentId}
-                            className="bg-utsa-orange hover:bg-utsa-accessible"
+                            className=""
                           >
                             {magicApproving === studentId ? (
                               "Approving..."
@@ -554,7 +554,7 @@ export default function AdminRequestsPage() {
                             size="sm"
                             onClick={() => handleFastApproveAll(studentId)}
                             disabled={fastApproving === studentId || magicApproving === studentId}
-                            className="bg-green-600 hover:bg-green-700"
+                            className="btn-tactile-success text-white"
                           >
                             {fastApproving === studentId ? (
                               "Approving..."
@@ -630,7 +630,7 @@ export default function AdminRequestsPage() {
                                 size="sm"
                                 onClick={() => handleUpdateRequest(request.id)}
                                 disabled={isUpdating}
-                                className="bg-green-600 hover:bg-green-700"
+                                className="btn-tactile-success text-white"
                               >
                                 {isUpdating ? "Saving..." : "Save"}
                               </Button>
@@ -639,7 +639,7 @@ export default function AdminRequestsPage() {
                             <Button
                               size="sm"
                               onClick={() => startEditing(request)}
-                              className="bg-utsa-orange hover:bg-utsa-accessible"
+                              className=""
                             >
                               Update Status
                             </Button>

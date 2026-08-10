@@ -509,7 +509,7 @@ export default function EmailStudentsPage() {
               <div className="space-y-1.5">
                 <Label htmlFor="period">Exam Period (Optional)</Label>
                 <Select value={selectedPeriod || "__ALL__"} onValueChange={setSelectedPeriod} disabled={isLoadingPeriods}>
-                  <SelectTrigger className="h-10 border-utsa-border text-left">
+                  <SelectTrigger className="h-8 border-utsa-border text-left">
                     <SelectValue placeholder={isLoadingPeriods ? "Loading periods..." : "Select exam period"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -539,7 +539,7 @@ export default function EmailStudentsPage() {
                   placeholder="e.g., 003, 006 (leave empty for all sections)"
                   value={sectionNumber}
                   onChange={(e) => setSectionNumber(e.target.value)}
-                  className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                  className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                 />
                 <p className="text-xs text-utsa-muted">
                   Leave empty to load students from all sections for the selected period
@@ -549,7 +549,7 @@ export default function EmailStudentsPage() {
               <Button 
                 onClick={loadStudents}
                 disabled={isLoadingStudents}
-                className="w-full bg-utsa-orange hover:bg-utsa-accessible"
+                className="w-full"
               >
                 {isLoadingStudents ? (
                   <div className="flex items-center gap-2">
@@ -585,7 +585,7 @@ export default function EmailStudentsPage() {
                       ...prev, 
                       minProgress: e.target.value ? Number(e.target.value) : undefined 
                     }))}
-                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                    className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -598,7 +598,7 @@ export default function EmailStudentsPage() {
                       ...prev, 
                       maxProgress: e.target.value ? Number(e.target.value) : undefined 
                     }))}
-                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                    className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                   />
                 </div>
               </div>
@@ -614,7 +614,7 @@ export default function EmailStudentsPage() {
                       ...prev, 
                       minCoins: e.target.value ? Number(e.target.value) : undefined 
                     }))}
-                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                    className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -627,7 +627,7 @@ export default function EmailStudentsPage() {
                       ...prev, 
                       maxCoins: e.target.value ? Number(e.target.value) : undefined 
                     }))}
-                    className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                    className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                   />
                 </div>
               </div>
@@ -636,7 +636,7 @@ export default function EmailStudentsPage() {
                 <Button
                   variant={filterCriteria.hasProgress ? "default" : "outline"}
                   size="sm"
-                  className={filterCriteria.hasProgress ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                  className={filterCriteria.hasProgress ? "btn-tactile-orange text-white" : "border-utsa-border"}
                   onClick={() => setFilterCriteria(prev => ({ 
                     ...prev, 
                     hasProgress: !prev.hasProgress,
@@ -648,7 +648,7 @@ export default function EmailStudentsPage() {
                 <Button
                   variant={filterCriteria.noProgress ? "default" : "outline"}
                   size="sm"
-                  className={filterCriteria.noProgress ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                  className={filterCriteria.noProgress ? "btn-tactile-orange text-white" : "border-utsa-border"}
                   onClick={() => setFilterCriteria(prev => ({ 
                     ...prev, 
                     noProgress: !prev.noProgress,
@@ -676,7 +676,7 @@ export default function EmailStudentsPage() {
               <div className="space-y-1.5">
                 <Label>Template</Label>
                 <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger className="h-10 border-utsa-border text-left">
+                  <SelectTrigger className="h-8 border-utsa-border text-left">
                     <SelectValue placeholder="Select email template" />
                   </SelectTrigger>
                   <SelectContent>
@@ -699,7 +699,7 @@ export default function EmailStudentsPage() {
                     <Input
                       value={customSubject}
                       onChange={(e) => setCustomSubject(e.target.value)}
-                      className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+                      className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
                       placeholder="Email subject"
                     />
                   </div>
@@ -815,7 +815,7 @@ export default function EmailStudentsPage() {
 
                       <Button
                         onClick={openIndividualEmails}
-                        className="w-full bg-utsa-orange hover:bg-utsa-accessible"
+                        className="w-full"
                         disabled={hidePII}
                       >
                         <div className="flex items-center gap-2">
@@ -826,7 +826,7 @@ export default function EmailStudentsPage() {
 
                       {hidePII ? (
                         <Button
-                          className="w-full bg-utsa-accessible hover:bg-utsa-orange opacity-50 cursor-not-allowed"
+                          className="w-full hover: opacity-50 cursor-not-allowed"
                           disabled
                         >
                           <div className="flex items-center gap-2">
@@ -835,7 +835,7 @@ export default function EmailStudentsPage() {
                           </div>
                         </Button>
                       ) : (
-                        <Button asChild className="w-full bg-utsa-accessible hover:bg-utsa-orange">
+                        <Button asChild className="w-full">
                           <a href={generateBCCMailtoLink()}>
                             <div className="flex items-center gap-2">
                               <Mail className="h-4 w-4" />
@@ -849,7 +849,7 @@ export default function EmailStudentsPage() {
                 </>
               ) : (
                 <div className="text-center py-8 text-utsa-muted">
-                  <Users className="h-12 w-12 mx-auto mb-4 text-utsa-muted/50" />
+                  <Users className="h-8 w-12 mx-auto mb-4 text-utsa-muted/50" />
                   <p>No students match the current criteria</p>
                   <p className="text-sm">Adjust your filters or load student data</p>
                 </div>

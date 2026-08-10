@@ -137,7 +137,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+              className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
               required
             />
           </div>
@@ -150,14 +150,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
               autoComplete="current-password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              className="h-10 border-utsa-border focus-visible:ring-utsa-orange"
+              className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
               required
             />
           </div>
           <Button
             type="submit"
             disabled={submitting}
-            className="w-full bg-utsa-orange hover:bg-utsa-accessible"
+            className="w-full"
           >
             {submitting ? "Signing in…" : "Sign in"}
           </Button>

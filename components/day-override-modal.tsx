@@ -150,7 +150,7 @@ export function DayOverrideModal({
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <div className="text-center py-6">
-            <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
+            <div className="mx-auto flex items-center justify-center w-12 h-8 rounded-full bg-green-100 mb-4">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Override Request Submitted!</h3>

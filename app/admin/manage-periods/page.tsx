@@ -459,7 +459,7 @@ export default function ManagePeriodsPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleAddNewPeriod} disabled={isLoading} className="bg-utsa-orange hover:bg-utsa-accessible">
+            <Button onClick={handleAddNewPeriod} disabled={isLoading} className="">
               {isLoading ? "Adding..." : "Add Period"}
             </Button>
             <Button 
@@ -502,7 +502,7 @@ export default function ManagePeriodsPage() {
                       size="sm"
                       onClick={() => handleSavePeriod(periodKey)}
                       disabled={isLoading}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="btn-tactile-success text-white"
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {isLoading ? "Saving..." : "Save"}
@@ -527,7 +527,7 @@ export default function ManagePeriodsPage() {
                       setEditingPeriod(periodKey)
                       setEditingPeriodNewKey(periodKey)
                     }}
-                    className="bg-utsa-orange hover:bg-utsa-accessible"
+                    className=""
                   >
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
@@ -636,7 +636,7 @@ export default function ManagePeriodsPage() {
                           size="sm"
                           onClick={() => handleAddExcludedDate(periodKey)}
                           disabled={!newExcludedDate}
-                          className="bg-utsa-orange hover:bg-utsa-accessible"
+                          className=""
                         >
                           <Plus className="h-4 w-4" />
                         </Button>

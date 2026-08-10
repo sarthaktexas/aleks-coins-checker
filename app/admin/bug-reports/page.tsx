@@ -206,7 +206,7 @@ export default function AdminBugReportsPage() {
                         size="sm"
                         onClick={() => updateReport(report.id)}
                         disabled={isUpdating}
-                        className="bg-utsa-orange hover:bg-utsa-accessible"
+                        className=""
                       >
                         {isUpdating ? "Saving…" : "Save"}
                       </Button>

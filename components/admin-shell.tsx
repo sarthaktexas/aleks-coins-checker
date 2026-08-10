@@ -37,7 +37,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="admin-shell flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 bg-white">
-        <div className="h-1 w-full bg-utsa-orange" />
+        <div className="h-1 w-full" />
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
           <Link href="/admin/dashboard" className="shrink-0 text-sm font-bold text-utsa-midnight">
             ALEKS Admin
@@ -57,9 +57,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "shrink-0 rounded px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "shrink-0 rounded px-2.5 py-1.5 text-xs font-semibold transition-[filter,box-shadow]",
                   active
-                    ? "bg-utsa-orange text-white"
+                    ? "btn-tactile-orange text-white"
                     : "text-utsa-midnight/70 hover:bg-black/[0.04] hover:text-utsa-midnight",
                 )}
               >

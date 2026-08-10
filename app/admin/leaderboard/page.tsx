@@ -157,7 +157,7 @@ export default function AdminLeaderboardPage() {
     if (rank === 1) return "bg-yellow-500 hover:bg-yellow-600"
     if (rank === 2) return "bg-gray-400 hover:bg-gray-500"
     if (rank === 3) return "bg-amber-600 hover:bg-amber-700"
-    return "bg-utsa-orange hover:bg-utsa-accessible"
+    return "bg-utsa-orange"
   }
 
   return (
@@ -187,7 +187,7 @@ export default function AdminLeaderboardPage() {
                   setSelectedSection("")
                 }
               }}
-              className="w-full h-10 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange"
+              className="w-full h-8 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange"
             >
               <option value="">Select a period</option>
               {getAvailablePeriods().map(period => (
@@ -204,7 +204,7 @@ export default function AdminLeaderboardPage() {
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
               disabled={!selectedPeriod}
-              className="w-full h-10 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange disabled:bg-utsa-surface disabled:cursor-not-allowed"
+              className="w-full h-8 px-3 border border-utsa-border rounded-md focus:outline-none focus:ring-2 focus:ring-utsa-orange focus:border-utsa-orange disabled:bg-utsa-surface disabled:cursor-not-allowed"
             >
               <option value="">Select a section</option>
               {selectedPeriod && getAvailableSections(selectedPeriod).map(section => (
@@ -351,7 +351,7 @@ export default function AdminLeaderboardPage() {
                               size="sm"
                               onClick={() => handlePageChange(pageNum)}
                               disabled={isLoading}
-                              className={currentPage === pageNum ? "bg-utsa-orange hover:bg-utsa-accessible" : "border-utsa-border"}
+                              className={currentPage === pageNum ? "btn-tactile-orange text-white" : "border-utsa-border"}
                             >
                               {pageNum}
                             </Button>

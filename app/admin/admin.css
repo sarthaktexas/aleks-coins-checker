@@ -3,10 +3,27 @@
   --admin-orange-accessible: #d3430d;
   --admin-midnight: #032044;
   --admin-mist: #c8dcff;
-  --admin-surface: #f7f9fc;
-  --admin-border: #d4dde8;
+  --admin-surface: #e8ecf2;
+  --admin-panel: #ffffff;
+  --admin-border: rgba(3, 32, 68, 0.1);
   --admin-muted: #5a6b7d;
   background: var(--admin-surface);
   color: var(--admin-midnight);
   min-height: 100vh;
+}
+
+/* White panels lift off the gray surface with a hairline edge */
+.admin-shell .admin-panel,
+.admin-shell .rounded-md.bg-white,
+.admin-shell [class*="rounded-md"][class*="bg-white"] {
+  background: var(--admin-panel);
+  border: 1px solid var(--admin-border);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 1px 2px rgba(3, 32, 68, 0.05);
+}
+
+.admin-shell .admin-inset {
+  background: rgba(3, 32, 68, 0.04);
+  border-radius: 0.375rem;
 }

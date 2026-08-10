@@ -82,29 +82,30 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8 sm:py-12 max-w-5xl">
+    <div className="min-h-screen bg-utsa-surface">
+      <div className="h-1 w-full bg-utsa-orange" />
+      <div className="container mx-auto px-4 py-6 sm:py-8 max-w-5xl">
         {/* Header */}
-        <div className="text-center mb-8 sm:mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
+        <div className="mb-6">
+          <div className="mb-3">
             <Link href="/">
-              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900">
+              <Button variant="outline" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Student Portal
               </Button>
             </Link>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">Class Analytics</h1>
-          <p className="text-slate-600 text-base sm:text-lg">Average completion rates and study times across all sections</p>
+          <h1 className="text-xl font-semibold text-utsa-midnight">Class Analytics</h1>
+          <p className="text-sm text-utsa-muted">Average completion rates and study times across all sections</p>
         </div>
 
         {/* Loading Analytics */}
         {isLoadingAnalytics && (
-          <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+          <Card className="mb-6 rounded-md bg-white">
             <CardContent className="p-6 text-center">
               <div className="flex items-center justify-center gap-3">
-                <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                <span className="text-purple-700 font-medium">Loading class analytics...</span>
+                <div className="w-4 h-4 border-2 border-utsa-orange border-t-transparent rounded-full animate-spin" />
+                <span className="text-utsa-muted font-medium text-sm">Loading class analytics...</span>
               </div>
             </CardContent>
           </Card>
@@ -112,32 +113,26 @@ export default function AnalyticsPage() {
 
         {/* Analytics Section */}
         {!isLoadingAnalytics && analytics.length > 0 && (
-          <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+          <Card className="mb-6 rounded-md bg-white">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-3 text-lg sm:text-xl">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
-                </div>
+              <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
+                <BarChart3 className="h-4 w-4 text-utsa-orange" />
                 Class Analytics
               </CardTitle>
-              <CardDescription className="text-sm sm:text-base">
+              <CardDescription className="text-sm text-utsa-muted">
                 Average completion rates and study times across all sections
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Period Selection Buttons */}
               {activePeriods.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-3">
+                <div className="flex flex-wrap gap-2">
                   {activePeriods.map((period) => (
                     <Button
                       key={period}
                       onClick={() => setSelectedPeriod(period)}
                       variant={selectedPeriod === period ? "default" : "outline"}
-                      className={
-                        selectedPeriod === period
-                          ? "bg-purple-600 hover:bg-purple-700 text-white"
-                          : "border-purple-200 text-purple-700 hover:bg-purple-50"
-                      }
+                      size="sm"
                     >
                       {analytics.find(p => p.period === period)?.periodName ?? period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </Button>
@@ -153,21 +148,21 @@ export default function AnalyticsPage() {
                 return (
                   <div className="space-y-4">
                     {/* Period Header */}
-                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                    <div className="flex items-center justify-between p-4 bg-utsa-surface rounded-md">
                       <div>
-                        <h3 className="font-semibold text-purple-900">
+                        <h3 className="font-semibold text-utsa-midnight">
                           {period.periodName ?? period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </h3>
-                        <p className="text-sm text-purple-700">
+                        <p className="text-sm text-utsa-muted">
                           Sections {period.sections.join(', ')} • {period.totalStudents} students
                         </p>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-2 text-sm text-purple-700">
+                        <div className="flex items-center gap-2 text-sm text-utsa-midnight">
                           <TrendingUp className="h-4 w-4" />
                           <span className="font-medium">{period.averageCompletion}% avg completion</span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-purple-600">
+                        <div className="flex items-center gap-2 text-sm text-utsa-muted">
                           <Clock className="h-4 w-4" />
                           <span>{period.averageTime.toFixed(1)} min avg time</span>
                         </div>
@@ -176,11 +171,11 @@ export default function AnalyticsPage() {
 
                     {/* Line Chart */}
                     <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-purple-800 flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
                         <TrendingUp className="h-4 w-4" />
                         Completion Trends Over Time
                       </h4>
-                      <div className="w-full h-96 bg-white rounded-lg p-4">
+                      <div className="w-full h-96 bg-white rounded-md p-4">
                         <CompletionChart data={[period]} />
                       </div>
                     </div>
@@ -194,21 +189,21 @@ export default function AnalyticsPage() {
                         return (
                           <div
                             key={day.day}
-                            className="relative p-3 rounded-lg border border-gray-200 bg-white overflow-hidden"
+                            className="relative p-3 rounded-md bg-white overflow-hidden"
                             style={{
                               background: isExempt 
-                                ? `linear-gradient(to right, #6b7280 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
-                                : `linear-gradient(to right, #8b5cf6 ${completionPercent}%, #f3f4f6 ${completionPercent}%)`
+                                ? `linear-gradient(to right, #9AA5B5 ${completionPercent}%, #E8ECF2 ${completionPercent}%)`
+                                : `linear-gradient(to right, #F15A22 ${completionPercent}%, #E8ECF2 ${completionPercent}%)`
                             }}
                           >
                             <div className="relative z-10">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-800">
+                                <span className="text-sm font-medium text-utsa-midnight">
                                   Day {day.day}
                                 </span>
                                 <div className="flex items-center gap-1">
                                   {isExempt && (
-                                    <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                    <Badge variant="outline" className="text-xs bg-utsa-surface text-utsa-muted">
                                       Exempt
                                     </Badge>
                                   )}
@@ -221,26 +216,26 @@ export default function AnalyticsPage() {
                               </div>
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-700 font-medium">Completion:</span>
-                                  <span className="font-bold text-gray-800">
+                                  <span className="text-utsa-muted font-medium">Completion:</span>
+                                  <span className="font-bold text-utsa-midnight">
                                     {day.averageCompletion.toFixed(1)}%
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-700">Avg Time:</span>
-                                  <span className="font-medium text-gray-800">
+                                  <span className="text-utsa-muted">Avg Time:</span>
+                                  <span className="font-medium text-utsa-midnight">
                                     {day.averageTime.toFixed(0)}m
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-gray-700">Students:</span>
-                                  <span className="font-medium text-gray-800">
+                                  <span className="text-utsa-muted">Students:</span>
+                                  <span className="font-medium text-utsa-midnight">
                                     {day.qualifiedStudents}/{day.totalStudents}
                                   </span>
                                 </div>
                                 {day.sectionData.length > 1 && (
-                                  <div className="pt-1 border-t border-gray-300">
-                                    <div className="text-xs text-gray-600">
+                                  <div className="pt-1 border-t border-utsa-border">
+                                    <div className="text-xs text-utsa-muted">
                                       {day.sectionData.map((section, idx) => (
                                         <div key={section.sectionNumber} className="flex justify-between">
                                           <span>Sec {section.sectionNumber}:</span>
@@ -265,17 +260,17 @@ export default function AnalyticsPage() {
 
         {/* No Analytics Data */}
         {!isLoadingAnalytics && analytics.length === 0 && (
-          <Card className="mb-6 sm:mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+          <Card className="mb-6 rounded-md bg-white">
             <CardContent className="p-6 text-center">
-              <p className="text-slate-600">No analytics data available yet.</p>
+              <p className="text-utsa-muted text-sm">No analytics data available yet.</p>
             </CardContent>
           </Card>
         )}
 
         {/* Footer */}
-        <div className="mt-8 sm:mt-12 text-center">
+        <div className="mt-8">
           <Link href="/">
-            <Button variant="outline">
+            <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Student Portal
             </Button>

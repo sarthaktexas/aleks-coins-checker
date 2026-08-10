@@ -53,7 +53,8 @@ export default function ViewDataPage() {
   const [selectedSection, setSelectedSection] = useState("")
   const [uploadRecords, setUploadRecords] = useState<UploadRecord[]>([])
   const [studentData, setStudentData] = useState<Record<string, StudentData>>({})
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingUploads, setIsLoadingUploads] = useState(true)
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false)
   const [error, setError] = useState("")
   const [sortField, setSortField] = useState<keyof StudentData | "studentId" | "status">("name")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc")
@@ -91,7 +92,7 @@ export default function ViewDataPage() {
   }, [showExportDropdown])
 
   const loadUploadRecords = async () => {
-    setIsLoading(true)
+    setIsLoadingUploads(true)
     try {
       const response = await fetch("/api/admin/student-data", { credentials: "same-origin" })
       if (response.status === 401) {
@@ -108,12 +109,14 @@ export default function ViewDataPage() {
     } catch (error) {
       setError("Failed to load upload records")
     } finally {
-      setIsLoading(false)
+      setIsLoadingUploads(false)
     }
   }
 
   const loadStudentData = async (period: string, sectionNumber: string) => {
-    setIsLoading(true)
+    setIsLoadingStudents(true)
+    setStudentData({})
+    setExpandedStudentId(null)
     setError("")
     try {
       const response = await fetch(
@@ -144,7 +147,7 @@ export default function ViewDataPage() {
     } catch (error) {
       setError("Failed to load student data")
     } finally {
-      setIsLoading(false)
+      setIsLoadingStudents(false)
     }
   }
 
@@ -457,54 +460,96 @@ Total: ${extraCreditStudents.length} students`
           </p>
         </div>
         <div className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {uploadRecords.map((record) => (
-              <div key={record.id} className="rounded-md border border-utsa-border p-4 hover:border-utsa-orange/50 transition-colors">
-                <div className="space-y-2">
+          {isLoadingUploads ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-md border border-utsa-border p-4 space-y-3 animate-pulse">
                   <div className="flex items-center justify-between">
-                    <div className="flex flex-col gap-1">
-                      <Badge variant="outline" className="text-xs border-utsa-border">
-                        {record.period}
-                      </Badge>
-                      <Badge variant="secondary" className="text-xs">
-                        Section {record.section_number || 'default'}
-                      </Badge>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="h-5 w-24 rounded bg-utsa-surface" />
+                      <div className="h-5 w-20 rounded bg-utsa-surface" />
                     </div>
-                    <span className="text-xs text-utsa-muted">
-                      {record.student_count} students
-                    </span>
+                    <div className="h-4 w-16 rounded bg-utsa-surface" />
                   </div>
-                  <p className="text-sm text-utsa-muted">
-                    {formatDate(record.uploaded_at)}
-                  </p>
+                  <div className="h-4 w-28 rounded bg-utsa-surface" />
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setSelectedPeriod(record.period)
-                        setSelectedSection(record.section_number || 'default')
-                        loadStudentData(record.period, record.section_number || 'default')
-                      }}
-                      className="flex-1 bg-utsa-orange hover:bg-utsa-accessible"
-                      disabled={isLoading}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Data
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deleteUpload(record.id)}
-                      disabled={isLoading || deletingUploadId === record.id}
-                      className="px-3"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="h-8 flex-1 rounded bg-utsa-surface" />
+                    <div className="h-8 w-10 rounded bg-utsa-surface" />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : uploadRecords.length === 0 ? (
+            <div className="text-center py-10">
+              <Database className="h-8 w-8 text-utsa-muted/40 mx-auto mb-3" />
+              <p className="text-sm text-utsa-muted">No data sets uploaded yet.</p>
+              <p className="text-xs text-utsa-muted mt-1">
+                Upload student data from the Upload page to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {uploadRecords.map((record) => (
+                <div key={record.id} className="rounded-md border border-utsa-border p-4 hover:border-utsa-orange/50 transition-colors">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="outline" className="text-xs border-utsa-border">
+                          {record.period}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          Section {record.section_number || 'default'}
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-utsa-muted">
+                        {record.student_count} students
+                      </span>
+                    </div>
+                    <p className="text-sm text-utsa-muted">
+                      {formatDate(record.uploaded_at)}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setSelectedPeriod(record.period)
+                          setSelectedSection(record.section_number || 'default')
+                          loadStudentData(record.period, record.section_number || 'default')
+                        }}
+                        className="flex-1"
+                        disabled={isLoadingStudents}
+                      >
+                        {isLoadingStudents && selectedPeriod === record.period && selectedSection === (record.section_number || 'default') ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                            Loading…
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Data
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteUpload(record.id)}
+                        disabled={isLoadingStudents || deletingUploadId === record.id}
+                        className="px-3"
+                      >
+                        {deletingUploadId === record.id ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -528,7 +573,7 @@ Total: ${extraCreditStudents.length} students`
                     <Button
                       onClick={() => setShowExportDropdown(!showExportDropdown)}
                       disabled={isExporting || hideStudentData}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="btn-tactile-success text-white text-white"
                     >
                       {isExporting ? (
                         <div className="flex items-center gap-2">
@@ -666,8 +711,8 @@ Total: ${extraCreditStudents.length} students`
                       <span className="text-xl font-bold text-amber-600">{data.coins}</span>
                     </div>
 
-                    <div className="relative w-12 h-12">
-                      <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                    <div className="relative w-12 h-8">
+                      <svg className="w-12 h-8 transform -rotate-90" viewBox="0 0 36 36">
                         <path
                           className="text-utsa-border"
                           stroke="currentColor"
@@ -778,7 +823,7 @@ Total: ${extraCreditStudents.length} students`
                           href={`/?studentId=${encodeURIComponent(studentId)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-utsa-orange hover:bg-utsa-accessible text-white text-sm font-medium rounded-md transition-colors"
+                          className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-md transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="h-4 w-4" />

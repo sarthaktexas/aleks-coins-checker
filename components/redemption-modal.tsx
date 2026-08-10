@@ -141,7 +141,7 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-md">
           <div className="text-center py-6">
-            <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
+            <div className="mx-auto flex items-center justify-center w-12 h-8 rounded-full bg-green-100 mb-4">
               <Gift className="h-6 w-6 text-green-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Redemption Submitted!</h3>
@@ -170,7 +170,7 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Cost Badge */}
           <div className="flex justify-center">
-            <Badge className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium">
+            <Badge className="btn-tactile-success text-white text-white px-4 py-2 text-sm font-medium">
               Cost: {info.cost} coins
             </Badge>
           </div>
@@ -241,7 +241,7 @@ export function RedemptionModal({ isOpen, onClose, onSuccess, redemptionType, st
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !redemptionRequestsEnabled || isCheckingSettings} className="bg-green-600 hover:bg-green-700">
+            <Button type="submit" disabled={isSubmitting || !redemptionRequestsEnabled || isCheckingSettings} className="btn-tactile-success text-white">
               {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

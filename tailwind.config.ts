@@ -59,9 +59,9 @@ const config = {
           midnight: "#032044",
           mist: "#C8DCFF",
           talavera: "#265BF7",
-          border: "#D4DDE8",
+          border: "#E2E8F0",
           muted: "#5A6B7D",
-          surface: "#F7F9FC",
+          surface: "#E8ECF2",
         },
       },
       borderRadius: {

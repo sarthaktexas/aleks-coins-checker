@@ -224,7 +224,7 @@ export default function AdminUsersPage() {
             </Select>
           </div>
         </div>
-        <Button type="submit" disabled={submitting} className="bg-utsa-orange hover:bg-utsa-accessible">
+        <Button type="submit" disabled={submitting} className="">
           {submitting ? "Creating…" : "Create account"}
         </Button>
       </form>
