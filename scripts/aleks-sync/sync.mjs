@@ -261,26 +261,71 @@ async function expandArchivedInClassMenu(page) {
   }
 }
 
-function scoreClassForSync(cls) {
+/** Infer semester markers from a period key like spring2026_exam2 / spring_exam1_2026. */
+function termHintsFromPeriod(periodKey = "") {
+  const key = String(periodKey).toLowerCase()
+  if (/spring/.test(key)) {
+    return {
+      prefer: /SP26|Sp26|Spring\s*26|Spring\s*2026/i,
+      avoid: /Su26|Sum\s*26|F26|Fall\s*26|Su25|Sum\s*25|F25|Fall\s*25/i,
+      label: "spring",
+    }
+  }
+  if (/summer|su\d/.test(key)) {
+    return {
+      prefer: /Su26|Sum\s*26|Summer\s*26|Summer\s*2026/i,
+      avoid: /SP26|Sp26|Spring\s*26|F26|Fall\s*26|SP25|F25/i,
+      label: "summer",
+    }
+  }
+  if (/fall/.test(key)) {
+    return {
+      prefer: /F26|Fall\s*26|Fall\s*2026/i,
+      avoid: /Su26|Sum\s*26|SP26|Sp26|Su25|SP25/i,
+      label: "fall",
+    }
+  }
+  return null
+}
+
+function scoreClassForSync(cls, periodKey = "") {
   let score = 0
   const name = cls.aleksName || ""
-  if (/Su26|Sum\s*26|SP26|Sp26|F26|Fall\s*26|Spring\s*26/i.test(name)) score += 20
+  const hints = termHintsFromPeriod(periodKey)
+  if (hints) {
+    if (hints.prefer.test(name)) score += 50
+    if (hints.avoid.test(name)) score -= 30
+  } else {
+    if (/Su26|Sum\s*26|SP26|Sp26|F26|Fall\s*26|Spring\s*26/i.test(name)) score += 20
+  }
   if (/Su25|Sum\s*25|SP25|Sp25|F25|Fall\s*25|Spring\s*25/i.test(name)) score += 5
   if (!cls.archived) score += 2
   return score
 }
 
-/** One class per section — prefer current-term names (e.g. Su26 over Sum 25). */
-function dedupeClassesBySection(classes, knownSections = []) {
+/** One class per section — prefer classes matching the exam period's semester. */
+function dedupeClassesBySection(classes, knownSections = [], periodKey = "") {
+  const hints = termHintsFromPeriod(periodKey)
+  let pool = classes
+  if (hints) {
+    const matching = classes.filter((c) => hints.prefer.test(c.aleksName || ""))
+    if (matching.length > 0) {
+      console.log(
+        `Filtering to ${hints.label} classes: ${matching.length}/${classes.length}`,
+      )
+      pool = matching
+    }
+  }
+
   const filtered =
     knownSections.length > 0
-      ? classes.filter((c) => knownSections.includes(c.sectionNumber))
-      : classes
+      ? pool.filter((c) => knownSections.includes(c.sectionNumber))
+      : pool
 
   const bySection = new Map()
-  for (const cls of filtered.length > 0 ? filtered : classes) {
+  for (const cls of filtered.length > 0 ? filtered : pool) {
     const prev = bySection.get(cls.sectionNumber)
-    if (!prev || scoreClassForSync(cls) > scoreClassForSync(prev)) {
+    if (!prev || scoreClassForSync(cls, periodKey) > scoreClassForSync(prev, periodKey)) {
       bySection.set(cls.sectionNumber, cls)
     }
   }
@@ -294,7 +339,7 @@ function escapeRegExp(s) {
 /**
  * Scrape Class dropdown (active + archived) from classic ALEKS searchbar.
  */
-async function discoverClasses(page, downloadDir, knownSections = []) {
+async function discoverClasses(page, downloadDir, knownSections = [], periodKey = "") {
   await openClassDropdown(page)
   await page.waitForTimeout(500)
   await expandArchivedInClassMenu(page)
@@ -335,7 +380,7 @@ async function discoverClasses(page, downloadDir, knownSections = []) {
     throw new Error("No classes found in ALEKS CLASS menu (active or archived)")
   }
 
-  const picked = dedupeClassesBySection(classes, knownSections)
+  const picked = dedupeClassesBySection(classes, knownSections, periodKey)
   if (picked.length > 0) {
     console.log(`Using ${picked.length}/${classes.length} class(es) after section/term filter`)
     return picked
@@ -554,7 +599,12 @@ async function main() {
     await screenshot(page, downloadDir, "01-after-login")
 
     console.log("Discovering classes from ALEKS Class menu…")
-    const classes = await discoverClasses(page, downloadDir, config.knownSections || [])
+    const classes = await discoverClasses(
+      page,
+      downloadDir,
+      config.knownSections || [],
+      examPeriod,
+    )
     console.log(`Found ${classes.length} class(es):`)
     console.log(JSON.stringify(classes, null, 2))
 
