@@ -562,47 +562,43 @@ async function main() {
       throw new Error("No classes found in ALEKS Class dropdown")
     }
 
-    let dateRangeSet = false
+    let onTimeAndTopic = false
 
     for (const cls of classes) {
       console.log(`\n=== Class: ${cls.aleksName} → section ${cls.sectionNumber}${cls.archived ? " (archived)" : ""} ===`)
       try {
         await selectClass(page, cls, downloadDir)
-        await openTimeAndTopic(page)
 
-        const currentRange = await readReportDateRange(page)
-        const needsDateSet =
-          !dateRangeSet ||
-          !currentRange ||
-          currentRange.start !== config.reportStartDate ||
-          currentRange.end !== config.reportEndDate
-
-        if (needsDateSet) {
-          await screenshot(page, downloadDir, `02-time-and-topic-${cls.sectionNumber}`)
-          console.log(
-            `Setting date range ${config.reportStartDate} → ${config.reportEndDate}` +
-              (currentRange ? ` (was ${currentRange.start}→${currentRange.end})` : ""),
-          )
+        if (!onTimeAndTopic) {
+          await openTimeAndTopic(page)
+          await screenshot(page, downloadDir, "02-time-and-topic")
+          console.log(`Setting date range ${config.reportStartDate} → ${config.reportEndDate}`)
           await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
-          dateRangeSet = true
+          onTimeAndTopic = true
         } else {
-          console.log(`Date range already correct: ${currentRange.label}`)
-          await page.waitForTimeout(1000)
+          // Class switch refreshes the same Time and Topic report; no need to re-open it.
+          await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
+          await page.waitForTimeout(1500)
+          const currentRange = await readReportDateRange(page)
+          console.log(`After class switch: ${currentRange?.label || "(range not found)"}`)
+          if (
+            !currentRange ||
+            currentRange.start !== config.reportStartDate ||
+            currentRange.end !== config.reportEndDate
+          ) {
+            console.log("Date range reset after class switch — re-applying…")
+            await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
+          }
         }
 
         console.log("Downloading Excel…")
         const filePath = await downloadExcel(page, downloadDir, cls.sectionNumber)
-        console.log(`Saved ${filePath}`)
-
-        // Sanity-check the workbook covers the requested start date
         const bytes = await fs.readFile(filePath)
-        const asText = bytes.toString("utf8")
-        // xlsx is zip; also check via crude string for MM/DD in shared strings isn't reliable.
-        // Soft check: file should be larger than the empty 1-week default (~15KB).
-        if (bytes.length < 16000) {
-          console.warn(`Warning: ${path.basename(filePath)} is only ${bytes.length} bytes — date range may be wrong`)
+        // ZIP/XLSX magic: PK\x03\x04
+        if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+          throw new Error(`Downloaded file is not Excel/ZIP (got magic ${bytes.slice(0, 4).toString("hex")})`)
         }
-        void asText
+        console.log(`Saved ${filePath} (${bytes.length} bytes, valid xlsx signature)`)
 
         if (dryRun) {
           console.log("DRY_RUN=1 — skipping import")
