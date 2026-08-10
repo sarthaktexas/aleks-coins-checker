@@ -24,20 +24,6 @@ import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-const CLASS_MENU_NOISE = new Set([
-  "class",
-  "classes",
-  "archived",
-  "archive",
-  "active",
-  "current",
-  "select a class",
-  "select class",
-  "show archived",
-  "hide archived",
-  "view archived",
-])
-
 function requireEnv(name) {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Missing required env: ${name}`)
@@ -53,28 +39,41 @@ function toAleksDate(iso) {
 /** Derive portal section number from an ALEKS class label. */
 function sectionFromClassName(aleksName, knownSections = []) {
   const name = String(aleksName || "").trim()
+  const candidates = []
+
+  // Common ALEKS pattern: "... - 01T" / "... - 006"
+  const trail = name.match(/-\s*([A-Za-z0-9]+)\s*$/)
+  if (trail) {
+    const raw = trail[1]
+    candidates.push(raw)
+    const digits = raw.replace(/\D/g, "")
+    if (digits) {
+      candidates.push(digits)
+      const unpadded = digits.replace(/^0+/, "") || "0"
+      candidates.push(unpadded)
+      candidates.push(digits.padStart(3, "0"))
+    }
+  }
+
   const secMatch = name.match(/(?:section|sec\.?)\s*[:#-]?\s*(\d{1,4})/i)
   if (secMatch) {
-    const raw = secMatch[1]
-    const padded = raw.padStart(3, "0")
-    if (knownSections.includes(raw)) return raw
-    if (knownSections.includes(padded)) return padded
-    return knownSections.length ? (knownSections.includes(raw) ? raw : padded) : padded
+    candidates.push(secMatch[1], secMatch[1].padStart(3, "0"))
   }
 
-  const nums = [...name.matchAll(/\b(\d{2,4})\b/g)].map((m) => m[1])
-  for (let i = nums.length - 1; i >= 0; i--) {
-    const n = nums[i]
-    const padded = n.padStart(3, "0")
-    if (knownSections.includes(n)) return n
-    if (knownSections.includes(padded)) return padded
-  }
-  if (nums.length > 0) {
-    const n = nums[nums.length - 1]
-    return n.length <= 3 ? n.padStart(3, "0") : n
+  for (const n of [...name.matchAll(/\b(\d{2,4})\b/g)].map((m) => m[1]).reverse()) {
+    candidates.push(n, n.padStart(3, "0"), n.replace(/^0+/, "") || "0")
   }
 
-  // Last resort: slug (keeps sync working even without a numeric section)
+  const uniq = [...new Set(candidates.filter(Boolean))]
+  for (const c of uniq) {
+    if (knownSections.includes(c)) return c
+  }
+  if (uniq.length > 0) {
+    // Prefer bare numeric section when no known match
+    const bare = uniq.find((c) => /^\d+$/.test(c) && !/^0\d/.test(c)) || uniq[0]
+    return bare
+  }
+
   return name.replace(/\s+/g, "_").slice(0, 40)
 }
 
@@ -158,35 +157,81 @@ async function fillFirst(page, selectors, value, { timeout = 10000 } = {}) {
   throw new Error(`Could not fill any of: ${selectors.join(", ")}`)
 }
 
-async function login(page, username, password) {
+async function login(page, username, password, downloadDir) {
   await page.goto("https://www.aleks.com/", { waitUntil: "domcontentloaded", timeout: 60000 })
+  await page.waitForTimeout(1500)
 
-  await fillFirst(page, [
-    'input[name="login_name"]',
-    'input[name="loginName"]',
-    'input#login_name',
-    'input[placeholder*="Login" i]',
-    'input[aria-label*="Login" i]',
-  ], username)
+  // Cookie banner can sit on top of the form in CI
+  const cookieClose = page.getByRole("link", { name: /close cookie banner/i })
+  if (await cookieClose.isVisible().catch(() => false)) {
+    await cookieClose.click().catch(() => {})
+    await page.waitForTimeout(300)
+  }
 
-  await fillFirst(page, [
-    'input[name="passwd"]',
-    'input[name="password"]',
-    'input[type="password"]',
-  ], password)
+  try {
+    await page.locator("#login_name_full, input[name='username']").first().waitFor({
+      state: "visible",
+      timeout: 20000,
+    })
 
-  await clickFirst(page, [
-    'input[type="submit"][value*="Login" i]',
-    'button:has-text("Login")',
-    'input[value="Login"]',
-    'a:has-text("Login")',
-  ])
+    await fillFirst(page, [
+      "#login_name_full",
+      'input[name="username"]',
+      'input[name="login_name"]',
+      'input[name="loginName"]',
+      "input#login_name",
+      'input[placeholder*="Login" i]',
+      'input[aria-label*="Login" i]',
+    ], username)
+
+    await fillFirst(page, [
+      "#login_pass_full",
+      'input[name="password"]',
+      'input[name="passwd"]',
+      'input[type="password"]',
+    ], password)
+
+    await clickFirst(page, [
+      "#login_button_0",
+      'button:has-text("LOG IN")',
+      'button:has-text("Log In")',
+      'button[type="submit"]',
+      'input[type="submit"][value*="Login" i]',
+      'input[value="Login"]',
+    ])
+  } catch (err) {
+    if (downloadDir) await screenshot(page, downloadDir, "00-login-failed")
+    throw err
+  }
 
   await page.waitForLoadState("networkidle", { timeout: 60000 }).catch(() => {})
   await page.waitForTimeout(2000)
+
+  // Sanity check: username field should be gone after a successful login
+  const stillOnLogin = await page.locator("#login_name_full").isVisible().catch(() => false)
+  if (stillOnLogin) {
+    if (downloadDir) await screenshot(page, downloadDir, "00-login-still-on-form")
+    throw new Error("ALEKS login did not navigate away from the login form (check credentials)")
+  }
 }
 
 async function openClassDropdown(page) {
+  // Classic ALEKS instructor nav: CLASS » custom searchbar
+  const searchbar = page.locator("#sim_nav_sel_searchbar_1")
+  if (await searchbar.count()) {
+    const list = page.locator("#sim_nav_sel_searchbar_1 .scroll_divSB, #sim_nav_sel_searchbar_1 .tableSB")
+    if (!(await list.first().isVisible().catch(() => false))) {
+      await clickFirst(page, [
+        "#sim_nav_sel_searchbar_1 .pulldownSB",
+        "#sim_nav_sel_searchbar_1_selected",
+        "#sim_nav_sel_searchbar_1_button",
+        "#sim_nav_sel_searchbar_1",
+      ])
+      await page.waitForTimeout(500)
+    }
+    return
+  }
+
   await clickFirst(page, [
     'text=/^Class$/i',
     '[aria-label*="Class" i]',
@@ -197,117 +242,82 @@ async function openClassDropdown(page) {
   ])
 }
 
-function normalizeClassLabel(text) {
-  return String(text || "").replace(/\s+/g, " ").trim()
+async function expandArchivedInClassMenu(page) {
+  const hiddenArchived = page.locator(
+    "#sim_nav_sel_searchbar_1 tr.listed_elementSB.archive .sim_sb_entry_tag_left",
+  )
+  const anyHidden = await hiddenArchived.count()
+  if (anyHidden === 0) {
+    // Might already be expanded, or no archived rows
+    const header = page.locator("#sim_nav_sel_searchbar_1 tr.archive .openclose, #sim_nav_sel_searchbar_1 .openclose").first()
+    if (await header.isVisible().catch(() => false)) {
+      await header.click().catch(() => {})
+      await page.waitForTimeout(400)
+    }
+    return
+  }
+
+  // If entries exist but are display:none, click Archived open/close
+  const firstVisible = await hiddenArchived.first().isVisible().catch(() => false)
+  if (!firstVisible) {
+    await page.locator("#sim_nav_sel_searchbar_1 tr.archive .openclose").first().click().catch(async () => {
+      await page.locator("#sim_nav_sel_searchbar_1 .openclose").first().click()
+    })
+    await page.waitForTimeout(400)
+  }
 }
 
-function isNoiseClassLabel(text) {
-  const t = normalizeClassLabel(text).toLowerCase()
-  if (!t || t.length < 2) return true
-  if (CLASS_MENU_NOISE.has(t)) return true
-  if (/^show\b|^hide\b|^view\b/i.test(t) && /archiv/i.test(t)) return true
-  return false
-}
+/**
+ * Scrape Class dropdown (active + archived) from classic ALEKS searchbar.
+ */
+async function discoverClasses(page, downloadDir, knownSections = []) {
+  await openClassDropdown(page)
+  await page.waitForTimeout(500)
+  await expandArchivedInClassMenu(page)
+  await screenshot(page, downloadDir, "classes-menu")
 
-async function collectVisibleClassLabels(page) {
-  const labels = await page.evaluate(() => {
+  const rows = await page.evaluate(() => {
     const out = []
     const nodes = document.querySelectorAll(
-      '[role="menuitem"], [role="option"], li, a, button, .class_name, .className, td',
+      "#sim_nav_sel_searchbar_1 .sim_sb_entry_tag_left, .sim_sb_entry_tag_left",
     )
     for (const el of nodes) {
-      if (!(el instanceof HTMLElement)) continue
-      const style = window.getComputedStyle(el)
-      if (style.display === "none" || style.visibility === "hidden") continue
-      const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim()
-      if (!text || text.length > 120) continue
-      // Prefer leaf-ish nodes (avoid giant containers)
-      if (el.children.length > 3) continue
-      out.push(text)
+      const name = (el.textContent || "").replace(/\s+/g, " ").trim()
+      if (!name) continue
+      const row = el.closest("tr")
+      const archived = Boolean(row?.classList.contains("archive"))
+      out.push({ name, archived })
     }
     return out
   })
 
-  const unique = []
-  const seen = new Set()
-  for (const raw of labels) {
-    const text = normalizeClassLabel(raw)
-    if (isNoiseClassLabel(text)) continue
-    const key = text.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    unique.push(text)
-  }
-  return unique
-}
-
-async function toggleArchived(page, wantArchived) {
-  const archivedControl = page.getByText(/archiv/i).first()
-  if (!(await archivedControl.isVisible().catch(() => false))) return false
-  const label = normalizeClassLabel(await archivedControl.innerText().catch(() => ""))
-  const looksOpen = /hide|active classes|current/i.test(label)
-  if (wantArchived && looksOpen) return true
-  if (!wantArchived && !looksOpen && /show|view|archived/i.test(label)) {
-    // already on active list
-    return true
-  }
-  await archivedControl.click().catch(() => {})
-  await page.waitForTimeout(600)
-  return true
-}
-
-/**
- * Scrape Class dropdown: active classes, then archived classes.
- */
-async function discoverClasses(page, downloadDir, knownSections = []) {
-  await openClassDropdown(page)
-  await page.waitForTimeout(800)
-
-  const activeLabels = await collectVisibleClassLabels(page)
-  await screenshot(page, downloadDir, "classes-active")
-
-  let archivedLabels = []
-  const hasArchived = await toggleArchived(page, true)
-  if (hasArchived) {
-    await page.waitForTimeout(500)
-    archivedLabels = await collectVisibleClassLabels(page)
-    await screenshot(page, downloadDir, "classes-archived")
-    // return to active if possible
-    await toggleArchived(page, false)
-  }
-
-  // Close dropdown (Escape)
   await page.keyboard.press("Escape").catch(() => {})
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(200)
 
   const classes = []
   const seen = new Set()
-
-  for (const aleksName of activeLabels) {
-    const key = aleksName.toLowerCase()
+  for (const row of rows) {
+    const key = row.name.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
     classes.push({
-      aleksName,
-      sectionNumber: sectionFromClassName(aleksName, knownSections),
-      archived: false,
+      aleksName: row.name,
+      sectionNumber: sectionFromClassName(row.name, knownSections),
+      archived: row.archived,
     })
   }
-  for (const aleksName of archivedLabels) {
-    const key = aleksName.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    classes.push({
-      aleksName,
-      sectionNumber: sectionFromClassName(aleksName, knownSections),
-      archived: true,
-    })
+
+  if (classes.length === 0) {
+    throw new Error("No classes found in ALEKS CLASS menu (active or archived)")
   }
 
   // Prefer classes that map to known portal sections when we have them
   if (knownSections.length > 0) {
     const matched = classes.filter((c) => knownSections.includes(c.sectionNumber))
-    if (matched.length > 0) return matched
+    if (matched.length > 0) {
+      console.log(`Filtering to ${matched.length}/${classes.length} class(es) matching known sections`)
+      return matched
+    }
   }
 
   return classes
@@ -315,21 +325,25 @@ async function discoverClasses(page, downloadDir, knownSections = []) {
 
 async function selectClass(page, { aleksName, archived }, downloadDir) {
   await openClassDropdown(page)
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(400)
+  if (archived) await expandArchivedInClassMenu(page)
 
-  if (archived) {
-    await toggleArchived(page, true)
-  } else {
-    await toggleArchived(page, false)
-  }
+  const classOption = page
+    .locator("#sim_nav_sel_searchbar_1 .sim_sb_entry_tag_left, .sim_sb_entry_tag_left")
+    .filter({ hasText: aleksName })
+    .first()
 
-  const classOption = page.getByText(aleksName, { exact: false }).first()
   try {
     await classOption.waitFor({ state: "visible", timeout: 10000 })
     await classOption.click()
   } catch (err) {
-    await screenshot(page, downloadDir, `class-not-found-${aleksName.replace(/\W+/g, "_")}`)
-    throw new Error(`Could not select class "${aleksName}": ${err.message}`)
+    // Fallback: any visible text match
+    try {
+      await page.getByText(aleksName, { exact: false }).first().click({ timeout: 5000 })
+    } catch {
+      await screenshot(page, downloadDir, `class-not-found-${aleksName.replace(/\W+/g, "_")}`)
+      throw new Error(`Could not select class "${aleksName}": ${err.message}`)
+    }
   }
 
   await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
@@ -337,15 +351,20 @@ async function selectClass(page, { aleksName, archived }, downloadDir) {
 }
 
 async function openTimeAndTopic(page) {
-  const reports = page.getByText(/^Reports$/i).first()
+  // Classic ALEKS: hover/click Reports nav, then Time & Topic
+  const reports = page.locator("#navigation_report").or(page.getByText(/^Reports$/i)).first()
   await reports.waitFor({ state: "visible", timeout: 20000 })
-  await reports.hover()
+  await reports.hover().catch(() => {})
+  await page.waitForTimeout(300)
+  await reports.click().catch(() => {})
   await page.waitForTimeout(400)
 
   await clickFirst(page, [
     'text=/Time\\s*(and|&)\\s*Topic/i',
+    'span:has-text("Time & Topic")',
     'a:has-text("Time and Topic")',
     'a:has-text("Time & Topic")',
+    'text=/Time and Topic - Learning Mode/i',
   ])
 
   await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
@@ -478,7 +497,7 @@ async function main() {
   const results = []
   try {
     console.log("Logging into ALEKS…")
-    await login(page, username, password)
+    await login(page, username, password, downloadDir)
     await screenshot(page, downloadDir, "01-after-login")
 
     console.log("Discovering classes from ALEKS Class menu…")
