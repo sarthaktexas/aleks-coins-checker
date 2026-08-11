@@ -109,7 +109,7 @@ export function DayOverrideModal({
 
     if (dayInfo.isLatestDay && !dayInfo.isLastDay) {
       setError(
-        "Override requests are disabled for the latest day. Data may not be accurate based on when it was uploaded.",
+        "Override requests are disabled for the latest day. Wait until the day is complete — updated data is available the next day at 7am.",
       )
       return
     }
@@ -239,8 +239,8 @@ export function DayOverrideModal({
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
-                Override requests are disabled for the latest day. Data may not be accurate based on when
-                it was uploaded.
+                Override requests are disabled for the latest day. Data for today may not be accurate until
+                the day is complete — updated ALEKS data is available the next day at 7am.
               </AlertDescription>
             </Alert>
           )}

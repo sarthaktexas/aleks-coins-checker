@@ -557,6 +557,7 @@ export async function POST(request: NextRequest) {
         percentComplete: studentWithOverrides.percentComplete,
         dailyLog: studentWithOverrides.dailyLog,
         exemptDayCredits: studentWithOverrides.exemptDayCredits,
+        uploadedAt: periodData.uploadedAt,
       }
     })
 
@@ -621,7 +622,8 @@ export async function POST(request: NextRequest) {
         dailyLog: student.dailyLog,
         period: periodInfo?.period || 'Unknown',
         sectionNumber: studentSectionNumber,
-        exemptDayCredits: student.exemptDayCredits
+        exemptDayCredits: student.exemptDayCredits,
+        uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
       },
       periods: periodsData,
       coinAdjustments: coinAdjustments,

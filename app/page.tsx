@@ -58,6 +58,7 @@ type StudentInfo = {
   exemptDayCredits?: number
   period?: string
   sectionNumber?: string
+  uploadedAt?: string | null
 }
 
 type PeriodInfo = {
@@ -434,12 +435,6 @@ export default function StudentLookup() {
     }
   }
 
-  const today = (() => {
-    const now = new Date()
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-    return `${monthNames[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
-  })()
-
   return (
     <div className="min-h-screen bg-utsa-surface">
       <div className="h-1 w-full bg-utsa-orange" />
@@ -448,7 +443,13 @@ export default function StudentLookup() {
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-utsa-midnight">ALEKS Points Portal</h1>
           <p className="text-sm text-utsa-muted">Enter your student ID to view your progress and points</p>
-          <p className="mt-1.5 text-xs text-utsa-muted">ALEKS data is uploaded nightly automatically.</p>
+          <div className="mt-3 flex gap-2.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <p className="text-sm text-amber-900">
+              <span className="font-medium">ALEKS data</span> is updated daily at 7am.{" "}
+              <span className="font-medium">Override requests</span> are updated daily at 8am.
+            </p>
+          </div>
         </div>
 
         {/* Hide PII Warning - shown when admin has toggled PII hiding (e.g., for screen sharing) */}
@@ -966,12 +967,14 @@ export default function StudentLookup() {
                   })()}
 
                   {/* Footer */}
-                  <div className="text-center pt-4 border-t border-utsa-border">
-                    <div className="flex items-center justify-center gap-2 text-xs text-utsa-muted">
-                      <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span>Data updated: {today}</span>
+                  {studentInfo.uploadedAt && (
+                    <div className="text-center pt-4 border-t border-utsa-border">
+                      <div className="flex items-center justify-center gap-2 text-xs text-utsa-muted">
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span>Data updated: {formatLocalDateTime(studentInfo.uploadedAt)}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
