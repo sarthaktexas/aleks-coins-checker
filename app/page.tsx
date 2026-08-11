@@ -495,7 +495,6 @@ export default function StudentLookup() {
                 <Button
                   onClick={handleSearch}
                   disabled={isSearching}
-                  size="sm"
                 >
                   {isSearching ? "Searching..." : "Search"}
                 </Button>
@@ -521,612 +520,347 @@ export default function StudentLookup() {
         </Card>
 
 
-        {/* Results Card */}
+        {/* Results */}
         {studentInfo && (
-          <div className="space-y-6">
+          <div className="space-y-4">
+            {/* Student Header — compact identity + coins row */}
             <Card className="rounded-md bg-white overflow-hidden">
-              <CardHeader className="border-b border-utsa-border bg-white">
-                <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
-                  <User className="h-4 w-4 text-utsa-orange" />
-                  Student Information
-                </CardTitle>
+              <CardContent className="p-4 sm:p-5">
                 {isDemoStudent && (
-                  <div className="bg-utsa-surface rounded-md p-3 mt-3">
-                    <p className="text-utsa-midnight text-xs sm:text-sm font-medium flex items-center gap-2">
-                      <span>Demo Student - This is sample data for testing purposes</span>
-                    </p>
+                  <div className="bg-utsa-surface rounded-md px-3 py-2 mb-4 text-xs font-medium text-utsa-midnight">
+                    Demo Student — sample data for testing
                   </div>
                 )}
-              </CardHeader>
 
-              <CardContent className="p-4 sm:p-6">
-                <div className="space-y-6">
-                  {/* Student Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                        <User className="h-4 w-4" />
-                        Name
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  {/* Identity */}
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-utsa-midnight truncate">
+                      {hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name}
+                    </h2>
+                    <p className="text-sm text-utsa-muted truncate">
+                      {hidePII ? getFakeDataForStudent(studentId).email : studentInfo.email}
+                    </p>
+                    <p className="text-xs text-utsa-muted mt-1">
+                      {studentInfo.period?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} · Section {studentInfo.sectionNumber}
+                    </p>
+                  </div>
+
+                  {/* Coins + Rank cluster */}
+                  <div className="flex items-center gap-5 shrink-0">
+                    {/* Total coins */}
+                    <div className="text-center">
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <Coins className="h-4 w-4 text-utsa-orange" />
+                        <span className="text-2xl font-bold text-utsa-midnight">{totalCoinsAcrossPeriods}</span>
                       </div>
-                      <p className="text-lg font-semibold text-utsa-midnight">
-                        {hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name}
+                      <p className="text-[11px] text-utsa-muted font-medium mt-0.5">
+                        {studentPeriods.length > 1 ? 'total coins' : 'coins'}
                       </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                        <Mail className="h-4 w-4" />
-                        Email
+                    {/* Current period coins (only if multiple periods) */}
+                    {studentPeriods.length > 1 && (
+                      <div className="text-center border-l border-utsa-border pl-5">
+                        <div className="flex items-center gap-1.5 justify-center">
+                          <Coins className="h-4 w-4 text-amber-500" />
+                          <span className="text-2xl font-bold text-utsa-midnight">{studentInfo.totalCoins !== undefined ? studentInfo.totalCoins : studentInfo.coins}</span>
+                        </div>
+                        <p className="text-[11px] text-utsa-muted font-medium mt-0.5">this period</p>
                       </div>
-                      <p className="text-base font-medium text-utsa-midnight">
-                        {hidePII ? getFakeDataForStudent(studentId).email : studentInfo.email}
-                      </p>
-                    </div>
+                    )}
+
+                    {/* Rank */}
+                    {leaderboardData && leaderboardData.rank !== null && (
+                      <div className="text-center border-l border-utsa-border pl-5">
+                        <div className="flex items-center gap-1 justify-center">
+                          <Trophy className="h-4 w-4 text-utsa-orange" />
+                          <span className="text-2xl font-bold text-utsa-midnight">#{leaderboardData.rank}</span>
+                        </div>
+                        <p className="text-[11px] text-utsa-muted font-medium mt-0.5">of {leaderboardData.totalStudents}</p>
+                      </div>
+                    )}
                   </div>
-
-                  {/* Total Coins Across All Periods */}
-                  {studentPeriods.length > 0 && (
-                    <Card className="rounded-md bg-white">
-                      <CardContent className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-3 mb-3">
-                          <Coins className="h-5 w-5 text-utsa-orange" />
-                          <span className="text-base font-semibold text-utsa-midnight">Total Coins (All Periods)</span>
-                        </div>
-                        <p className="text-3xl font-bold text-utsa-midnight mb-1">{totalCoinsAcrossPeriods}</p>
-                        <p className="text-xs text-utsa-muted font-medium">Accumulated across {studentPeriods.length} exam period{studentPeriods.length !== 1 ? 's' : ''}</p>
-                        {coinAdjustments.length > 0 && (
-                          <div className="mt-3 p-2 bg-utsa-surface rounded-md">
-                            <p className="text-xs text-utsa-midnight font-medium">
-                              Includes {coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0)} adjustment coin{coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0) !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Coins and Redemption Section */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Coins Card */}
-                    <Card className="rounded-md bg-white">
-                      <CardContent className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-3 mb-3">
-                          <Coins className="h-5 w-5 text-amber-600" />
-                          <span className="text-base font-semibold text-utsa-midnight">Current Period Coins</span>
-                        </div>
-                        <p className="text-3xl font-bold text-utsa-midnight mb-1">{studentInfo.totalCoins !== undefined ? studentInfo.totalCoins : studentInfo.coins}</p>
-                        <p className="text-xs text-utsa-muted font-medium">
-                          {studentInfo.period?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} • Section {studentInfo.sectionNumber}
-                        </p>
-                        {studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0 && (
-                          <div className="mt-3 p-2 bg-amber-50 rounded-md border border-amber-200">
-                            <p className="text-xs text-amber-800 font-medium">
-                              {studentInfo.exemptDayCredits} extra credit coin{studentInfo.exemptDayCredits !== 1 ? 's' : ''} from exempt days
-                            </p>
-                          </div>
-                        )}
-                        {studentInfo.coinAdjustment !== undefined && studentInfo.coinAdjustment !== 0 && (
-                          <div className="mt-3 p-2 bg-utsa-surface rounded-md">
-                            <p className="text-xs text-utsa-midnight font-medium">
-                              {studentInfo.coinAdjustment > 0 ? '+' : ''}{studentInfo.coinAdjustment} adjustment coin{Math.abs(studentInfo.coinAdjustment) !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                        )}
-                        {/* Leaderboard Rank */}
-                        {leaderboardData && leaderboardData.rank !== null && (
-                          <div className="mt-4 p-3 bg-utsa-surface rounded-md">
-                            <div className="flex items-center justify-center gap-2 mb-2">
-                              <Trophy className="h-4 w-4 text-utsa-orange" />
-                              <span className="text-sm font-semibold text-utsa-midnight">Your Rank</span>
-                            </div>
-                            <p className="text-2xl font-bold text-utsa-midnight mb-1">
-                              #{leaderboardData.rank}
-                            </p>
-                            <p className="text-xs text-utsa-muted">
-                              out of {leaderboardData.totalStudents} students
-                            </p>
-                            {leaderboardData.topStudentCoins > 0 && (
-                              <p className="text-xs text-utsa-muted mt-2">
-                                #1 has {leaderboardData.topStudentCoins} coin{leaderboardData.topStudentCoins !== 1 ? 's' : ''}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {leaderboardLoading && (
-                          <div className="mt-4 p-3 bg-utsa-surface rounded-md">
-                            <p className="text-xs text-utsa-muted">Loading rank...</p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    {/* Redemption Options */}
-                    <Card className="rounded-md bg-white">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3 mb-4">
-                          <Gift className="h-5 w-5 text-emerald-600" />
-                          <span className="text-base font-semibold text-utsa-midnight">Redemption Options</span>
-                        </div>
-
-                        {!redemptionRequestsEnabled ? (
-                          <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <AlertTriangle className="h-4 w-4 text-amber-600" />
-                              <p className="text-sm font-medium text-amber-800">Redemption Requests Disabled</p>
-                            </div>
-                            <p className="text-xs text-amber-700">
-                              Redemption requests are currently disabled. Please contact your instructor if you need assistance.
-                            </p>
-                          </div>
-                        ) : (
-                          (() => {
-                            // Use total coins across all periods for redemption calculations
-                            const coinsForRedemption = totalCoinsAcrossPeriods ?? studentInfo.totalCoins ?? studentInfo.coins ?? 0
-                            const redemptionInfo = getRedemptionInfo(coinsForRedemption)
-
-                            return (
-                              <div className="space-y-4">
-                                {/* Assignment Redemption */}
-                                <div className="bg-utsa-surface rounded-md p-4">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-medium text-utsa-midnight">Assignment/Video Replacement</div>
-                                    <Badge variant="outline" className="text-xs">
-                                      10 coins
-                                    </Badge>
-                                  </div>
-                                  {redemptionInfo.assignmentRedemptions > 0 ? (
-                                    <div className="space-y-2">
-                                      <p className="text-sm text-utsa-muted">
-                                        Available: <strong>{redemptionInfo.assignmentRedemptions}</strong> redemption
-                                        {redemptionInfo.assignmentRedemptions !== 1 ? "s" : ""}
-                                      </p>
-                                      <Button
-                                        size="sm"
-                                        variant="success"
-                                        onClick={() => setRedemptionModal({ isOpen: true, type: "assignment" })}
-                                        className="w-full"
-                                      >
-                                        Redeem Assignment
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <Target className="h-4 w-4 text-utsa-muted" />
-                                      <p className="text-sm text-utsa-muted">
-                                        {redemptionInfo.coinsToNextAssignment} more coin
-                                        {redemptionInfo.coinsToNextAssignment !== 1 ? "s" : ""} needed
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Quiz Redemption */}
-                                <div className="bg-utsa-surface rounded-md p-4">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-medium text-utsa-midnight">Attendance Quiz Replacement</div>
-                                    <Badge variant="outline" className="text-xs">
-                                      20 coins
-                                    </Badge>
-                                  </div>
-                                  {redemptionInfo.quizRedemptions > 0 ? (
-                                    <div className="space-y-2">
-                                      <p className="text-sm text-utsa-muted">
-                                        Available: <strong>{redemptionInfo.quizRedemptions}</strong> redemption
-                                        {redemptionInfo.quizRedemptions !== 1 ? "s" : ""}
-                                      </p>
-                                      <Button
-                                        size="sm"
-                                        variant="success"
-                                        onClick={() => setRedemptionModal({ isOpen: true, type: "quiz" })}
-                                        className="w-full"
-                                      >
-                                        Redeem Quiz
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <Target className="h-4 w-4 text-utsa-muted" />
-                                      <p className="text-sm text-utsa-muted">
-                                        {redemptionInfo.coinsToNextQuiz} more coin
-                                        {redemptionInfo.coinsToNextQuiz !== 1 ? "s" : ""} needed
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          })()
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Pending Requests */}
-                  {pendingRequests && pendingRequests.length > 0 && (
-                    <div className="mb-6">
-                      <Card className="rounded-md bg-white">
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-3 mb-4">
-                            <Clock className="h-5 w-5 text-amber-600" />
-                            <span className="text-base font-semibold text-utsa-midnight">Pending Requests</span>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            {pendingRequests.map((request: any) => (
-                              <div key={request.id} className="bg-amber-50 rounded-md p-4 border border-amber-200">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-sm font-medium text-amber-800">
-                                    {request.request_type === 'assignment_replacement' 
-                                      ? 'Assignment/Video Replacement' 
-                                      : request.request_type === 'quiz_replacement'
-                                      ? 'Quiz Replacement'
-                                      : 'Override Request'}
-                                  </div>
-                                  <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800">
-                                    Pending
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-amber-700 mb-2">{request.request_details}</p>
-                                <p className="text-xs text-amber-600">
-                                  Submitted: {formatLocalDateTime(request.submitted_at)}
-                                  {request.period && (
-                                    <span className="ml-2">
-                                      • {(request.period as string).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                                      {request.section_number ? ` • Section ${request.section_number}` : ''}
-                                    </span>
-                                  )}
-                                  {request.request_type !== 'override_request' && (
-                                    <span className="ml-2">
-                                      • {request.request_type === 'assignment_replacement' ? '10' : '20'} coins deducted
-                                    </span>
-                                  )}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-
-                  {/* Request History - Approved and Rejected */}
-                  {(approvedRequests.length > 0 || rejectedRequests.length > 0) && (
-                    <div className="mb-6">
-                      <RequestHistory 
-                        approvedRequests={approvedRequests}
-                        rejectedRequests={rejectedRequests}
-                      />
-                    </div>
-                  )}
-
-                  {/* Achievement Banner - Only show at end of period */}
-                  {(() => {
-                    const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
-                    const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
-                    const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
-                    // Calculate exempt day credits (from days that would have qualified on exempt days)
-                    const exemptDayCredits = studentInfo.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= studentInfo.totalDays).length
-                    // Include exempt day credits in percentage to allow over 100% for extra credit
-                    const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
-                    const isProgressComplete = studentInfo.percentComplete >= 100
-                    const isExtraCreditQualified = qualificationPercentage >= 90
-                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
-
-                    // Only show achievement banners at END of period
-                    if (!isPeriodComplete) {
-                      return null
-                    }
-
-                    // End of period with perfect achievement - Yellow card
-                    if (isProgressComplete && isExtraCreditQualified) {
-                      return (
-                        <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-center">
-                          <h3 className="text-lg font-semibold text-amber-800 mb-2">
-                            PERFECT ACHIEVEMENT!
-                          </h3>
-                          <p className="text-sm text-amber-700 font-medium">
-                            You've achieved 100% progress AND qualified for extra credit!
-                          </p>
-                          <p className="text-xs text-amber-600 mt-2">
-                            Outstanding dedication to your ALEKS studies!
-                          </p>
-                        </div>
-                      )
-                    }
-                    
-                    // End of period with extra credit - Green card
-                    if (isExtraCreditQualified) {
-                      return (
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-md p-4 text-center">
-                          <h3 className="text-base font-semibold text-emerald-800 mb-2">
-                            Extra Credit Qualified!
-                          </h3>
-                          <p className="text-sm text-emerald-700 font-medium">
-                            Congratulations on qualifying for extra credit!
-                          </p>
-                          <p className="text-xs text-emerald-600 mt-2">
-                            Excellent work!
-                          </p>
-                        </div>
-                      )
-                    }
-                    
-                    // End of period but didn't qualify
-                    return (
-                      <div className="bg-utsa-surface rounded-md p-4 text-center">
-                        <h3 className="text-base font-semibold text-utsa-midnight mb-2">
-                          Period Complete
-                        </h3>
-                        <p className="text-sm text-utsa-muted font-medium">
-                          You completed {qualificationPercentage.toFixed(1)}% of the period
-                          {exemptDayCredits > 0 && ` (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt day credit${exemptDayCredits !== 1 ? 's' : ''})`}.
-                        </p>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Extra Credit Status and Progress - Only show during period */}
-                  {(() => {
-                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
-                    
-                    // Hide these sections at end of period (achievement banner shows instead)
-                    if (isPeriodComplete || studentInfo.percentComplete < 60) {
-                      return null
-                    }
-
-                    const extraCreditStatus = calculateExtraCreditStatus(
-                      studentInfo.dailyLog,
-                      studentInfo.totalDays,
-                      studentInfo.periodDays,
-                    )
-                    const IconComponent = extraCreditStatus.icon
-
-                    return (
-                      <>
-                        {/* Extra Credit Status */}
-                        <div className={`p-3 sm:p-4 rounded-md border ${extraCreditStatus.bgColor}`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <IconComponent className={`h-4 w-4 sm:h-5 sm:w-5 ${extraCreditStatus.color}`} />
-                            <span className={`text-sm sm:text-base font-semibold ${extraCreditStatus.color}`}>
-                              Extra Credit Status
-                            </span>
-                          </div>
-                          <p className={`text-xs sm:text-sm font-medium ${extraCreditStatus.color} mb-1`}>
-                            {extraCreditStatus.message}
-                          </p>
-                          <p className={`text-xs sm:text-sm ${extraCreditStatus.color}`}>
-                            {extraCreditStatus.detail}
-                          </p>
-                        </div>
-
-                        {/* Progress Section */}
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-utsa-midnight">Period Progress</span>
-                            <Badge
-                              className={`${getProgressBadgeColor(studentInfo.percentComplete)} text-white border-0 px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium`}
-                            >
-                              {getProgressBadge(studentInfo.percentComplete)}
-                            </Badge>
-                          </div>
-
-                          <div className="relative">
-                            <div className="w-full bg-utsa-surface rounded-full h-3 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-700 ease-out ${getProgressColor(studentInfo.percentComplete)}`}
-                                style={{ width: `${studentInfo.percentComplete}%` }}
-                              />
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-xs font-bold text-white drop-shadow-sm">
-                                {studentInfo.percentComplete}%
-                              </span>
-                            </div>
-                          </div>
-
-                          <p className="text-xs sm:text-sm text-utsa-muted text-center font-medium">
-                            {studentInfo.percentComplete.toFixed(1)}% of days completed in extra credit period
-                          </p>
-                        </div>
-                      </>
-                    )
-                  })()}
-
-                  {/* Compact progress for low performers - Only during period */}
-                  {(() => {
-                    const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
-                    
-                    // Hide at end of period
-                    if (isPeriodComplete || studentInfo.percentComplete >= 60) {
-                      return null
-                    }
-
-                    return (
-                      <div className="bg-utsa-surface rounded-md p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-utsa-midnight">Period Progress</span>
-                          <span className="text-sm font-semibold text-utsa-midnight">{studentInfo.percentComplete}%</span>
-                        </div>
-                        <div className="w-full bg-white rounded-full h-2">
-                          <div
-                            className={`h-full rounded-full ${getProgressColor(studentInfo.percentComplete)}`}
-                            style={{ width: `${Math.min(studentInfo.percentComplete, 100)}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-utsa-muted mt-2">
-                          Focus on earning coins! Extra credit requires{" "}
-                          {Math.round(
-                            (calculateMaxMissableDays(studentInfo.periodDays).requiredQualifiedDays /
-                              studentInfo.periodDays) *
-                              100,
-                          )}
-                          %+ completion.
-                        </p>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Footer */}
-                  {studentInfo.uploadedAt && (
-                    <div className="text-center pt-4 border-t border-utsa-border">
-                      <div className="flex items-center justify-center gap-2 text-xs text-utsa-muted">
-                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                        <span>Data updated: {formatLocalDateTime(studentInfo.uploadedAt)}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* Inline metadata chips */}
+                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0)) && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {coinAdjustments.length > 0 && (
+                      <span className="inline-flex items-center text-xs bg-utsa-surface text-utsa-midnight rounded-full px-2.5 py-1 font-medium">
+                        {coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0) > 0 ? '+' : ''}{coinAdjustments.reduce((sum, adj) => sum + adj.adjustment_amount, 0)} adjustment coins
+                      </span>
+                    )}
+                    {studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0 && (
+                      <span className="inline-flex items-center text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-2.5 py-1 font-medium">
+                        {studentInfo.exemptDayCredits} exempt day credit{studentInfo.exemptDayCredits !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Data freshness */}
+                {studentInfo.uploadedAt && (
+                  <p className="text-[11px] text-utsa-muted mt-3 flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Updated {formatLocalDateTime(studentInfo.uploadedAt)}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
-            {/* Multiple Exam Periods Section */}
-            {studentPeriods.length > 0 && (
-              <Card className="rounded-md bg-white overflow-hidden">
-                <CardHeader className="border-b border-utsa-border bg-white">
-                  <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
-                    <BarChart3 className="h-4 w-4 text-utsa-orange" />
-                    Exam Period History
-                  </CardTitle>
-                  <CardDescription className="text-sm text-utsa-muted">
-                    Your performance across {studentPeriods.length} exam period{studentPeriods.length !== 1 ? 's' : ''}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4 sm:p-6 space-y-6">
-                  {/* Period Selection Buttons */}
-                  {studentPeriods.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {studentPeriods.slice(0, 3).map((periodData, index) => (
-                        <Button
-                          key={`${periodData.period}-${periodData.section}`}
-                          onClick={() => setSelectedPeriodHistory(index)}
-                          variant={selectedPeriodHistory === index ? "default" : "outline"}
-                          size="sm"
-                        >
-                          {periodData.periodName ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                          {index === 0 && (
-                            <span className="ml-2 px-1.5 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full">Latest</span>
-                          )}
-                        </Button>
-                      ))}
+            {/* Achievement Banner — end of period only */}
+            {(() => {
+              const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
+              const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
+              const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
+              const exemptDayCredits = studentInfo.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= studentInfo.totalDays).length
+              const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
+              const isProgressComplete = studentInfo.percentComplete >= 100
+              const isExtraCreditQualified = qualificationPercentage >= 90
+              const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
+
+              if (!isPeriodComplete) return null
+
+              if (isProgressComplete && isExtraCreditQualified) {
+                return (
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-center">
+                    <h3 className="text-base font-semibold text-amber-800">PERFECT ACHIEVEMENT!</h3>
+                    <p className="text-sm text-amber-700 mt-1">100% progress AND extra credit qualified.</p>
+                  </div>
+                )
+              }
+              if (isExtraCreditQualified) {
+                return (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-md p-4 text-center">
+                    <h3 className="text-base font-semibold text-emerald-800">Extra Credit Qualified!</h3>
+                    <p className="text-sm text-emerald-700 mt-1">Congratulations on qualifying for extra credit!</p>
+                  </div>
+                )
+              }
+              return (
+                <div className="bg-utsa-surface rounded-md p-4 text-center">
+                  <h3 className="text-base font-semibold text-utsa-midnight">Period Complete</h3>
+                  <p className="text-sm text-utsa-muted mt-1">
+                    {qualificationPercentage.toFixed(1)}% completed
+                    {exemptDayCredits > 0 && ` (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt credit${exemptDayCredits !== 1 ? 's' : ''})`}.
+                  </p>
+                </div>
+              )
+            })()}
+
+            {/* Extra Credit Status + Progress — mid-period only */}
+            {(() => {
+              const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
+              if (isPeriodComplete) return null
+
+              const extraCreditStatus = calculateExtraCreditStatus(studentInfo.dailyLog, studentInfo.totalDays, studentInfo.periodDays)
+              const IconComponent = extraCreditStatus.icon
+              const showFull = studentInfo.percentComplete >= 60
+
+              return (
+                <div className={`p-3 rounded-md border ${extraCreditStatus.bgColor}`}>
+                  <div className="flex items-center gap-2">
+                    <IconComponent className={`h-4 w-4 ${extraCreditStatus.color}`} />
+                    <span className={`text-sm font-semibold ${extraCreditStatus.color}`}>{extraCreditStatus.message}</span>
+                    <Badge className={`${getProgressBadgeColor(studentInfo.percentComplete)} text-white border-0 text-xs ml-auto`}>
+                      {studentInfo.percentComplete}%
+                    </Badge>
+                  </div>
+                  <p className={`text-xs mt-1.5 ${extraCreditStatus.color}`}>{extraCreditStatus.detail}</p>
+                  {showFull && (
+                    <div className="relative mt-2">
+                      <div className="w-full bg-white/50 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${getProgressColor(studentInfo.percentComplete)}`}
+                          style={{ width: `${studentInfo.percentComplete}%` }}
+                        />
+                      </div>
                     </div>
                   )}
+                  {!showFull && (
+                    <p className="text-xs text-utsa-muted mt-1">
+                      Extra credit requires {Math.round((calculateMaxMissableDays(studentInfo.periodDays).requiredQualifiedDays / studentInfo.periodDays) * 100)}%+ completion.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
 
-                  {/* Selected Period Details */}
+            {/* Redemption + Pending Requests row */}
+            <Card className="rounded-md bg-white overflow-hidden">
+              <CardContent className="p-4 sm:p-5">
+                {!redemptionRequestsEnabled ? (
+                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-md p-3">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <p className="text-sm text-amber-800">Redemption requests are currently disabled.</p>
+                  </div>
+                ) : (() => {
+                  const coinsForRedemption = totalCoinsAcrossPeriods ?? studentInfo.totalCoins ?? studentInfo.coins ?? 0
+                  const redemptionInfo = getRedemptionInfo(coinsForRedemption)
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Assignment */}
+                      <div className="flex items-center justify-between bg-utsa-surface rounded-md p-3">
+                        <div>
+                          <p className="text-sm font-medium text-utsa-midnight">Assignment/Video Replacement</p>
+                          {redemptionInfo.assignmentRedemptions > 0 ? (
+                            <p className="text-xs text-utsa-muted">{redemptionInfo.assignmentRedemptions} available</p>
+                          ) : (
+                            <p className="text-xs text-utsa-muted">{redemptionInfo.coinsToNextAssignment} coins needed</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={redemptionInfo.assignmentRedemptions > 0 ? "success" : "outline"}
+                          disabled={redemptionInfo.assignmentRedemptions === 0}
+                          onClick={() => setRedemptionModal({ isOpen: true, type: "assignment" })}
+                        >
+                          10 coins
+                        </Button>
+                      </div>
+
+                      {/* Quiz */}
+                      <div className="flex items-center justify-between bg-utsa-surface rounded-md p-3">
+                        <div>
+                          <p className="text-sm font-medium text-utsa-midnight">Attendance Quiz Replacement</p>
+                          {redemptionInfo.quizRedemptions > 0 ? (
+                            <p className="text-xs text-utsa-muted">{redemptionInfo.quizRedemptions} available</p>
+                          ) : (
+                            <p className="text-xs text-utsa-muted">{redemptionInfo.coinsToNextQuiz} coins needed</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={redemptionInfo.quizRedemptions > 0 ? "success" : "outline"}
+                          disabled={redemptionInfo.quizRedemptions === 0}
+                          onClick={() => setRedemptionModal({ isOpen: true, type: "quiz" })}
+                        >
+                          20 coins
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Pending Requests — compact list */}
+                {pendingRequests && pendingRequests.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <h3 className="text-xs font-semibold text-utsa-muted uppercase tracking-wider">Pending Requests</h3>
+                    {pendingRequests.map((request: any) => (
+                      <div key={request.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-amber-800 truncate">
+                            {request.request_type === 'assignment_replacement' ? 'Assignment Replacement'
+                              : request.request_type === 'quiz_replacement' ? 'Quiz Replacement'
+                              : 'Override Request'}
+                          </p>
+                          <p className="text-xs text-amber-600 truncate">{request.request_details}</p>
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-800 shrink-0 ml-2">Pending</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Request History */}
+                {(approvedRequests.length > 0 || rejectedRequests.length > 0) && (
+                  <div className="mt-4">
+                    <RequestHistory approvedRequests={approvedRequests} rejectedRequests={rejectedRequests} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Exam Period History */}
+            {studentPeriods.length > 0 && (
+              <Card className="rounded-md bg-white overflow-hidden">
+                <CardContent className="p-4 sm:p-5 space-y-4">
+                  {/* Period tabs */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <BarChart3 className="h-4 w-4 text-utsa-orange" />
+                    {studentPeriods.slice(0, 3).map((periodData, index) => (
+                      <Button
+                        key={`${periodData.period}-${periodData.section}`}
+                        onClick={() => setSelectedPeriodHistory(index)}
+                        variant={selectedPeriodHistory === index ? "default" : "outline"}
+                        size="sm"
+                      >
+                        {periodData.periodName ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        {index === 0 && <span className="ml-1.5 text-[10px] opacity-70">Latest</span>}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Selected Period */}
                   {selectedPeriodHistory !== null && studentPeriods[selectedPeriodHistory] && (() => {
                     const periodData = studentPeriods[selectedPeriodHistory]
-                    const isLatest = selectedPeriodHistory === 0
                     return (
                       <div className="space-y-4">
-                        {/* Period Header */}
-                        <div className="flex items-center justify-between p-4 bg-utsa-surface rounded-md">
-                          <div>
-                            <h3 className="font-semibold text-utsa-midnight flex items-center gap-2">
-                              {periodData.periodName ?? periodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                              {isLatest && (
-                                <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full">Latest</span>
-                              )}
-                            </h3>
-                            <p className="text-sm text-utsa-muted">
-                              Section {periodData.section}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-center gap-2">
-                              <Coins className="h-5 w-5 text-amber-500" />
-                              <span className="text-2xl font-bold text-utsa-midnight">{periodData.totalCoins || periodData.coins}</span>
-                            </div>
-                            <p className="text-sm text-utsa-muted">{periodData.percentComplete}% complete</p>
+                        {/* Compact stats row */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="bg-utsa-surface px-3 py-2 rounded-md">
+                            <p className="text-xs text-utsa-muted">Coins</p>
+                            <p className="text-lg font-bold text-utsa-midnight">{periodData.totalCoins || periodData.coins}</p>
                             {periodData.coinAdjustment !== undefined && periodData.coinAdjustment !== 0 && (
-                              <p className="text-xs text-utsa-muted mt-1">
-                                {periodData.coinAdjustment > 0 ? '+' : ''}{periodData.coinAdjustment} adjustment
-                              </p>
-                            )}
-                            {/* Leaderboard Rank for this period */}
-                            {leaderboardData && leaderboardData.rank !== null && (
-                              <div className="mt-2 pt-2 border-t border-utsa-border">
-                                <div className="flex items-center justify-end gap-1 mb-1">
-                                  <Trophy className="h-3 w-3 text-utsa-orange" />
-                                  <span className="text-xs font-semibold text-utsa-midnight">Rank #{leaderboardData.rank}</span>
-                                </div>
-                                {leaderboardData.topStudentCoins > 0 && (
-                                  <p className="text-xs text-utsa-muted">
-                                    #1: {leaderboardData.topStudentCoins} coins
-                                  </p>
-                                )}
-                              </div>
+                              <p className="text-[11px] text-utsa-muted">{periodData.coinAdjustment > 0 ? '+' : ''}{periodData.coinAdjustment} adj</p>
                             )}
                           </div>
-                        </div>
-
-                        {/* Period Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          <div className="bg-utsa-surface p-3 rounded-md">
-                            <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                              <Target className="h-4 w-4" />
-                              Progress
-                            </div>
-                            <p className="text-xl font-bold text-utsa-midnight mt-1">
-                              {periodData.totalDays}/{periodData.periodDays}
-                            </p>
-                            <p className="text-xs text-utsa-muted">days completed</p>
+                          <div className="bg-utsa-surface px-3 py-2 rounded-md">
+                            <p className="text-xs text-utsa-muted">Progress</p>
+                            <p className="text-lg font-bold text-utsa-midnight">{periodData.totalDays}/{periodData.periodDays}</p>
+                            <p className="text-[11px] text-utsa-muted">{periodData.percentComplete}%</p>
                           </div>
-
-                          <div className="bg-utsa-surface p-3 rounded-md">
-                            <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                              <CheckCircle className="h-4 w-4" />
-                              Qualified
-                            </div>
-                            <p className="text-xl font-bold text-utsa-midnight mt-1">
-                              {periodData.dailyLog.filter(d => d.qualified && !d.isExcluded).length}
-                            </p>
-                            <p className="text-xs text-utsa-muted">working days</p>
+                          <div className="bg-utsa-surface px-3 py-2 rounded-md">
+                            <p className="text-xs text-utsa-muted">Qualified</p>
+                            <p className="text-lg font-bold text-utsa-midnight">{periodData.dailyLog.filter(d => d.qualified && !d.isExcluded).length}</p>
+                            <p className="text-[11px] text-utsa-muted">days</p>
                           </div>
-
-                          {periodData.exemptDayCredits !== undefined && periodData.exemptDayCredits > 0 && (
-                            <div className="bg-utsa-surface p-3 rounded-md">
-                              <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                                <Gift className="h-4 w-4" />
-                                Exempt Bonus
-                              </div>
-                              <p className="text-xl font-bold text-utsa-midnight mt-1">
-                                {periodData.exemptDayCredits}
-                              </p>
-                              <p className="text-xs text-utsa-muted">extra coins</p>
-                            </div>
-                          )}
-
-                          <div className="bg-utsa-surface p-3 rounded-md">
-                            <div className="flex items-center gap-2 text-sm font-medium text-utsa-muted">
-                              <Clock className="h-4 w-4" />
-                              Avg Time
-                            </div>
-                            <p className="text-xl font-bold text-utsa-midnight mt-1">
+                          <div className="bg-utsa-surface px-3 py-2 rounded-md">
+                            <p className="text-xs text-utsa-muted">Avg Time</p>
+                            <p className="text-lg font-bold text-utsa-midnight">
                               {Math.round(periodData.dailyLog.reduce((sum, d) => sum + d.minutes, 0) / periodData.dailyLog.filter(d => d.minutes > 0).length || 0)}
                             </p>
-                            <p className="text-xs text-utsa-muted">minutes/day</p>
+                            <p className="text-[11px] text-utsa-muted">min/day</p>
                           </div>
                         </div>
 
-                        {/* Calendar View for this period */}
-                        <div className="mt-4">
-                          <h4 className="text-sm font-semibold text-utsa-midnight mb-3 flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            Daily Progress
-                          </h4>
-                          <CalendarView
-                            dailyLog={periodData.dailyLog}
-                            totalDays={periodData.totalDays}
-                            periodDays={periodData.periodDays}
-                            studentInfo={{
-                              studentId: studentId,
-                              name: hidePII ? getFakeDataForStudent(studentId).name : (periodData.name || studentInfo.name),
-                              email: hidePII ? getFakeDataForStudent(studentId).email : (periodData.email || studentInfo.email),
-                              period: periodData.period,
-                              sectionNumber: periodData.section
-                            }}
-                            onRequestSubmitted={refreshStudentRequests}
-                          />
+                        {/* Rank + Section info */}
+                        <div className="flex items-center gap-3 text-xs text-utsa-muted">
+                          <span>Section {periodData.section}</span>
+                          {leaderboardData && leaderboardData.rank !== null && (
+                            <>
+                              <span>·</span>
+                              <span className="flex items-center gap-1">
+                                <Trophy className="h-3 w-3 text-utsa-orange" />
+                                Rank #{leaderboardData.rank} of {leaderboardData.totalStudents}
+                                {leaderboardData.topStudentCoins > 0 && ` (#1: ${leaderboardData.topStudentCoins} coins)`}
+                              </span>
+                            </>
+                          )}
+                          {periodData.exemptDayCredits !== undefined && periodData.exemptDayCredits > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>{periodData.exemptDayCredits} exempt bonus coin{periodData.exemptDayCredits !== 1 ? 's' : ''}</span>
+                            </>
+                          )}
                         </div>
+
+                        {/* Calendar */}
+                        <CalendarView
+                          dailyLog={periodData.dailyLog}
+                          totalDays={periodData.totalDays}
+                          periodDays={periodData.periodDays}
+                          studentInfo={{
+                            studentId: studentId,
+                            name: hidePII ? getFakeDataForStudent(studentId).name : (periodData.name || studentInfo.name),
+                            email: hidePII ? getFakeDataForStudent(studentId).email : (periodData.email || studentInfo.email),
+                            period: periodData.period,
+                            sectionNumber: periodData.section
+                          }}
+                          onRequestSubmitted={refreshStudentRequests}
+                        />
                       </div>
                     )
                   })()}
@@ -1134,7 +868,7 @@ export default function StudentLookup() {
               </Card>
             )}
 
-            {/* Calendar View - Show only if no multiple periods */}
+            {/* Calendar View — single period fallback */}
             {studentPeriods.length === 0 && (
               <CalendarView
                 dailyLog={studentInfo.dailyLog}
@@ -1153,57 +887,29 @@ export default function StudentLookup() {
           </div>
         )}
 
-        {/* Analytics Link - Moved to separate page to reduce database load */}
-        <div className="mt-8">
-          <Card className="mb-6 rounded-md bg-white">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
-                <BarChart3 className="h-4 w-4 text-utsa-orange" />
-                Class Analytics
-              </CardTitle>
-              <CardDescription className="text-sm text-utsa-muted">
-                View average completion rates and study times across all sections
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                asChild
-                className="w-full"
-              >
-                <a href="/analytics">
-                  View Class Analytics
-                </a>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
         {/* Footer */}
-        <div className="mt-8 text-center space-y-3">
-          <p className="text-sm text-utsa-muted">
-            Something broken?{" "}
+        <div className="mt-8 flex items-center justify-between text-xs text-utsa-muted">
+          <div className="flex items-center gap-3">
+            <a href="/analytics" className="hover:text-utsa-midnight transition-colors flex items-center gap-1">
+              <BarChart3 className="h-3 w-3" />
+              Class Analytics
+            </a>
+            <span className="text-utsa-border">·</span>
             <button
               type="button"
               onClick={() => setBugReportOpen(true)}
               className="text-utsa-orange hover:text-utsa-accessible font-medium hover:underline transition-colors inline-flex items-center gap-1"
             >
-              <Bug className="h-3.5 w-3.5" />
+              <Bug className="h-3 w-3" />
               Report a bug
             </button>
-          </p>
-          <p className="text-xs text-utsa-muted">
-            Your data is only accessible with your student ID
-          </p>
-
-          {/* Admin Access */}
-          <div className="pt-2 border-t border-utsa-border">
-            <Button variant="ghost" size="sm" asChild className="text-utsa-muted hover:text-utsa-midnight text-xs">
-              <a href="/admin/dashboard" className="flex items-center gap-1">
-                <Lock className="h-3 w-3" />
-                Admin Dashboard
-              </a>
-            </Button>
           </div>
+          <Button variant="ghost" size="sm" asChild className="text-utsa-muted hover:text-utsa-midnight text-xs h-auto py-1 px-2">
+            <a href="/admin/dashboard" className="flex items-center gap-1">
+              <Lock className="h-3 w-3" />
+              Admin
+            </a>
+          </Button>
         </div>
 
         {/* Redemption Modal */}
