@@ -38,9 +38,12 @@ async function main() {
     const url = page.url()
     console.log(JSON.stringify({ ok: true, url, title }, null, 2))
     console.log("ALEKS login succeeded.")
+    console.log(`##ALEKS_LOGIN_RESULT## ${JSON.stringify({ ok: true, url, title })}`)
   } catch (err) {
     await screenshot(page, downloadDir, "00-check-login-failed").catch(() => {})
-    console.error("ALEKS login failed:", err instanceof Error ? err.message : err)
+    const message = err instanceof Error ? err.message : String(err)
+    console.error("ALEKS login failed:", message)
+    console.error(`##ALEKS_LOGIN_RESULT## ${JSON.stringify({ ok: false, error: message })}`)
     process.exitCode = 1
   } finally {
     await browser.close().catch(() => {})

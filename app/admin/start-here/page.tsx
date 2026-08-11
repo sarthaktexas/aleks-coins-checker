@@ -1,28 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
   Calendar,
   CheckCircle,
-  ExternalLink,
   KeyRound,
   Loader2,
   Users,
+  XCircle,
 } from "lucide-react"
 import { useAdminAuth } from "@/components/admin-auth-provider"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+const POLL_MS = 3000
+const MAX_POLL_MS = 8 * 60 * 1000
+
+type CheckStatus = {
+  phase: "idle" | "starting" | "polling" | "success" | "failure" | "error"
+  summary: string
+  logExcerpt: string | null
+  runId: number | null
+}
 
 export default function StartHerePage() {
   const { user } = useAdminAuth()
-  const [checking, setChecking] = useState(false)
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string; url?: string } | null>(
-    null,
-  )
+  const [check, setCheck] = useState<CheckStatus>({
+    phase: "idle",
+    summary: "",
+    logExcerpt: null,
+    runId: null,
+  })
+  const pollStartedAt = useRef<number>(0)
+  const abortPoll = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      abortPoll.current = true
+    }
+  }, [])
 
   if (user.role !== "professor") {
     return (
@@ -35,34 +54,126 @@ export default function StartHerePage() {
     )
   }
 
+  const pollStatus = async (params: { runId?: number | null; since?: string }) => {
+    abortPoll.current = false
+    pollStartedAt.current = Date.now()
+    setCheck((prev) => ({
+      ...prev,
+      phase: "polling",
+      summary: params.runId ? "Running — checking ALEKS login…" : "Starting login check…",
+    }))
+
+    while (!abortPoll.current) {
+      if (Date.now() - pollStartedAt.current > MAX_POLL_MS) {
+        setCheck((prev) => ({
+          ...prev,
+          phase: "error",
+          summary: "Login check is taking too long. Try again in a few minutes.",
+        }))
+        return
+      }
+
+      const qs = params.runId
+        ? `runId=${params.runId}`
+        : `since=${encodeURIComponent(params.since || "")}`
+      const response = await fetch(`/api/admin/aleks-sync/check-login?${qs}`, {
+        credentials: "same-origin",
+      })
+      if (response.status === 401) {
+        setCheck({
+          phase: "error",
+          summary: SESSION_EXPIRED,
+          logExcerpt: null,
+          runId: null,
+        })
+        return
+      }
+      const data = await response.json()
+      if (!response.ok) {
+        setCheck({
+          phase: "error",
+          summary: data.error || "Failed to load login check status",
+          logExcerpt: null,
+          runId: params.runId ?? null,
+        })
+        return
+      }
+
+      if (data.runId && !params.runId) {
+        params.runId = data.runId
+      }
+
+      if (data.status === "completed") {
+        const ok = data.conclusion === "success"
+        setCheck({
+          phase: ok ? "success" : "failure",
+          summary: data.summary || (ok ? "ALEKS login succeeded." : "ALEKS login failed."),
+          logExcerpt: data.logExcerpt || null,
+          runId: data.runId ?? params.runId ?? null,
+        })
+        return
+      }
+
+      setCheck({
+        phase: "polling",
+        summary: data.summary || "Running — checking ALEKS login…",
+        logExcerpt: null,
+        runId: data.runId ?? params.runId ?? null,
+      })
+
+      await new Promise((r) => setTimeout(r, POLL_MS))
+    }
+  }
+
   const handleCheckLogin = async () => {
-    setChecking(true)
-    setMessage(null)
+    abortPoll.current = true
+    setCheck({
+      phase: "starting",
+      summary: "Starting login check…",
+      logExcerpt: null,
+      runId: null,
+    })
+
     try {
       const response = await fetch("/api/admin/aleks-sync/check-login", {
         method: "POST",
         credentials: "same-origin",
       })
       if (response.status === 401) {
-        setMessage({ type: "error", text: SESSION_EXPIRED })
+        setCheck({
+          phase: "error",
+          summary: SESSION_EXPIRED,
+          logExcerpt: null,
+          runId: null,
+        })
         return
       }
       const result = await response.json()
-      if (response.ok) {
-        setMessage({
-          type: "success",
-          text: result.message || "Login check started.",
-          url: result.actionsUrl,
+      if (!response.ok) {
+        setCheck({
+          phase: "error",
+          summary: result.error || "Failed to start login check",
+          logExcerpt: null,
+          runId: null,
         })
-      } else {
-        setMessage({ type: "error", text: result.error || "Failed to start login check" })
+        return
       }
+
+      await pollStatus({
+        runId: result.runId ?? null,
+        since: result.dispatchedAt,
+      })
     } catch {
-      setMessage({ type: "error", text: "Network error. Please try again." })
-    } finally {
-      setChecking(false)
+      setCheck({
+        phase: "error",
+        summary: "Network error. Please try again.",
+        logExcerpt: null,
+        runId: null,
+      })
     }
   }
+
+  const busy = check.phase === "starting" || check.phase === "polling"
 
   return (
     <div className="space-y-6">
@@ -73,48 +184,13 @@ export default function StartHerePage() {
         </p>
       </div>
 
-      {message && (
-        <Alert
-          className={
-            message.type === "success"
-              ? "border-green-200 bg-green-50"
-              : "border-red-200 bg-red-50"
-          }
-        >
-          {message.type === "success" ? (
-            <CheckCircle className="h-4 w-4 text-green-700" />
-          ) : (
-            <AlertTriangle className="h-4 w-4 text-red-700" />
-          )}
-          <AlertDescription
-            className={message.type === "success" ? "text-green-800" : "text-red-800"}
-          >
-            <span>{message.text}</span>
-            {message.url && (
-              <>
-                {" "}
-                <a
-                  href={message.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-semibold underline underline-offset-2"
-                >
-                  Open Actions
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-
       <ol className="space-y-4">
         <li className="rounded-md bg-white p-4 space-y-3">
           <div className="flex items-start gap-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-utsa-orange text-sm font-bold text-white">
               1
             </span>
-            <div className="min-w-0 space-y-2">
+            <div className="min-w-0 flex-1 space-y-3">
               <h2 className="text-sm font-semibold text-utsa-midnight flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-utsa-orange" />
                 Confirm ALEKS login still works
@@ -122,23 +198,61 @@ export default function StartHerePage() {
               <p className="text-sm text-utsa-muted">
                 Before the semester starts, make sure the stored ALEKS username and password
                 (used by the daily sync) can still sign in. This button attempts login and
-                reports success or failure.
+                reports success or failure here on this page.
               </p>
               <Button
                 type="button"
                 onClick={handleCheckLogin}
-                disabled={checking}
+                disabled={busy}
                 className="btn-tactile-orange"
               >
-                {checking ? (
+                {busy ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Starting check…
+                    {check.phase === "starting" ? "Starting…" : "Checking…"}
                   </>
                 ) : (
                   "Check ALEKS login"
                 )}
               </Button>
+
+              {check.phase !== "idle" && (
+                <div
+                  className={
+                    check.phase === "success"
+                      ? "rounded-md border border-green-200 bg-green-50 p-3 space-y-2"
+                      : check.phase === "failure" || check.phase === "error"
+                        ? "rounded-md border border-red-200 bg-red-50 p-3 space-y-2"
+                        : "rounded-md border border-black/5 bg-black/[0.02] p-3 space-y-2"
+                  }
+                >
+                  <div className="flex items-start gap-2 text-sm">
+                    {check.phase === "success" ? (
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-700" />
+                    ) : check.phase === "failure" || check.phase === "error" ? (
+                      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+                    ) : (
+                      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-utsa-orange" />
+                    )}
+                    <p
+                      className={
+                        check.phase === "success"
+                          ? "text-green-800"
+                          : check.phase === "failure" || check.phase === "error"
+                            ? "text-red-800"
+                            : "text-utsa-midnight"
+                      }
+                    >
+                      {check.summary}
+                    </p>
+                  </div>
+                  {check.logExcerpt && (
+                    <pre className="max-h-48 overflow-auto rounded bg-white/80 p-2 text-xs leading-relaxed text-utsa-midnight whitespace-pre-wrap break-words">
+                      {check.logExcerpt}
+                    </pre>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </li>

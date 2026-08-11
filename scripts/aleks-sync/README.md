@@ -44,7 +44,7 @@ Manual admin upload still works as a fallback for Excel.
 
 ### Login credential check (`npm run check-login`)
 
-Smoke-tests that `ALEKS_USERNAME` / `ALEKS_PASSWORD` still sign in (no Excel download). Trigger from **Admin → Start Here! → Check ALEKS login**, or Actions → **ALEKS check login**.
+Smoke-tests that `ALEKS_USERNAME` / `ALEKS_PASSWORD` still sign in (no Excel download). Trigger from **Admin → Start Here! → Check ALEKS login**; the page polls status and shows the result (and a log excerpt) in-app. You can also run Actions → **ALEKS check login**.
 
 ## One-time setup
 
