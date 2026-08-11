@@ -19,7 +19,14 @@ async function knownSectionsForPeriod(periodKey: string): Promise<string[]> {
   }
 }
 
-async function debugLogPeriodRow(periodKey: string) {
+type PeriodRowDebug = {
+  periodKey: string
+  startDate: string | null
+  endDate: string | null
+  updatedAt: string | null
+} | null
+
+async function debugLogPeriodRow(periodKey: string): Promise<PeriodRowDebug> {
   try {
     const row = await sql`
       SELECT period_key, start_date, end_date, updated_at
@@ -29,7 +36,7 @@ async function debugLogPeriodRow(periodKey: string) {
     `
     if (row.rows.length === 0) {
       console.log(`[ALEKS config debug] period=${periodKey} row not found`)
-      return
+      return null
     }
 
     const r = row.rows[0]
@@ -39,13 +46,22 @@ async function debugLogPeriodRow(periodKey: string) {
       return new Date(value as Date).toISOString().slice(0, 10)
     }
 
+    const debugRow = {
+      periodKey: String(r.period_key),
+      startDate: normalizeDate(r.start_date),
+      endDate: normalizeDate(r.end_date),
+      updatedAt: r.updated_at ? new Date(r.updated_at as string).toISOString() : null,
+    }
+
     console.log(
       `[ALEKS config debug] period=${String(r.period_key)} start=${normalizeDate(r.start_date)} end=${normalizeDate(r.end_date)} updatedAt=${
         r.updated_at ? new Date(r.updated_at as string).toISOString() : "null"
       }`,
     )
+    return debugRow
   } catch (err) {
     console.error("[ALEKS config debug] failed to read exam_periods row:", err)
+    return null
   }
 }
 
@@ -70,13 +86,14 @@ export async function GET(request: NextRequest) {
     let source: string
     let latestUploadAt: string | null = null
     let knownSections: string[] = []
+    let debugPeriodRow: PeriodRowDebug = null
 
     if (overridePeriod) {
       period = await getPeriodDates(overridePeriod)
       if (!period) {
         return NextResponse.json({ error: `Period ${overridePeriod} not found` }, { status: 404 })
       }
-      await debugLogPeriodRow(overridePeriod)
+      debugPeriodRow = await debugLogPeriodRow(overridePeriod)
       source = "query"
       knownSections = await knownSectionsForPeriod(overridePeriod)
       const resolved = await resolveActivePeriod()
@@ -95,7 +112,7 @@ export async function GET(request: NextRequest) {
         )
       }
       period = resolved.period
-      await debugLogPeriodRow(period.periodKey)
+      debugPeriodRow = await debugLogPeriodRow(period.periodKey)
       source = resolved.source
       latestUploadAt = resolved.latestUploadAt
       knownSections = resolved.knownSections
@@ -123,6 +140,7 @@ export async function GET(request: NextRequest) {
       reason: window.reason,
       reportStartDate: window.reportStartDate,
       reportEndDate: window.reportEndDate,
+      debugPeriodRow,
     })
   } catch (error) {
     console.error("ALEKS sync config error:", error)
