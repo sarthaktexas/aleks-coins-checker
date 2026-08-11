@@ -20,9 +20,9 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 ## How it works
 
 1. GitHub Actions runs daily (or via Admin → **Pull from ALEKS now** / Actions → Run workflow)
-2. App config API picks the **active exam period** from the latest `student_data` upload
+2. App config API picks the **active exam period** whose date range includes today (Central); if none, the most recent period that already ended
 3. Playwright logs into ALEKS and scrapes the **Class** dropdown (active + archived)
-4. For each class: Reports → Time and Topic → date range (period start → today) → download `.xlsx`
+4. For each class: Reports → Time and Topic → date range (period start → today, or period end if earlier) → download `.xlsx`
 5. Each file is `POST`ed to `/api/admin/aleks-sync/import`
 
 Section numbers are derived from the ALEKS class name (e.g. “Section 003” → `003`), preferring values that already exist for that period in the DB.

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       period:
-        description: "Exam period key (empty = auto from latest upload)"
+        description: "Exam period key (empty = today in range, else nearest past period)"
         required: false
         default: ""
         type: string

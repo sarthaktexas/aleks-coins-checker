@@ -422,26 +422,6 @@ export default function AdminPage() {
 
       <div className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
         <div className="space-y-1.5">
-          <Label>Exam period</Label>
-          <Select
-            value={selectedPeriod}
-            onValueChange={setSelectedPeriod}
-            disabled={isUploading || isPulling || isLoadingPeriods}
-          >
-            <SelectTrigger className="h-8 border-utsa-border">
-              <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(periods).map(([key, period]) => (
-                <SelectItem key={key} value={key}>
-                  {period.name} · {formatDateRange(period.startDate, period.endDate)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
           <Label>Upload method</Label>
           <div
             role="tablist"
@@ -481,6 +461,26 @@ export default function AdminPage() {
 
         {uploadMode === "manual" ? (
           <form onSubmit={handleUpload} className="space-y-4 border-t border-utsa-border pt-4">
+            <div className="space-y-1.5">
+              <Label>Exam period</Label>
+              <Select
+                value={selectedPeriod}
+                onValueChange={setSelectedPeriod}
+                disabled={isUploading || isPulling || isLoadingPeriods}
+              >
+                <SelectTrigger className="h-8 border-utsa-border">
+                  <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(periods).map(([key, period]) => (
+                    <SelectItem key={key} value={key}>
+                      {period.name} · {formatDateRange(period.startDate, period.endDate)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="sectionNumber">Section number</Label>
               <Input
@@ -603,11 +603,32 @@ export default function AdminPage() {
           </form>
         ) : (
           <div className="space-y-4 border-t border-utsa-border pt-4">
+            <div className="space-y-1.5">
+              <Label>Exam period</Label>
+              <Select
+                value={selectedPeriod}
+                onValueChange={setSelectedPeriod}
+                disabled={isUploading || isPulling || isLoadingPeriods}
+              >
+                <SelectTrigger className="h-8 border-utsa-border">
+                  <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(periods).map(([key, period]) => (
+                    <SelectItem key={key} value={key}>
+                      {period.name} · {formatDateRange(period.startDate, period.endDate)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <h2 className="text-sm font-semibold text-utsa-midnight">Pull from ALEKS</h2>
               <p className="text-xs text-utsa-muted">
-                Starts the GitHub Actions sync for the selected exam period. Sections are detected
-                automatically from ALEKS class names.
+                Pulls the selected exam period from period start through today (or the period end,
+                whichever comes first). Nightly auto-sync still picks the period by today&apos;s
+                date. Sections are detected automatically from ALEKS class names.
               </p>
             </div>
 

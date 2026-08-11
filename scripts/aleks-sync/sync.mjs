@@ -5,7 +5,7 @@
  *   ALEKS_USERNAME, ALEKS_PASSWORD
  *   APP_URL, IMPORT_API_TOKEN
  *
- * Exam period comes from the app (latest uploaded student_data period),
+ * Exam period comes from the app (period containing today, else nearest past),
  * or EXAM_PERIOD env / workflow input override.
  * Classes are scraped from the ALEKS Class dropdown (active + archived).
  *
@@ -658,7 +658,7 @@ async function main() {
   await fs.mkdir(downloadDir, { recursive: true })
 
   console.log(
-    `Fetching sync config${periodOverride ? ` (period=${periodOverride})` : " (active period from DB)"}${forceSync ? " [FORCE]" : ""}…`,
+    `Fetching sync config${periodOverride ? ` (period=${periodOverride})` : " (period by today's date)"}${forceSync ? " [FORCE]" : ""}…`,
   )
   const config = await fetchSyncConfig(appUrl, token, {
     period: periodOverride || undefined,

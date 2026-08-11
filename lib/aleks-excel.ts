@@ -444,12 +444,13 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
 }
 
 /**
- * Active period = period of the most recently uploaded student_data row.
- * Falls back to an exam_periods row whose date range includes today (Central).
+ * Active period = exam period whose date range includes today (Central).
+ * If today falls in a gap (or after all periods), use the most recent period
+ * that ended before today (backwards — never the next future period).
  */
 export async function resolveActivePeriod(): Promise<{
   period: PeriodDateInfo
-  source: "latest_upload" | "date_range"
+  source: "date_range" | "previous_period"
   latestUploadAt: string | null
   knownSections: string[]
 } | null> {
@@ -459,33 +460,46 @@ export async function resolveActivePeriod(): Promise<{
 
   await ensureStudentDataTable()
 
-  const latest = await sql`
-    SELECT period, section_number, uploaded_at
-    FROM student_data
-    ORDER BY uploaded_at DESC
+  await sql`
+    CREATE TABLE IF NOT EXISTS exam_periods (
+      id SERIAL PRIMARY KEY,
+      period_key VARCHAR(50) UNIQUE NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      excluded_dates JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `
+
+  const today = todayInCentral()
+
+  const containing = await sql`
+    SELECT period_key
+    FROM exam_periods
+    WHERE start_date <= ${today}::date AND end_date >= ${today}::date
+    ORDER BY start_date DESC
     LIMIT 1
   `
 
   let periodKey: string | null = null
-  let source: "latest_upload" | "date_range" = "latest_upload"
-  let latestUploadAt: string | null = null
+  let source: "date_range" | "previous_period" = "date_range"
 
-  if (latest.rows.length > 0) {
-    periodKey = String(latest.rows[0].period)
-    latestUploadAt = new Date(latest.rows[0].uploaded_at as string).toISOString()
-    source = "latest_upload"
+  if (containing.rows.length > 0) {
+    periodKey = String(containing.rows[0].period_key)
+    source = "date_range"
   } else {
-    const today = todayInCentral()
-    const byDate = await sql`
+    const previous = await sql`
       SELECT period_key
       FROM exam_periods
-      WHERE start_date <= ${today}::date AND end_date >= ${today}::date
-      ORDER BY start_date DESC
+      WHERE end_date < ${today}::date
+      ORDER BY end_date DESC
       LIMIT 1
     `
-    if (byDate.rows.length > 0) {
-      periodKey = String(byDate.rows[0].period_key)
-      source = "date_range"
+    if (previous.rows.length > 0) {
+      periodKey = String(previous.rows[0].period_key)
+      source = "previous_period"
     }
   }
 
@@ -493,6 +507,18 @@ export async function resolveActivePeriod(): Promise<{
 
   const period = await getPeriodDates(periodKey)
   if (!period) return null
+
+  const latest = await sql`
+    SELECT uploaded_at
+    FROM student_data
+    WHERE period = ${periodKey}
+    ORDER BY uploaded_at DESC
+    LIMIT 1
+  `
+  const latestUploadAt =
+    latest.rows.length > 0
+      ? new Date(latest.rows[0].uploaded_at as string).toISOString()
+      : null
 
   const sections = await sql`
     SELECT DISTINCT COALESCE(section_number, 'default') as section_number
@@ -519,6 +545,10 @@ export function todayInCentral(): string {
   }).format(new Date())
 }
 
+/**
+ * ALEKS report window: period start → min(today, period end).
+ * Without force, skips when today is outside the period.
+ */
 export function computeReportWindow(
   startDate: string,
   endDate: string,
@@ -526,6 +556,9 @@ export function computeReportWindow(
   options: { force?: boolean } = {},
 ) {
   const force = Boolean(options.force)
+  // Current day or last day of the period, whichever comes first.
+  const reportEndDate = today < endDate ? today : endDate
+  const reportStartDate = startDate
 
   if (!force) {
     if (today < startDate) {
@@ -533,7 +566,7 @@ export function computeReportWindow(
         shouldSync: false as const,
         reason: "Period has not started yet",
         today,
-        reportStartDate: startDate,
+        reportStartDate,
         reportEndDate: endDate,
         forced: false,
       }
@@ -543,7 +576,7 @@ export function computeReportWindow(
         shouldSync: false as const,
         reason: "Period has ended",
         today,
-        reportStartDate: startDate,
+        reportStartDate,
         reportEndDate: endDate,
         forced: false,
       }
@@ -552,29 +585,34 @@ export function computeReportWindow(
       shouldSync: true as const,
       reason: null as string | null,
       today,
-      reportStartDate: startDate,
-      reportEndDate: today,
+      reportStartDate,
+      reportEndDate,
       forced: false,
     }
   }
 
-  // Forced: always sync. Cap the ALEKS end date at the period end (never past it).
-  let reportEndDate = endDate
   let reason: string | null = "Forced sync"
   if (today < startDate) {
+    // Before start: still pull the full period range so ALEKS has a valid window.
     reason = "Forced sync (period has not started yet — using full period range)"
-  } else if (today > endDate) {
+    return {
+      shouldSync: true as const,
+      reason,
+      today,
+      reportStartDate,
+      reportEndDate: endDate,
+      forced: true,
+    }
+  }
+  if (today > endDate) {
     reason = "Forced sync (period has ended — using period end date)"
-  } else {
-    reportEndDate = today
-    reason = "Forced sync"
   }
 
   return {
     shouldSync: true as const,
     reason,
     today,
-    reportStartDate: startDate,
+    reportStartDate,
     reportEndDate,
     forced: true,
   }

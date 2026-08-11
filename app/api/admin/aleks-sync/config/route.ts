@@ -21,7 +21,8 @@ async function knownSectionsForPeriod(periodKey: string): Promise<string[]> {
 
 /**
  * GET /api/admin/aleks-sync/config
- * Optional ?period= — otherwise uses period from latest student_data upload.
+ * Optional ?period= — otherwise picks the exam period containing today (Central),
+ * or the most recent period that ended before today (backwards fallback).
  * Optional ?force=1 — sync even if outside the period date window.
  * Auth: Bearer IMPORT_API_TOKEN
  */
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!isAuthorized(auth)) return auth
 
     const overridePeriod = request.nextUrl.searchParams.get("period")?.trim() || null
-    const force =
+    let force =
       request.nextUrl.searchParams.get("force") === "1" ||
       request.nextUrl.searchParams.get("force") === "true"
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "No active exam period found. Upload data once, pass ?period=, or create an exam period that includes today.",
+              "No exam period found for today. Create a period that includes today, or one that ended before today.",
           },
           { status: 404 },
         )
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest) {
       source = resolved.source
       latestUploadAt = resolved.latestUploadAt
       knownSections = resolved.knownSections
+      // Past-period fallback is outside the date window — still sync it.
+      if (resolved.source === "previous_period") force = true
     }
 
     const window = computeReportWindow(period.startDate, period.endDate, undefined, { force })
