@@ -396,7 +396,7 @@ export default function AdminRequestsPage() {
                   Starting…
                 </>
               ) : (
-                `Verify reviewed topics${pendingReviewedOverrides > 0 ? ` (${pendingReviewedOverrides})` : ""}`
+                `Trigger verification of reviewed topics${pendingReviewedOverrides > 0 ? ` (${pendingReviewedOverrides})` : ""}`
               )}
             </Button>
           )}

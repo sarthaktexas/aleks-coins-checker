@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
+import { isSession, requireAdmin } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -63,7 +63,7 @@ async function upsertSetting(key: string, value: boolean) {
 // GET - Fetch admin settings
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -88,10 +88,8 @@ export async function GET(request: NextRequest) {
 // PUT - Update admin settings
 export async function PUT(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
-    const professorGate = requireProfessor(session)
-    if (professorGate !== true) return professorGate
 
     const body = await request.json()
     const { overridesEnabled, redemptionRequestsEnabled } = body

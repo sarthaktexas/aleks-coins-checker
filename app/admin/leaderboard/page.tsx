@@ -11,10 +11,12 @@ import {
   ChevronRight,
   Coins,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useAdminAuth } from "@/components/admin-auth-provider"
 
 type UploadRecord = {
   id: number
@@ -40,6 +42,7 @@ type LeaderboardStudent = {
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 
 export default function AdminLeaderboardPage() {
+  const { user } = useAdminAuth()
   const [uploadRecords, setUploadRecords] = useState<UploadRecord[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState("")
   const [selectedSection, setSelectedSection] = useState("")
@@ -53,14 +56,16 @@ export default function AdminLeaderboardPage() {
   const [hidePII] = useHidePII()
 
   useEffect(() => {
+    if (user.role !== "professor") return
     loadUploadRecords()
-  }, [])
+  }, [user.role])
 
   useEffect(() => {
+    if (user.role !== "professor") return
     if (selectedPeriod && selectedSection) {
       loadLeaderboard(1)
     }
-  }, [selectedPeriod, selectedSection])
+  }, [selectedPeriod, selectedSection, user.role])
 
   const loadUploadRecords = async () => {
     setIsLoading(true)
@@ -158,6 +163,17 @@ export default function AdminLeaderboardPage() {
     if (rank === 2) return "bg-gray-400 hover:bg-gray-500 text-white"
     if (rank === 3) return "bg-amber-600 hover:bg-amber-700 text-white"
     return "bg-utsa-orange text-white"
+  }
+
+  if (user.role !== "professor") {
+    return (
+      <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
+        <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
+        <AlertDescription className="text-utsa-accessible">
+          Only professors can view the leaderboard.
+        </AlertDescription>
+      </Alert>
+    )
   }
 
   return (

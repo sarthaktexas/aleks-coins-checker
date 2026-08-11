@@ -12,15 +12,15 @@ import "@/app/admin/admin.css"
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin", label: "Upload", exact: true, professorOnly: true },
+  { href: "/admin", label: "Upload", taLabel: "Settings", exact: true },
   { href: "/admin/view-data", label: "Data" },
-  { href: "/admin/manage-periods", label: "Periods" },
+  { href: "/admin/manage-periods", label: "Periods", professorOnly: true },
   { href: "/admin/view-overrides", label: "Overrides" },
   { href: "/admin/requests", label: "Requests" },
-  { href: "/admin/bug-reports", label: "Bugs" },
+  { href: "/admin/bug-reports", label: "Bugs", professorOnly: true },
   { href: "/admin/coin-adjustments", label: "Coins" },
   { href: "/admin/email-students", label: "Email" },
-  { href: "/admin/leaderboard", label: "Leaderboard" },
+  { href: "/admin/leaderboard", label: "Leaderboard", professorOnly: true },
   { href: "/admin/profile", label: "Profile" },
   { href: "/admin/users", label: "Staff", professorOnly: true },
 ] as const
@@ -79,7 +79,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                     : "text-utsa-midnight/70 hover:bg-black/[0.04] hover:text-utsa-midnight",
                 )}
               >
-                {item.label}
+                {"taLabel" in item && !isProfessor ? item.taLabel : item.label}
               </Link>
             )
           })}

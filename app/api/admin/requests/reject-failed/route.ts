@@ -5,7 +5,7 @@ import { isSession, requireAdmin } from "@/lib/admin-auth"
 // POST - Reject redemption requests that didn't get coins deducted
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     // Check if database is available

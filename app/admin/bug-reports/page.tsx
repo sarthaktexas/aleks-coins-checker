@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertTriangle } from "lucide-react"
 import { formatLocalDateTime } from "@/lib/datetime"
+import { useAdminAuth } from "@/components/admin-auth-provider"
 
 type BugReport = {
   id: number
@@ -26,6 +27,7 @@ type BugReport = {
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 
 export default function AdminBugReportsPage() {
+  const { user } = useAdminAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [reports, setReports] = useState<BugReport[]>([])
@@ -36,8 +38,9 @@ export default function AdminBugReportsPage() {
   const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
+    if (user.role !== "professor") return
     loadReports()
-  }, [])
+  }, [user.role])
 
   const loadReports = async () => {
     setIsLoading(true)
@@ -103,6 +106,17 @@ export default function AdminBugReportsPage() {
     } finally {
       setIsUpdating(false)
     }
+  }
+
+  if (user.role !== "professor") {
+    return (
+      <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
+        <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
+        <AlertDescription className="text-utsa-accessible">
+          Only professors can manage bug reports.
+        </AlertDescription>
+      </Alert>
+    )
   }
 
   return (

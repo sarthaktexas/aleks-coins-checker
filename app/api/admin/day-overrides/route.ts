@@ -48,7 +48,7 @@ async function ensureOverridesTable() {
 // Create or update day override
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const {
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
 // Get all overrides for a student
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const { searchParams } = new URL(request.url)
@@ -314,7 +314,7 @@ export async function GET(request: NextRequest) {
 // Delete a day override
 export async function DELETE(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const { studentId, dayNumber } = await request.json()

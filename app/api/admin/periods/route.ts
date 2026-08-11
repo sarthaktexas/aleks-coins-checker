@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     return NextResponse.json({
@@ -22,8 +22,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const { periods } = await request.json()
 

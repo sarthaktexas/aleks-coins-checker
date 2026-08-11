@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 // GET - Fetch counts of pending student requests
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     // Check if database is available

@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
 // GET - Fetch all exam periods
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     // Check if database is available
@@ -72,8 +72,10 @@ export async function GET(request: NextRequest) {
 // POST - Create or update an exam period
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const body = await request.json()
     const { periodKey, name, startDate, endDate, excludedDates } = body
@@ -136,8 +138,10 @@ export async function POST(request: NextRequest) {
 // PATCH - Change a period's key (updates all references across tables)
 export async function PATCH(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const body = await request.json()
     const { oldPeriodKey, newPeriodKey } = body
@@ -213,8 +217,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete an exam period
 export async function DELETE(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const body = await request.json()
     const { periodKey } = body

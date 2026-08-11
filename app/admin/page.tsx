@@ -97,9 +97,9 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    loadPeriods()
+    if (user.role === "professor") loadPeriods()
     loadSettings()
-  }, [])
+  }, [user.role])
 
   const loadSettings = async () => {
     loadSettingsAbortRef.current?.abort()
@@ -414,25 +414,25 @@ export default function AdminPage() {
     return `${formatDate(startDate)} – ${formatDate(endDate)}`
   }
 
-  if (user.role !== "professor") {
-    return (
-      <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
-        <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
-        <AlertDescription className="text-utsa-accessible">
-          Only professors can upload ALEKS data and manage upload settings.
-        </AlertDescription>
-      </Alert>
-    )
-  }
+  const isProfessor = user.role === "professor"
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-utsa-midnight">Upload & Settings</h1>
-        <p className="text-sm text-utsa-muted">Upload ALEKS Excel data and manage feature flags</p>
-        <p className="mt-1.5 text-xs text-utsa-muted">ALEKS data is uploaded nightly automatically.</p>
+        <h1 className="text-xl font-semibold text-utsa-midnight">
+          {isProfessor ? "Upload & Settings" : "Feature Settings"}
+        </h1>
+        <p className="text-sm text-utsa-muted">
+          {isProfessor
+            ? "Upload ALEKS Excel data and manage feature flags"
+            : "Turn day overrides and redemption requests on or off"}
+        </p>
+        {isProfessor && (
+          <p className="mt-1.5 text-xs text-utsa-muted">ALEKS data is uploaded nightly automatically.</p>
+        )}
       </div>
 
+      {isProfessor && (
       <div className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
         <div className="space-y-1.5">
           <Label>Upload method</Label>
@@ -665,6 +665,7 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+      )}
 
       {message && (
         <Alert
@@ -745,6 +746,8 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {isProfessor && (
+      <>
       <div className="rounded-md border border-utsa-border bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
           <Trash2 className="h-4 w-4 text-utsa-accessible" />
@@ -795,6 +798,8 @@ export default function AdminPage() {
           come from the selected period.
         </p>
       </div>
+      </>
+      )}
     </div>
   )
 }

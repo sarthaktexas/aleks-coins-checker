@@ -89,7 +89,7 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
 
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const { searchParams } = new URL(request.url)
@@ -421,7 +421,7 @@ async function deleteRelatedStudentRecords(period?: string, sectionNumber?: stri
 // DELETE - Delete student data (all or specific upload)
 export async function DELETE(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()

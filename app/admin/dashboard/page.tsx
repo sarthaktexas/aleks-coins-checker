@@ -12,6 +12,7 @@ import {
   Trophy,
   Bug,
   Users,
+  SlidersHorizontal,
 } from "lucide-react"
 import Link from "next/link"
 import { useAdminAuth } from "@/components/admin-auth-provider"
@@ -83,15 +84,21 @@ export default function AdminDashboard() {
   const tools = [
     ...(user.role === "professor"
       ? [{ title: "Upload & Settings", href: "/admin", icon: Upload }]
-      : []),
+      : [{ title: "Feature Settings", href: "/admin", icon: Settings }]),
     { title: "Student Data", href: "/admin/view-data", icon: Database },
-    { title: "Exam Periods", href: "/admin/manage-periods", icon: Calendar },
-    { title: "Day Overrides", href: "/admin/view-overrides", icon: Settings },
+    ...(user.role === "professor"
+      ? [{ title: "Exam Periods", href: "/admin/manage-periods", icon: Calendar }]
+      : []),
+    { title: "Day Overrides", href: "/admin/view-overrides", icon: SlidersHorizontal },
     { title: "Student Requests", href: "/admin/requests", icon: MessageSquare },
-    { title: "Bug Reports", href: "/admin/bug-reports", icon: Bug },
+    ...(user.role === "professor"
+      ? [{ title: "Bug Reports", href: "/admin/bug-reports", icon: Bug }]
+      : []),
     { title: "Coin Adjustments", href: "/admin/coin-adjustments", icon: Coins },
     { title: "Email Students", href: "/admin/email-students", icon: Mail },
-    { title: "Leaderboard", href: "/admin/leaderboard", icon: Trophy },
+    ...(user.role === "professor"
+      ? [{ title: "Leaderboard", href: "/admin/leaderboard", icon: Trophy }]
+      : []),
     ...(user.role === "professor"
       ? [{ title: "Staff Accounts", href: "/admin/users", icon: Users }]
       : []),

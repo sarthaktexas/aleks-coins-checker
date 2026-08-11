@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic"
 /** GET — list staff accounts (any logged-in admin) */
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     await bootstrapAdminUsersIfNeeded()
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 /** POST — create staff account (professors only) */
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
     const professorGate = requireProfessor(session)
     if (professorGate !== true) return professorGate
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 /** PATCH — update staff account (professors only) */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
     const professorGate = requireProfessor(session)
     if (professorGate !== true) return professorGate

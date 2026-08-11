@@ -1,13 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
 // POST - Initialize exam periods with default data
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {

@@ -76,6 +76,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
+  // Re-check session when tab becomes visible so deactivate / role changes apply quickly
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [refresh])
+
   const logout = useCallback(async () => {
     await fetch("/api/admin/auth", { method: "DELETE", credentials: "same-origin" })
     setUser(null)

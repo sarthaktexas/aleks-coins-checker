@@ -46,6 +46,7 @@ import {
   type SemesterSeason,
   type ExamType,
 } from "@/lib/exam-periods"
+import { useAdminAuth } from "@/components/admin-auth-provider"
 
 type ExamPeriodData = {
   name: string
@@ -156,6 +157,7 @@ function formatDateRange(startDate: string, endDate: string) {
 }
 
 export default function ManagePeriodsPage() {
+  const { user } = useAdminAuth()
   const [periods, setPeriods] = useState<Record<string, ExamPeriodData>>({})
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -192,8 +194,9 @@ export default function ManagePeriodsPage() {
   }
 
   useEffect(() => {
+    if (user.role !== "professor") return
     loadPeriods()
-  }, [])
+  }, [user.role])
 
   const openAddDialog = () => {
     setDialogMode("add")
@@ -341,6 +344,17 @@ export default function ManagePeriodsPage() {
       else next.add(semesterKey)
       return next
     })
+  }
+
+  if (user.role !== "professor") {
+    return (
+      <Alert className="border-utsa-orange/30 bg-utsa-orange/10">
+        <AlertTriangle className="h-4 w-4 text-utsa-accessible" />
+        <AlertDescription className="text-utsa-accessible">
+          Only professors can manage exam periods.
+        </AlertDescription>
+      </Alert>
+    )
   }
 
   return (

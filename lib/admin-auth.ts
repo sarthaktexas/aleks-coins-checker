@@ -124,13 +124,6 @@ export function forbidden(message = "Insufficient permissions") {
   return NextResponse.json({ error: message }, { status: 403 })
 }
 
-/** Require a valid admin session. Returns session or a 401 response. */
-export function requireAdmin(request: NextRequest): AdminSession | NextResponse {
-  const session = getSessionFromRequest(request)
-  if (!session) return unauthorized()
-  return session
-}
-
 export function requireProfessor(session: AdminSession): true | NextResponse {
   if (session.role !== "professor") return forbidden("Professor access required")
   return true
@@ -240,6 +233,25 @@ export async function findActiveUserById(id: number): Promise<
     ...rowToUser(row as any),
     pinHash: row.pin_hash as string,
     pinSalt: row.pin_salt as string,
+  }
+}
+
+/** Require a valid admin session for an active account. Returns session or a 401 response. */
+export async function requireAdmin(request: NextRequest): Promise<AdminSession | NextResponse> {
+  const session = getSessionFromRequest(request)
+  if (!session) return unauthorized()
+
+  const user = await findActiveUserById(session.userId)
+  if (!user) {
+    return unauthorized("Account is inactive or no longer exists")
+  }
+
+  // Prefer live DB role/name so demotions/renames apply without re-login
+  return {
+    ...session,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
   }
 }
 

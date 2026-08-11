@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic"
 /** PATCH — update the signed-in user's own profile (display name and/or PIN) */
 export async function PATCH(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()

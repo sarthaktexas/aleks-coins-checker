@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
     const professorGate = requireProfessor(session)
     if (professorGate !== true) return professorGate

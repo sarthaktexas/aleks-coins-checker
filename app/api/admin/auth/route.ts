@@ -3,6 +3,7 @@ import {
   bootstrapAdminUsersIfNeeded,
   buildSession,
   clearSessionCookie,
+  findActiveUserById,
   findActiveUserByUsername,
   getSessionFromRequest,
   setSessionCookie,
@@ -19,13 +20,21 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ authenticated: false }, { status: 401 })
     }
+
+    const user = await findActiveUserById(session.userId)
+    if (!user) {
+      const response = NextResponse.json({ authenticated: false }, { status: 401 })
+      clearSessionCookie(response)
+      return response
+    }
+
     return NextResponse.json({
       authenticated: true,
       user: {
-        id: session.userId,
-        username: session.username,
-        displayName: session.displayName,
-        role: session.role,
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
       },
     })
   } catch (error) {

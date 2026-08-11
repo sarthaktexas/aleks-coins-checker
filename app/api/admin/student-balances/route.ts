@@ -85,7 +85,7 @@ async function applyOverridesToStudentData(studentData: StudentData, studentId?:
 
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()

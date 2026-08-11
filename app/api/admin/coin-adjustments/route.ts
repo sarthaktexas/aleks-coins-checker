@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 // GET - Fetch all coin adjustments or for a specific student
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const { searchParams } = new URL(request.url)
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 // POST - Create a new coin adjustment
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
 // DELETE - Soft delete a coin adjustment (set is_active to false)
 export async function DELETE(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()

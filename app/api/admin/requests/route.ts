@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 // GET - Fetch all student requests for admin view
 export async function GET(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     // Check if database is available
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 // PUT - Update a student request status
 export async function PUT(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()
@@ -275,7 +275,7 @@ export async function PUT(request: NextRequest) {
 // POST - Fast approve all pending requests for a specific student
 export async function POST(request: NextRequest) {
   try {
-    const session = requireAdmin(request)
+    const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
     const body = await request.json()
