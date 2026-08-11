@@ -33,11 +33,17 @@ jobs:
           cache: npm
           cache-dependency-path: scripts/aleks-sync/package-lock.json
 
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('scripts/aleks-sync/package-lock.json') }}
+
       - name: Install sync dependencies
         working-directory: scripts/aleks-sync
         run: |
           npm install
-          npx playwright install chromium --with-deps
+          npx playwright install chromium
 
       - name: Run ALEKS sync
         working-directory: scripts/aleks-sync
