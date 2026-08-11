@@ -13,6 +13,7 @@ import {
   Bug,
   Users,
   SlidersHorizontal,
+  Rocket,
 } from "lucide-react"
 import Link from "next/link"
 import { useAdminAuth } from "@/components/admin-auth-provider"
@@ -82,6 +83,9 @@ export default function AdminDashboard() {
   }
 
   const tools = [
+    ...(user.role === "professor"
+      ? [{ title: "Start Here!", href: "/admin/start-here", icon: Rocket }]
+      : []),
     ...(user.role === "professor"
       ? [{ title: "Upload & Settings", href: "/admin", icon: Upload }]
       : [{ title: "Feature Settings", href: "/admin", icon: Settings }]),

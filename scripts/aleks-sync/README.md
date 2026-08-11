@@ -42,6 +42,10 @@ Manual overrides are never auto-verified — they stay in the admin requests que
 
 Manual admin upload still works as a fallback for Excel.
 
+### Login credential check (`npm run check-login`)
+
+Smoke-tests that `ALEKS_USERNAME` / `ALEKS_PASSWORD` still sign in (no Excel download). Trigger from **Admin → Start Here! → Check ALEKS login**, or Actions → **ALEKS check login**.
+
 ## One-time setup
 
 ### 1. App env (Vercel)
@@ -86,4 +90,5 @@ export IMPORT_API_TOKEN=...
 
 HEADED=1 DRY_RUN=1 npm run sync
 HEADED=1 DRY_RUN=1 npm run verify-reviews
+HEADED=1 npm run check-login
 ```

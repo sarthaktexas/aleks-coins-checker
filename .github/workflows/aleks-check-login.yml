@@ -1,0 +1,56 @@
+name: ALEKS check login
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: aleks-check-login
+  cancel-in-progress: true
+
+jobs:
+  check-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/aleks-sync
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: scripts/aleks-sync/package-lock.json
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('scripts/aleks-sync/package-lock.json') }}
+
+      - name: Install sync dependencies
+        working-directory: scripts/aleks-sync
+        run: |
+          npm install
+          npx playwright install chromium
+
+      - name: Check ALEKS login
+        working-directory: scripts/aleks-sync
+        env:
+          ALEKS_USERNAME: ${{ secrets.ALEKS_USERNAME }}
+          ALEKS_PASSWORD: ${{ secrets.ALEKS_PASSWORD }}
+        run: npm run check-login
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aleks-check-login-debug
+          path: scripts/aleks-sync/.downloads-check-login/
+          if-no-files-found: ignore
+          retention-days: 7
