@@ -123,10 +123,16 @@ export default function AdminPage() {
       if (data.runId && !params.runId) params.runId = data.runId
       if (data.status === "completed") {
         const ok = data.conclusion === "success"
+        const successSummary =
+          data.importStatus === "imported"
+            ? `ALEKS pull succeeded. Imported ${data.sectionsImported ?? 0} section${(data.sectionsImported ?? 0) === 1 ? "" : "s"} (${data.studentsImported ?? 0} student${(data.studentsImported ?? 0) === 1 ? "" : "s"}).`
+            : data.importStatus === "no_data"
+              ? "ALEKS pull ran, but no new data was imported for this period."
+              : "ALEKS pull succeeded."
         setPullStatus({
           phase: ok ? "success" : "failure",
           summary: ok
-            ? "ALEKS pull succeeded."
+            ? successSummary
             : "ALEKS pull did not succeed. Please contact the developer to fix it.",
         })
         return
