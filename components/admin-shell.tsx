@@ -49,7 +49,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="admin-shell flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 bg-white">
+      <header className="sticky top-0 z-40 bg-card">
         <div className="h-1 w-full" />
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
           <div className="flex items-center gap-3 min-w-0">

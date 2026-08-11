@@ -436,7 +436,7 @@ export default function StudentLookup() {
   }
 
   return (
-    <div className="min-h-screen bg-utsa-surface">
+    <div className="min-h-screen bg-utsa-surface text-foreground dark:bg-background">
       <div className="h-1 w-full bg-utsa-orange" />
       <div className="container mx-auto px-4 py-6 sm:py-8 max-w-5xl">
         {/* Header */}
@@ -467,7 +467,7 @@ export default function StudentLookup() {
         )}
 
         {/* Search Card */}
-        <Card className="mb-6 rounded-md bg-white">
+        <Card className="mb-6 rounded-md bg-white dark:bg-card">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
               <Search className="h-4 w-4 text-utsa-orange" />
@@ -524,7 +524,7 @@ export default function StudentLookup() {
         {/* Results Card */}
         {studentInfo && (
           <div className="space-y-6">
-            <Card className="rounded-md bg-white overflow-hidden">
+            <Card className="rounded-md bg-white overflow-hidden dark:bg-card">
               <CardHeader className="border-b border-utsa-border bg-white">
                 <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
                   <User className="h-4 w-4 text-utsa-orange" />
@@ -566,7 +566,7 @@ export default function StudentLookup() {
 
                   {/* Total Coins Across All Periods */}
                   {studentPeriods.length > 0 && (
-                    <Card className="rounded-md bg-white">
+                    <Card className="rounded-md bg-white dark:bg-card">
                       <CardContent className="p-4 text-center">
                         <div className="flex items-center justify-center gap-3 mb-3">
                           <Coins className="h-5 w-5 text-utsa-orange" />
@@ -588,7 +588,7 @@ export default function StudentLookup() {
                   {/* Coins and Redemption Section */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Coins Card */}
-                    <Card className="rounded-md bg-white">
+                    <Card className="rounded-md bg-white dark:bg-card">
                       <CardContent className="p-4 text-center">
                         <div className="flex items-center justify-center gap-3 mb-3">
                           <Coins className="h-5 w-5 text-amber-600" />
@@ -641,7 +641,7 @@ export default function StudentLookup() {
                     </Card>
 
                     {/* Redemption Options */}
-                    <Card className="rounded-md bg-white">
+                    <Card className="rounded-md bg-white dark:bg-card">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3 mb-4">
                           <Gift className="h-5 w-5 text-emerald-600" />
@@ -744,7 +744,7 @@ export default function StudentLookup() {
                   {/* Pending Requests */}
                   {pendingRequests && pendingRequests.length > 0 && (
                     <div className="mb-6">
-                      <Card className="rounded-md bg-white">
+                      <Card className="rounded-md bg-white dark:bg-card">
                         <CardContent className="p-4">
                           <div className="flex items-center gap-3 mb-4">
                             <Clock className="h-5 w-5 text-amber-600" />
@@ -981,7 +981,7 @@ export default function StudentLookup() {
 
             {/* Multiple Exam Periods Section */}
             {studentPeriods.length > 0 && (
-              <Card className="rounded-md bg-white overflow-hidden">
+              <Card className="rounded-md bg-white overflow-hidden dark:bg-card">
                 <CardHeader className="border-b border-utsa-border bg-white">
                   <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
                     <BarChart3 className="h-4 w-4 text-utsa-orange" />
@@ -1155,7 +1155,7 @@ export default function StudentLookup() {
 
         {/* Analytics Link - Moved to separate page to reduce database load */}
         <div className="mt-8">
-          <Card className="mb-6 rounded-md bg-white">
+          <Card className="mb-6 rounded-md bg-white dark:bg-card">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-3 text-lg text-utsa-midnight">
                 <BarChart3 className="h-4 w-4 text-utsa-orange" />
