@@ -19,6 +19,36 @@ async function knownSectionsForPeriod(periodKey: string): Promise<string[]> {
   }
 }
 
+async function debugLogPeriodRow(periodKey: string) {
+  try {
+    const row = await sql`
+      SELECT period_key, start_date, end_date, updated_at
+      FROM exam_periods
+      WHERE period_key = ${periodKey}
+      LIMIT 1
+    `
+    if (row.rows.length === 0) {
+      console.log(`[ALEKS config debug] period=${periodKey} row not found`)
+      return
+    }
+
+    const r = row.rows[0]
+    const normalizeDate = (value: unknown) => {
+      if (!value) return null
+      if (typeof value === "string") return value.slice(0, 10)
+      return new Date(value as Date).toISOString().slice(0, 10)
+    }
+
+    console.log(
+      `[ALEKS config debug] period=${String(r.period_key)} start=${normalizeDate(r.start_date)} end=${normalizeDate(r.end_date)} updatedAt=${
+        r.updated_at ? new Date(r.updated_at as string).toISOString() : "null"
+      }`,
+    )
+  } catch (err) {
+    console.error("[ALEKS config debug] failed to read exam_periods row:", err)
+  }
+}
+
 /**
  * GET /api/admin/aleks-sync/config
  * Optional ?period= — otherwise picks the exam period containing today (Central),
@@ -46,6 +76,7 @@ export async function GET(request: NextRequest) {
       if (!period) {
         return NextResponse.json({ error: `Period ${overridePeriod} not found` }, { status: 404 })
       }
+      await debugLogPeriodRow(overridePeriod)
       source = "query"
       knownSections = await knownSectionsForPeriod(overridePeriod)
       const resolved = await resolveActivePeriod()
@@ -64,6 +95,7 @@ export async function GET(request: NextRequest) {
         )
       }
       period = resolved.period
+      await debugLogPeriodRow(period.periodKey)
       source = resolved.source
       latestUploadAt = resolved.latestUploadAt
       knownSections = resolved.knownSections
