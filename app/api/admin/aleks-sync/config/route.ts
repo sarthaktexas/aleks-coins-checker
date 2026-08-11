@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { computeReportWindow, getPeriodDates, resolveActivePeriod } from "@/lib/aleks-excel"
+import { computeReportWindow, resolveActivePeriod, type PeriodDateInfo } from "@/lib/aleks-excel"
 import { isAuthorized, requireImportToken } from "@/lib/import-token"
 
 export const dynamic = "force-dynamic"
@@ -26,10 +26,19 @@ type PeriodRowDebug = {
   updatedAt: string | null
 } | null
 
-async function debugLogPeriodRow(periodKey: string): Promise<PeriodRowDebug> {
+function normalizeDate(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === "string") return value.slice(0, 10)
+  return new Date(value as Date).toISOString().slice(0, 10)
+}
+
+async function fetchPeriodFromDb(periodKey: string): Promise<{
+  period: PeriodDateInfo
+  debugRow: PeriodRowDebug
+} | null> {
   try {
     const row = await sql`
-      SELECT period_key, start_date, end_date, updated_at
+      SELECT period_key, name, start_date, end_date, excluded_dates, updated_at
       FROM exam_periods
       WHERE period_key = ${periodKey}
       LIMIT 1
@@ -40,11 +49,6 @@ async function debugLogPeriodRow(periodKey: string): Promise<PeriodRowDebug> {
     }
 
     const r = row.rows[0]
-    const normalizeDate = (value: unknown) => {
-      if (!value) return null
-      if (typeof value === "string") return value.slice(0, 10)
-      return new Date(value as Date).toISOString().slice(0, 10)
-    }
 
     const debugRow = {
       periodKey: String(r.period_key),
@@ -58,7 +62,23 @@ async function debugLogPeriodRow(periodKey: string): Promise<PeriodRowDebug> {
         r.updated_at ? new Date(r.updated_at as string).toISOString() : "null"
       }`,
     )
-    return debugRow
+
+    const startDate = normalizeDate(r.start_date)
+    const endDate = normalizeDate(r.end_date)
+    if (!startDate || !endDate) {
+      throw new Error(`Invalid period dates for ${periodKey}`)
+    }
+
+    return {
+      period: {
+        periodKey: String(r.period_key),
+        name: String(r.name),
+        startDate,
+        endDate,
+        excludedDates: (r.excluded_dates as string[]) || [],
+      },
+      debugRow,
+    }
   } catch (err) {
     console.error("[ALEKS config debug] failed to read exam_periods row:", err)
     return null
@@ -89,11 +109,12 @@ export async function GET(request: NextRequest) {
     let debugPeriodRow: PeriodRowDebug = null
 
     if (overridePeriod) {
-      period = await getPeriodDates(overridePeriod)
-      if (!period) {
+      const dbPeriod = await fetchPeriodFromDb(overridePeriod)
+      if (!dbPeriod) {
         return NextResponse.json({ error: `Period ${overridePeriod} not found` }, { status: 404 })
       }
-      debugPeriodRow = await debugLogPeriodRow(overridePeriod)
+      period = dbPeriod.period
+      debugPeriodRow = dbPeriod.debugRow
       source = "query"
       knownSections = await knownSectionsForPeriod(overridePeriod)
       const resolved = await resolveActivePeriod()
@@ -111,8 +132,15 @@ export async function GET(request: NextRequest) {
           { status: 404 },
         )
       }
-      period = resolved.period
-      debugPeriodRow = await debugLogPeriodRow(period.periodKey)
+      const dbPeriod = await fetchPeriodFromDb(resolved.period.periodKey)
+      if (!dbPeriod) {
+        return NextResponse.json(
+          { error: `Resolved period ${resolved.period.periodKey} was not found in exam_periods` },
+          { status: 404 },
+        )
+      }
+      period = dbPeriod.period
+      debugPeriodRow = dbPeriod.debugRow
       source = resolved.source
       latestUploadAt = resolved.latestUploadAt
       knownSections = resolved.knownSections
