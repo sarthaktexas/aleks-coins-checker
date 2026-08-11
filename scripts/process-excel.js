@@ -6,7 +6,7 @@ const CURRENT_YEAR = new Date().getFullYear()
 
 // Define exam periods with excluded dates - using current year
 const EXAM_PERIODS = {
-  spring2025: {
+  spring2025_exam1: {
     name: `Spring ${CURRENT_YEAR} - Exam 1 Period`,
     startDate: `${CURRENT_YEAR}-01-15`,
     endDate: `${CURRENT_YEAR}-02-10`,
@@ -24,7 +24,7 @@ const EXAM_PERIODS = {
     endDate: `${CURRENT_YEAR}-04-28`,
     excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-04-21`], // Spring Break, Easter Monday
   },
-  summer2025: {
+  summer2025_exam1: {
     name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
     startDate: `${CURRENT_YEAR}-05-31`,
     endDate: `${CURRENT_YEAR}-06-23`,
@@ -42,7 +42,7 @@ const EXAM_PERIODS = {
     endDate: `${CURRENT_YEAR}-08-10`,
     excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`], // Weekend
   },
-  fall2025: {
+  fall2025_exam1: {
     name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
     startDate: `${CURRENT_YEAR}-08-26`,
     endDate: `${CURRENT_YEAR}-09-20`,
@@ -94,7 +94,7 @@ function getWorkingDays(startDate, endDate, excludedDates = []) {
   return workingDays
 }
 
-function processExcelFile(filePath, examPeriod = "summer2025") {
+function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
   console.log(`Processing Excel file: ${filePath}`)
   console.log(`Using exam period: ${examPeriod}`)
 
@@ -245,12 +245,12 @@ function main() {
     Object.keys(EXAM_PERIODS).forEach((key) => {
       console.log(`  ${key}: ${EXAM_PERIODS[key].name}`)
     })
-    console.log(`Example: node process-excel.js students.xlsx summer2025`)
+    console.log(`Example: node process-excel.js students.xlsx summer2025_exam1`)
     process.exit(1)
   }
 
   const filePath = args[0]
-  const examPeriod = args[1] || "summer2025"
+  const examPeriod = args[1] || "summer2025_exam1"
 
   if (!fs.existsSync(filePath)) {
     console.error(`File not found: ${filePath}`)

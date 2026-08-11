@@ -447,6 +447,7 @@ export default function StudentLookup() {
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-utsa-midnight">ALEKS Points Portal</h1>
           <p className="text-sm text-utsa-muted">Enter your student ID to view your progress and points</p>
+          <p className="mt-1.5 text-xs text-utsa-muted">ALEKS data is uploaded nightly automatically.</p>
         </div>
 
         {/* Hide PII Warning - shown when admin has toggled PII hiding (e.g., for screen sharing) */}

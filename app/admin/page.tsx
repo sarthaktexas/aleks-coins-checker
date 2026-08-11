@@ -20,7 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
+import { EXAM_PERIODS } from "@/lib/exam-periods"
 
 type ExamPeriodData = {
   name: string
@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [file, setFile] = useState<File | null>(null)
   const [selectedPeriod, setSelectedPeriod] = useState("")
   const [sectionNumber, setSectionNumber] = useState("")
+  const [uploadMode, setUploadMode] = useState<"manual" | "automatic">("automatic")
   const [isUploading, setIsUploading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -359,6 +360,11 @@ export default function AdminPage() {
   }
 
   const handlePullFromAleks = async () => {
+    if (!selectedPeriod) {
+      setMessage({ type: "error", text: "Select an exam period first" })
+      return
+    }
+
     setIsPulling(true)
     setMessage(null)
 
@@ -367,7 +373,7 @@ export default function AdminPage() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ period: selectedPeriod }),
       })
       if (response.status === 401) {
         setMessage({ type: "error", text: SESSION_EXPIRED })
@@ -390,6 +396,12 @@ export default function AdminPage() {
     }
   }
 
+  const setMode = (mode: "manual" | "automatic") => {
+    setUploadMode(mode)
+    setShowDeleteSectionConfirm(false)
+    setMessage(null)
+  }
+
   const formatDateRange = (startDate: string, endDate: string) => {
     const formatDate = (dateStr: string) => {
       const [year, month, day] = dateStr.split("-").map(Number)
@@ -405,122 +417,220 @@ export default function AdminPage() {
       <div>
         <h1 className="text-xl font-semibold text-utsa-midnight">Upload & Settings</h1>
         <p className="text-sm text-utsa-muted">Upload ALEKS Excel data and manage feature flags</p>
+        <p className="mt-1.5 text-xs text-utsa-muted">ALEKS data is uploaded nightly automatically.</p>
       </div>
 
-      <form onSubmit={handleUpload} className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Exam period ({CURRENT_YEAR})</Label>
-            <Select
-              value={selectedPeriod}
-              onValueChange={setSelectedPeriod}
-              disabled={isUploading || isLoadingPeriods}
-            >
-              <SelectTrigger className="h-8 border-utsa-border">
-                <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(periods).map(([key, period]) => (
-                  <SelectItem key={key} value={key}>
-                    {period.name} · {formatDateRange(period.startDate, period.endDate)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
+        <div className="space-y-1.5">
+          <Label>Exam period</Label>
+          <Select
+            value={selectedPeriod}
+            onValueChange={setSelectedPeriod}
+            disabled={isUploading || isPulling || isLoadingPeriods}
+          >
+            <SelectTrigger className="h-8 border-utsa-border">
+              <SelectValue placeholder={isLoadingPeriods ? "Loading…" : "Select period"} />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(periods).map(([key, period]) => (
+                <SelectItem key={key} value={key}>
+                  {period.name} · {formatDateRange(period.startDate, period.endDate)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="sectionNumber">Section number</Label>
-            <Input
-              id="sectionNumber"
-              type="text"
-              placeholder="e.g. 003"
-              value={sectionNumber}
-              onChange={(e) => setSectionNumber(e.target.value)}
-              disabled={isUploading}
-              className="h-8 border-utsa-border focus-visible:ring-utsa-orange"
-            />
+        <div className="space-y-1.5">
+          <Label>Upload method</Label>
+          <div
+            role="tablist"
+            aria-label="Upload method"
+            className="flex flex-col gap-1.5"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={uploadMode === "automatic"}
+              onClick={() => setMode("automatic")}
+              disabled={isUploading || isPulling}
+              className={`rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors ${
+                uploadMode === "automatic"
+                  ? "border-utsa-orange bg-utsa-orange/10 text-utsa-midnight"
+                  : "border-utsa-border bg-white text-utsa-muted hover:border-utsa-orange/40 hover:text-utsa-midnight"
+              }`}
+            >
+              Automatic pull
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={uploadMode === "manual"}
+              onClick={() => setMode("manual")}
+              disabled={isUploading || isPulling}
+              className={`rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors ${
+                uploadMode === "manual"
+                  ? "border-utsa-orange bg-utsa-orange/10 text-utsa-midnight"
+                  : "border-utsa-border bg-white text-utsa-muted hover:border-utsa-orange/40 hover:text-utsa-midnight"
+              }`}
+            >
+              Manual upload
+            </button>
           </div>
         </div>
 
-        {selectedPeriod && periods[selectedPeriod] && (
-          <div className="flex items-start gap-2 rounded border border-utsa-border bg-utsa-surface px-3 py-2 text-xs text-utsa-muted">
-            <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-utsa-orange" />
-            <span>
-              {periods[selectedPeriod].name} ·{" "}
-              {formatDateRange(periods[selectedPeriod].startDate, periods[selectedPeriod].endDate)} ·{" "}
-              {periods[selectedPeriod].excludedDates.length} exempt days
-            </span>
-          </div>
-        )}
+        {uploadMode === "manual" ? (
+          <form onSubmit={handleUpload} className="space-y-4 border-t border-utsa-border pt-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="sectionNumber">Section number</Label>
+              <Input
+                id="sectionNumber"
+                type="text"
+                placeholder="e.g. 003"
+                value={sectionNumber}
+                onChange={(e) => setSectionNumber(e.target.value)}
+                disabled={isUploading}
+                className="h-8 border-utsa-border focus-visible:ring-utsa-orange sm:max-w-xs"
+              />
+            </div>
 
-        <div className="space-y-1.5">
-          <Label>Excel file</Label>
-          <div
-            className={`cursor-pointer rounded-md border border-dashed px-4 py-6 text-center transition-colors ${
-              isDragOver
-                ? "border-utsa-orange bg-utsa-orange/10"
-                : file
-                  ? "border-emerald-400 bg-emerald-50"
-                  : "border-utsa-border bg-utsa-surface hover:border-utsa-orange/50"
-            } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
-            onDragOver={handleDragOver}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={!isUploading ? () => fileInputRef.current?.click() : undefined}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleInputChange}
-              className="hidden"
-              disabled={isUploading}
-            />
-            {file ? (
-              <div className="space-y-2">
-                <CheckCircle className="mx-auto h-5 w-5 text-emerald-600" />
-                <p className="text-sm font-medium text-emerald-800">{file.name}</p>
+            <div className="space-y-1.5">
+              <Label>Excel file</Label>
+              <div
+                className={`cursor-pointer rounded-md border border-dashed px-4 py-6 text-center transition-colors ${
+                  isDragOver
+                    ? "border-utsa-orange bg-utsa-orange/10"
+                    : file
+                      ? "border-emerald-400 bg-emerald-50"
+                      : "border-utsa-border bg-utsa-surface hover:border-utsa-orange/50"
+                } ${isUploading ? "pointer-events-none opacity-50" : ""}`}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={!isUploading ? () => fileInputRef.current?.click() : undefined}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleInputChange}
+                  className="hidden"
+                  disabled={isUploading}
+                />
+                {file ? (
+                  <div className="space-y-2">
+                    <CheckCircle className="mx-auto h-5 w-5 text-emerald-600" />
+                    <p className="text-sm font-medium text-emerald-800">{file.name}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFile(null)
+                        if (fileInputRef.current) fileInputRef.current.value = ""
+                      }}
+                      disabled={isUploading}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <FileSpreadsheet className="mx-auto h-5 w-5 text-utsa-muted" />
+                    <p className="text-sm text-utsa-midnight">Drop Excel here or click to browse</p>
+                    <p className="text-xs text-utsa-muted">.xlsx / .xls</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={isUploading || !file} className="w-full sm:w-auto">
+                {isUploading ? (
+                  "Uploading…"
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Upload
+                  </>
+                )}
+              </Button>
+
+              {!showDeleteSectionConfirm ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    isDeletingSection || isUploading || !selectedPeriod || !sectionNumber.trim()
+                  }
+                  onClick={() => setShowDeleteSectionConfirm(true)}
+                  className="border-utsa-orange/40 text-utsa-accessible"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete this period/section
+                </Button>
+              ) : null}
+            </div>
+
+            {showDeleteSectionConfirm && (
+              <div className="flex w-full flex-wrap items-center gap-2 rounded border border-utsa-orange/30 bg-utsa-orange/5 px-3 py-2">
+                <p className="text-xs text-utsa-accessible sm:mr-auto">
+                  Delete data for <span className="font-medium">{selectedPeriod}</span> / section{" "}
+                  <span className="font-medium">{sectionNumber.trim()}</span>?
+                </p>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={isDeletingSection}
+                  onClick={handleDeleteSectionData}
+                >
+                  {isDeletingSection ? "Deleting…" : "Confirm delete"}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setFile(null)
-                    if (fileInputRef.current) fileInputRef.current.value = ""
-                  }}
-                  disabled={isUploading}
+                  disabled={isDeletingSection}
+                  onClick={() => setShowDeleteSectionConfirm(false)}
                 >
-                  Remove
+                  Cancel
                 </Button>
               </div>
-            ) : (
-              <div className="space-y-1">
-                <FileSpreadsheet className="mx-auto h-5 w-5 text-utsa-muted" />
-                <p className="text-sm text-utsa-midnight">Drop Excel here or click to browse</p>
-                <p className="text-xs text-utsa-muted">.xlsx / .xls</p>
-              </div>
             )}
-          </div>
-        </div>
+          </form>
+        ) : (
+          <div className="space-y-4 border-t border-utsa-border pt-4">
+            <div>
+              <h2 className="text-sm font-semibold text-utsa-midnight">Pull from ALEKS</h2>
+              <p className="text-xs text-utsa-muted">
+                Starts the GitHub Actions sync for the selected exam period. Sections are detected
+                automatically from ALEKS class names.
+              </p>
+            </div>
 
-        <Button
-          type="submit"
-          disabled={isUploading || !file}
-          className="w-full sm:w-auto"
-        >
-          {isUploading ? (
-            "Uploading…"
-          ) : (
-            <>
-              <Upload className="h-4 w-4" />
-              Upload
-            </>
-          )}
-        </Button>
-      </form>
+            <Button
+              type="button"
+              disabled={isPulling || isUploading || !selectedPeriod}
+              onClick={() => handlePullFromAleks()}
+            >
+              {isPulling ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Starting pull…
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Pull from ALEKS now
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+      </div>
 
       {message && (
         <Alert
@@ -542,83 +652,6 @@ export default function AdminPage() {
           </AlertDescription>
         </Alert>
       )}
-
-      <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
-        <div>
-          <h2 className="text-sm font-semibold text-utsa-midnight">ALEKS auto-sync (test)</h2>
-          <p className="text-xs text-utsa-muted">
-            Delete a period/section, then pull fresh Time and Topic data via GitHub Actions.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {!showDeleteSectionConfirm ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={
-                isDeletingSection ||
-                isPulling ||
-                isUploading ||
-                !selectedPeriod ||
-                !sectionNumber.trim()
-              }
-              onClick={() => setShowDeleteSectionConfirm(true)}
-              className="border-utsa-orange/40 text-utsa-accessible"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete this period/section
-            </Button>
-          ) : (
-            <div className="flex w-full flex-wrap items-center gap-2 rounded border border-utsa-orange/30 bg-utsa-orange/5 px-3 py-2">
-              <p className="text-xs text-utsa-accessible sm:mr-auto">
-                Delete data for <span className="font-medium">{selectedPeriod}</span> / section{" "}
-                <span className="font-medium">{sectionNumber.trim()}</span>?
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={isDeletingSection}
-                onClick={handleDeleteSectionData}
-              >
-                {isDeletingSection ? "Deleting…" : "Confirm delete"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isDeletingSection}
-                onClick={() => setShowDeleteSectionConfirm(false)}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
-
-          <Button
-            type="button"
-            disabled={isPulling || isDeletingSection || isUploading}
-            onClick={() => handlePullFromAleks()}
-          >
-            {isPulling ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Starting pull…
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4" />
-                Pull from ALEKS now
-              </>
-            )}
-          </Button>
-        </div>
-
-        <p className="text-xs text-utsa-muted">
-          Pull auto-detects the active exam period and starts the ALEKS sync workflow.
-        </p>
-      </div>
 
       <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
         <h2 className="text-sm font-semibold text-utsa-midnight">Settings</h2>
