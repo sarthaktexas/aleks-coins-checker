@@ -174,6 +174,7 @@ export default function StartHerePage() {
         <h1 className="text-xl font-semibold text-utsa-midnight">Start Here!</h1>
         <p className="text-sm text-utsa-muted">
           New-semester checklist for professors. Keep this page handy anytime you need a refresher.
+          Classes will be pulled automatically from ALEKS and class data will auto-populate after sync runs.
         </p>
       </div>
 
@@ -227,9 +228,9 @@ export default function StartHerePage() {
                     ) : (
                       <ThinkingOrb
                         state="solving"
-                        size={20}
+                        size={24}
                         aria-label="Checking ALEKS login status"
-                        className="mt-0.5 shrink-0"
+                        className="mt-0.5 shrink-0 rounded-full bg-utsa-orange/10 ring-2 ring-utsa-orange/35 shadow-sm"
                       />
                     )}
                     <p

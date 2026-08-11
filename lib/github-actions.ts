@@ -43,6 +43,8 @@ export type WorkflowRunSnapshot = {
   summary: string | null
 }
 
+const UTSA_TIME_ZONE = "America/Chicago"
+
 function githubHeaders(pat: string, extra?: Record<string, string>) {
   return {
     Accept: "application/vnd.github+json",
@@ -151,12 +153,18 @@ function runOutcome(
 
 function dayLabelFromIso(iso: string): { dateKey: string; dayLabel: string } {
   const d = new Date(iso)
-  const dateKey = [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, "0"),
-    String(d.getDate()).padStart(2, "0"),
-  ].join("-")
+  const dayParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: UTSA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d)
+  const year = dayParts.find((p) => p.type === "year")?.value
+  const month = dayParts.find((p) => p.type === "month")?.value
+  const day = dayParts.find((p) => p.type === "day")?.value
+  const dateKey = year && month && day ? `${year}-${month}-${day}` : d.toISOString().slice(0, 10)
   const dayLabel = d.toLocaleDateString("en-US", {
+    timeZone: UTSA_TIME_ZONE,
     weekday: "long",
     month: "short",
     day: "numeric",
@@ -168,6 +176,7 @@ function dayLabelFromIso(iso: string): { dateKey: string; dayLabel: string } {
 function timeLabelFromIso(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleTimeString("en-US", {
+    timeZone: UTSA_TIME_ZONE,
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",

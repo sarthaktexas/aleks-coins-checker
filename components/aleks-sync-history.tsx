@@ -19,17 +19,6 @@ function outcomeLabel(outcome: AleksSyncHistoryDay["runs"][number]["outcome"]): 
 }
 
 
-function localTimeLabel(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  })
-}
-
-
 function workflowLabel(kind: AleksSyncHistoryDay["runs"][number]["workflow"]): string {
   return kind === "pull" ? "Pull" : "Reviewed topics"
 }
@@ -147,7 +136,7 @@ export function AleksSyncHistory({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <OutcomeIcon outcome={run.outcome} />
-                      <span className="text-utsa-midnight">{localTimeLabel(run.ranAt) || run.timeLabel}</span>
+                      <span className="text-utsa-midnight">{run.timeLabel}</span>
                       <span className="text-xs text-utsa-muted">
                         {run.trigger === "nightly" ? "Nightly" : "Manual"}
                       </span>

@@ -547,7 +547,7 @@ export function todayInCentral(): string {
 
 /**
  * ALEKS report window: period start → min(today, period end).
- * Without force, skips when today is outside the period.
+ * Without force, skips when today is outside the period or before day 7.
  */
 export function computeReportWindow(
   startDate: string,
@@ -559,6 +559,9 @@ export function computeReportWindow(
   // Current day or last day of the period, whichever comes first.
   const reportEndDate = today < endDate ? today : endDate
   const reportStartDate = startDate
+  const firstAllowedSyncDay = new Date(`${startDate}T12:00:00Z`)
+  firstAllowedSyncDay.setUTCDate(firstAllowedSyncDay.getUTCDate() + 6)
+  const firstAllowedSyncDate = firstAllowedSyncDay.toISOString().slice(0, 10)
 
   if (!force) {
     if (today < startDate) {
@@ -578,6 +581,16 @@ export function computeReportWindow(
         today,
         reportStartDate,
         reportEndDate: endDate,
+        forced: false,
+      }
+    }
+    if (today < firstAllowedSyncDate) {
+      return {
+        shouldSync: false as const,
+        reason: "Waiting until day 7 of the exam period (ALEKS requires at least one week)",
+        today,
+        reportStartDate,
+        reportEndDate,
         forced: false,
       }
     }
