@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type BugReport = {
   id: number
@@ -150,7 +151,7 @@ export default function AdminBugReportsPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-utsa-midnight">Report #{report.id}</h2>
                   <p className="text-xs text-utsa-muted">
-                    {new Date(report.submitted_at).toLocaleString()}
+                    {formatLocalDateTime(report.submitted_at)}
                     {report.student_id ? ` · student ${report.student_id}` : ""}
                     {report.contact_email ? ` · ${report.contact_email}` : ""}
                   </p>

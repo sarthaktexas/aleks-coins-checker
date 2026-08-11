@@ -16,6 +16,7 @@ import {
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type DayOverride = {
   id: number
@@ -116,16 +117,7 @@ export default function ViewOverridesPage() {
     return matchesSearch
   })
 
-  const formatDate = (dateString: string) => {
-    const options: Intl.DateTimeFormatOptions = {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      timeZone: "America/Chicago"
-    }
-    
-    return new Date(dateString).toLocaleString("en-US", options)
-  }
+  const formatDate = (dateString: string) => formatLocalDateTime(dateString)
 
   const formatOverrideDate = (dateString: string) => {
     if (!dateString) return ""

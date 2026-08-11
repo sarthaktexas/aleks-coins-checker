@@ -28,6 +28,7 @@ import { useHidePII } from "@/hooks/use-hide-pii"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { CondensedCalendarView } from "@/components/condensed-calendar-view"
 import { groupBySemester, getExamLabel } from "@/lib/exam-periods"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type StudentData = {
   name: string
@@ -409,17 +410,7 @@ Total: ${extraCreditStudents.length} students`
       return 0
     })
 
-  const formatDate = (dateString: string) => {
-    // Convert UTC timestamp to Central Time - show date
-    const options: Intl.DateTimeFormatOptions = {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      timeZone: "America/Chicago" // Central Time
-    }
-    
-    return new Date(dateString).toLocaleString("en-US", options)
-  }
+  const formatDate = (dateString: string) => formatLocalDateTime(dateString)
 
   const getProgressColor = (percent: number) => {
     if (percent >= 90) return "bg-emerald-500"

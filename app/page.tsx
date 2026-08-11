@@ -32,6 +32,7 @@ import { RequestHistory } from "@/components/request-history"
 import { BugReportModal } from "@/components/bug-report-modal"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type DailyLog = {
   day: number
@@ -766,7 +767,7 @@ export default function StudentLookup() {
                                 </div>
                                 <p className="text-sm text-amber-700 mb-2">{request.request_details}</p>
                                 <p className="text-xs text-amber-600">
-                                  Submitted: {new Date(request.submitted_at).toLocaleDateString()}
+                                  Submitted: {formatLocalDateTime(request.submitted_at)}
                                   {request.period && (
                                     <span className="ml-2">
                                       • {(request.period as string).replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}

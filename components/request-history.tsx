@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CheckCircle, XCircle, Search, ChevronLeft, ChevronRight, FileText, Calendar, User } from "lucide-react"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type Request = {
   id: number
@@ -230,23 +231,11 @@ export function RequestHistory({ approvedRequests, rejectedRequests }: RequestHi
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-utsa-border">
                   <div className="flex items-center gap-4 text-xs text-utsa-muted">
                     <span>
-                      Submitted: {new Date(request.submitted_at).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      Submitted: {formatLocalDateTime(request.submitted_at)}
                     </span>
                     {request.processed_at && (
                       <span>
-                        Processed: {new Date(request.processed_at).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        Processed: {formatLocalDateTime(request.processed_at)}
                       </span>
                     )}
                   </div>

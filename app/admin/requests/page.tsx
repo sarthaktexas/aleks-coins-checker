@@ -11,6 +11,7 @@ import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { AlertCircle, Mail, Clock, User, Calendar, FileText, EyeOff } from "lucide-react"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type StudentRequest = {
   id: number
@@ -367,10 +368,7 @@ export default function AdminRequestsPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
+  const formatDate = (dateString: string) => formatLocalDateTime(dateString)
 
   // Get unique sections
   const sections = Array.from(new Set(requests.map(r => r.section_number))).sort()

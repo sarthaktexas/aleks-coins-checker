@@ -11,6 +11,7 @@ import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { AlertCircle, CheckCircle, Coins, Plus, Trash2, User, Calendar, FileText, EyeOff } from "lucide-react"
+import { formatLocalDateTime } from "@/lib/datetime"
 
 type CoinAdjustment = {
   id: number
@@ -243,10 +244,7 @@ export default function AdminCoinAdjustmentsPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleString()
-  }
+  const formatDate = (dateString: string) => formatLocalDateTime(dateString)
 
   return (
     <div className="space-y-6">
