@@ -801,7 +801,7 @@ Total: ${extraCreditStudents.length} students`
                               <span className="font-medium text-utsa-midnight">
                                 {qualifiedDays}{exemptCredits > 0 ? ` + ${exemptCredits}` : ""}
                               </span>
-                              {" "}/ {workingDays.length} days
+                              {" "}/ {workingDays.length} qualified days
                             </span>
                             {avgMins !== null && (
                               <span><span className="font-medium text-utsa-midnight">{avgMins}</span> avg min/day</span>
@@ -824,6 +824,7 @@ Total: ${extraCreditStudents.length} students`
                                 dailyLog={data.dailyLog}
                                 totalDays={data.totalDays}
                                 periodDays={data.periodDays}
+                                studentId={studentId}
                               />
                             </div>
                           )}

@@ -189,11 +189,11 @@ export function DayOverrideModal({
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="sm:max-w-md">
           <div className="text-center py-6">
-            <div className="mx-auto flex items-center justify-center w-12 h-8 rounded-full bg-green-100 mb-4">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+            <div className="mx-auto flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 mb-4">
+              <CheckCircle className="h-6 w-6 text-emerald-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Override Request Submitted!</h3>
-            <p className="text-sm text-gray-600">
+            <h3 className="text-lg font-semibold text-utsa-midnight mb-2">Override Request Submitted!</h3>
+            <p className="text-sm text-utsa-muted">
               {submittedKind === OVERRIDE_KIND_REVIEWED
                 ? "Your review override will be checked against ALEKS automatically."
                 : "Your override request has been sent to your instructor for manual review."}
@@ -206,32 +206,32 @@ export function DayOverrideModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="p-1 bg-blue-100 rounded">
+            <div className="p-1.5 bg-utsa-surface rounded-md">
               <Shield className="h-4 w-4 text-utsa-orange" />
             </div>
             Request Day Override
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             Request an override for <strong>Day {dayInfo.dayNumber}</strong> ({formatDate(dayInfo.date)})
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="p-3 bg-slate-50 rounded-lg border">
-            <div className="text-sm text-slate-600 mb-2">Current Status:</div>
+          <div className="p-3 bg-utsa-surface rounded-md border border-[rgba(3,32,68,0.1)]">
+            <div className="text-xs uppercase tracking-wide text-utsa-muted mb-2 font-medium">Current Status</div>
             <div className="flex items-center gap-2">
               <div
                 className={`w-3 h-3 rounded-full ${dayInfo.currentQualified ? "bg-green-500" : "bg-red-500"}`}
               />
-              <span className="font-medium">
+              <span className="text-sm font-medium text-utsa-midnight">
                 {dayInfo.currentQualified ? "✅ Qualified" : "❌ Not Qualified"}
               </span>
             </div>
             {dayInfo.currentReason && (
-              <div className="text-sm text-slate-600 mt-1">Reason: {dayInfo.currentReason}</div>
+              <div className="text-sm text-utsa-muted mt-1">Reason: {dayInfo.currentReason}</div>
             )}
           </div>
 
@@ -261,17 +261,17 @@ export function DayOverrideModal({
               <button
                 type="button"
                 onClick={() => setOverrideKind(OVERRIDE_KIND_REVIEWED)}
-                className={`text-left p-3 rounded-lg border transition-colors ${
+                className={`text-left p-3 rounded-md border transition-colors ${
                   overrideKind === OVERRIDE_KIND_REVIEWED
-                    ? "border-utsa-orange bg-orange-50 ring-1 ring-utsa-orange"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    ? "border-utsa-orange bg-amber-50 ring-1 ring-utsa-orange/40"
+                    : "border-[rgba(3,32,68,0.15)] bg-white hover:border-[rgba(3,32,68,0.25)]"
                 }`}
               >
                 <div className="flex items-start gap-2">
                   <BookOpen className="h-4 w-4 mt-0.5 text-utsa-orange shrink-0" />
                   <div>
-                    <div className="font-medium text-sm text-slate-900">I reviewed topics this day</div>
-                    <p className="text-xs text-slate-600 mt-0.5">
+                    <div className="font-medium text-sm text-utsa-midnight">I reviewed topics this day</div>
+                    <p className="text-xs text-utsa-muted mt-0.5">
                       We will verify this in ALEKS automatically.
                     </p>
                   </div>
@@ -280,18 +280,18 @@ export function DayOverrideModal({
               <button
                 type="button"
                 onClick={() => setOverrideKind(OVERRIDE_KIND_MANUAL)}
-                className={`text-left p-3 rounded-lg border transition-colors ${
+                className={`text-left p-3 rounded-md border transition-colors ${
                   overrideKind === OVERRIDE_KIND_MANUAL
-                    ? "border-utsa-orange bg-orange-50 ring-1 ring-utsa-orange"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    ? "border-utsa-orange bg-amber-50 ring-1 ring-utsa-orange/40"
+                    : "border-[rgba(3,32,68,0.15)] bg-white hover:border-[rgba(3,32,68,0.25)]"
                 }`}
               >
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
                   <div>
-                    <div className="font-medium text-sm text-slate-900">Something else (manual review)</div>
-                    <p className="text-xs text-slate-600 mt-0.5">
-                      Use this only if it was not a review day. Your instructor will handle it manually.
+                    <div className="font-medium text-sm text-utsa-midnight">Something else (manual review)</div>
+                    <p className="text-xs text-utsa-muted mt-0.5">
+                      Use this only if it was not a review day. You should have already talked to a TA or professor in person before submitting this; manual requests are typically denied otherwise.
                     </p>
                   </div>
                 </div>
@@ -299,8 +299,17 @@ export function DayOverrideModal({
             </div>
           </div>
 
-          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="text-sm text-blue-800">
+          {overrideKind === OVERRIDE_KIND_MANUAL && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                Manual review requests are typically denied unless you have first talked with a TA or professor in person.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="p-3 bg-utsa-surface rounded-md border border-[rgba(3,32,68,0.1)]">
+            <div className="text-sm text-utsa-midnight">
               <strong>Your Request:</strong> Mark this day as qualified
             </div>
           </div>
@@ -323,7 +332,7 @@ export function DayOverrideModal({
               className="min-h-[80px]"
               required={overrideKind === OVERRIDE_KIND_MANUAL}
             />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-utsa-muted">
               {overrideKind === OVERRIDE_KIND_MANUAL
                 ? "Required so your instructor knows why this cannot be auto-verified as a review day."
                 : "You can leave this blank — confirming review above is enough."}
@@ -337,7 +346,7 @@ export function DayOverrideModal({
             </Alert>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
               Cancel
             </Button>
