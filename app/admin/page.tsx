@@ -24,7 +24,6 @@ import { Switch } from "@/components/ui/switch"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
 import { useAdminAuth } from "@/components/admin-auth-provider"
 import { ThinkingOrb } from "thinking-orbs"
-import { AleksSyncHistory } from "@/components/aleks-sync-history"
 
 type ExamPeriodData = {
   name: string
@@ -774,7 +773,6 @@ export default function AdminPage() {
       </div>
       )}
 
-      {isProfessor && <AleksSyncHistory />}
 
       {message && (
         <Alert

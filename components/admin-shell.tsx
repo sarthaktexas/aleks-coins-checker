@@ -12,6 +12,7 @@ import "@/app/admin/admin.css"
 
 const NAV_ITEMS = [
   { href: "/admin/start-here", label: "Start Here!", professorOnly: true },
+  { href: "/admin/aleks-sync-history", label: "Sync History", professorOnly: true },
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin", label: "Upload", taLabel: "Settings", exact: true },
   { href: "/admin/view-data", label: "Data" },

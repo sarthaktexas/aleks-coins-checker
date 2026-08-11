@@ -4,11 +4,11 @@ import { getAleksSyncRunHistory, requireGitHubConfig } from "@/lib/github-action
 
 export const dynamic = "force-dynamic"
 
-const WORKFLOW_FILE = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml"
+const WORKFLOW_FILE = process.env.ALEKS_REVIEW_WORKFLOW || "aleks-review-overrides.yml"
 
 /**
- * GET /api/admin/aleks-sync/history
- * Recent ALEKS sync workflow runs grouped by day. Professors only.
+ * GET /api/admin/aleks-sync/history-reviews
+ * Recent reviewed-topics verification workflow runs grouped by day. Professors only.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -25,17 +25,17 @@ export async function GET(request: NextRequest) {
     const limitParam = request.nextUrl.searchParams.get("limit")
     const limit = limitParam ? Math.min(Math.max(Number(limitParam) || 90, 1), 100) : 90
 
-    const days = await getAleksSyncRunHistory(WORKFLOW_FILE, limit, "pull")
+    const days = await getAleksSyncRunHistory(WORKFLOW_FILE, limit, "reviews")
 
     return NextResponse.json({
       days,
       workflow: WORKFLOW_FILE,
     })
   } catch (error) {
-    console.error("ALEKS sync history error:", error)
+    console.error("ALEKS review history error:", error)
     return NextResponse.json(
       {
-        error: "Failed to load ALEKS pull history",
+        error: "Failed to load reviewed-topics verification history",
         details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
       },
       { status: 500 },

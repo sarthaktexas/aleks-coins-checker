@@ -14,6 +14,7 @@ import {
   Users,
   SlidersHorizontal,
   Rocket,
+  History,
 } from "lucide-react"
 import Link from "next/link"
 import { useAdminAuth } from "@/components/admin-auth-provider"
@@ -84,7 +85,10 @@ export default function AdminDashboard() {
 
   const tools = [
     ...(user.role === "professor"
-      ? [{ title: "Start Here!", href: "/admin/start-here", icon: Rocket }]
+      ? [
+          { title: "Start Here!", href: "/admin/start-here", icon: Rocket },
+          { title: "Sync History", href: "/admin/aleks-sync-history", icon: History },
+        ]
       : []),
     ...(user.role === "professor"
       ? [{ title: "Upload & Settings", href: "/admin", icon: Upload }]

@@ -18,6 +18,22 @@ function outcomeLabel(outcome: AleksSyncHistoryDay["runs"][number]["outcome"]): 
   }
 }
 
+
+function localTimeLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  })
+}
+
+
+function workflowLabel(kind: AleksSyncHistoryDay["runs"][number]["workflow"]): string {
+  return kind === "pull" ? "Pull" : "Reviewed topics"
+}
+
 function OutcomeIcon({
   outcome,
 }: {
@@ -35,17 +51,30 @@ function OutcomeIcon({
   }
 }
 
-export function AleksSyncHistory() {
+type AleksSyncHistoryProps = {
+  title: string
+  description: string
+  endpoint: string
+  emptyMessage?: string
+  showWorkflowTag?: boolean
+}
+
+export function AleksSyncHistory({
+  title,
+  description,
+  endpoint,
+  emptyMessage = "No workflow history found yet.",
+  showWorkflowTag = false,
+}: AleksSyncHistoryProps) {
   const [days, setDays] = useState<AleksSyncHistoryDay[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [hasFailure, setHasFailure] = useState(false)
 
   const load = async () => {
     setLoading(true)
     setError("")
     try {
-      const response = await fetch("/api/admin/aleks-sync/history", {
+      const response = await fetch(endpoint, {
         credentials: "same-origin",
         cache: "no-store",
       })
@@ -59,7 +88,6 @@ export function AleksSyncHistory() {
         return
       }
       setDays(data.days || [])
-      setHasFailure(Boolean(data.hasFailure))
     } catch {
       setError("Network error loading pull history")
     } finally {
@@ -69,15 +97,16 @@ export function AleksSyncHistory() {
 
   useEffect(() => {
     load()
-  }, [])
+    // endpoint determines which workflow history this card loads
+  }, [endpoint])
 
   return (
     <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-utsa-midnight">ALEKS pull history</h2>
+          <h2 className="text-sm font-semibold text-utsa-midnight">{title}</h2>
           <p className="text-xs text-utsa-muted">
-            Nightly automatic pulls and manual pulls, grouped by day.
+            {description}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -92,11 +121,6 @@ export function AleksSyncHistory() {
         </Button>
       </div>
 
-      {hasFailure && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-          At least one recent pull failed. Please contact the developer.
-        </div>
-      )}
 
       {error && (
         <div className="rounded-md border border-utsa-orange/30 bg-utsa-orange/10 px-3 py-2 text-xs text-utsa-accessible">
@@ -105,7 +129,7 @@ export function AleksSyncHistory() {
       )}
 
       {!error && !loading && days.length === 0 && (
-        <p className="text-sm text-utsa-muted">No pull history found yet.</p>
+        <p className="text-sm text-utsa-muted">{emptyMessage}</p>
       )}
 
       {days.length > 0 && (
@@ -123,10 +147,15 @@ export function AleksSyncHistory() {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <OutcomeIcon outcome={run.outcome} />
-                      <span className="text-utsa-midnight">{run.timeLabel}</span>
+                      <span className="text-utsa-midnight">{localTimeLabel(run.ranAt) || run.timeLabel}</span>
                       <span className="text-xs text-utsa-muted">
                         {run.trigger === "nightly" ? "Nightly" : "Manual"}
                       </span>
+                      {showWorkflowTag && (
+                        <span className="text-xs text-utsa-muted">
+                          {workflowLabel(run.workflow)}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span

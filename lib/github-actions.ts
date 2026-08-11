@@ -19,6 +19,7 @@ export type AleksSyncHistoryRun = {
   id: number
   ranAt: string
   timeLabel: string
+  workflow: "pull" | "reviews"
   trigger: "nightly" | "manual"
   status: string
   conclusion: string | null
@@ -177,6 +178,7 @@ function timeLabelFromIso(iso: string): string {
 export async function getAleksSyncRunHistory(
   workflowFile = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml",
   perPage = 90,
+  workflow: "pull" | "reviews" = "pull",
 ): Promise<AleksSyncHistoryDay[]> {
   const cfg = requireGitHubConfig()
   if (!cfg.ok) throw new Error(cfg.error)
@@ -190,6 +192,7 @@ export async function getAleksSyncRunHistory(
       id: run.id,
       ranAt: run.created_at,
       timeLabel: timeLabelFromIso(run.created_at),
+      workflow,
       trigger: run.event === "schedule" ? "nightly" : "manual",
       status: run.status,
       conclusion: run.conclusion,
