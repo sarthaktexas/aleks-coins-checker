@@ -108,14 +108,14 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays }: Conde
   }
 
   const exemptCount = allDays.filter((d) => d.isExcluded).length
+  const uploadedCount = allDays.filter((d) => d.reason !== "⏳ No data available").length
 
   return (
     <div className="rounded border border-[rgba(3,32,68,0.12)] bg-white p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium text-utsa-muted">Daily Progress</span>
         <span className="text-xs text-utsa-muted">
-          {totalDays} / {periodDays} days
-          {exemptCount > 0 && ` (${exemptCount} exempt)`}
+          {uploadedCount}/{allDays.length} days uploaded
         </span>
       </div>
       <div className="max-w-full overflow-x-auto pb-1">
