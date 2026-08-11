@@ -19,23 +19,13 @@ async function knownSectionsForPeriod(periodKey: string): Promise<string[]> {
   }
 }
 
-type PeriodRowDebug = {
-  periodKey: string
-  startDate: string | null
-  endDate: string | null
-  updatedAt: string | null
-} | null
-
 function normalizeDate(value: unknown): string | null {
   if (!value) return null
   if (typeof value === "string") return value.slice(0, 10)
   return new Date(value as Date).toISOString().slice(0, 10)
 }
 
-async function fetchPeriodFromDb(periodKey: string): Promise<{
-  period: PeriodDateInfo
-  debugRow: PeriodRowDebug
-} | null> {
+async function fetchPeriodFromDb(periodKey: string): Promise<PeriodDateInfo | null> {
   try {
     const row = await sql`
       SELECT period_key, name, start_date, end_date, excluded_dates, updated_at
@@ -44,24 +34,10 @@ async function fetchPeriodFromDb(periodKey: string): Promise<{
       LIMIT 1
     `
     if (row.rows.length === 0) {
-      console.log(`[ALEKS config debug] period=${periodKey} row not found`)
       return null
     }
 
     const r = row.rows[0]
-
-    const debugRow = {
-      periodKey: String(r.period_key),
-      startDate: normalizeDate(r.start_date),
-      endDate: normalizeDate(r.end_date),
-      updatedAt: r.updated_at ? new Date(r.updated_at as string).toISOString() : null,
-    }
-
-    console.log(
-      `[ALEKS config debug] period=${String(r.period_key)} start=${normalizeDate(r.start_date)} end=${normalizeDate(r.end_date)} updatedAt=${
-        r.updated_at ? new Date(r.updated_at as string).toISOString() : "null"
-      }`,
-    )
 
     const startDate = normalizeDate(r.start_date)
     const endDate = normalizeDate(r.end_date)
@@ -70,17 +46,14 @@ async function fetchPeriodFromDb(periodKey: string): Promise<{
     }
 
     return {
-      period: {
-        periodKey: String(r.period_key),
-        name: String(r.name),
-        startDate,
-        endDate,
-        excludedDates: (r.excluded_dates as string[]) || [],
-      },
-      debugRow,
+      periodKey: String(r.period_key),
+      name: String(r.name),
+      startDate,
+      endDate,
+      excludedDates: (r.excluded_dates as string[]) || [],
     }
   } catch (err) {
-    console.error("[ALEKS config debug] failed to read exam_periods row:", err)
+    console.error("Failed to read exam_periods row:", err)
     return null
   }
 }
@@ -106,15 +79,13 @@ export async function GET(request: NextRequest) {
     let source: string
     let latestUploadAt: string | null = null
     let knownSections: string[] = []
-    let debugPeriodRow: PeriodRowDebug = null
 
     if (overridePeriod) {
       const dbPeriod = await fetchPeriodFromDb(overridePeriod)
       if (!dbPeriod) {
         return NextResponse.json({ error: `Period ${overridePeriod} not found` }, { status: 404 })
       }
-      period = dbPeriod.period
-      debugPeriodRow = dbPeriod.debugRow
+      period = dbPeriod
       source = "query"
       knownSections = await knownSectionsForPeriod(overridePeriod)
       const resolved = await resolveActivePeriod()
@@ -139,8 +110,7 @@ export async function GET(request: NextRequest) {
           { status: 404 },
         )
       }
-      period = dbPeriod.period
-      debugPeriodRow = dbPeriod.debugRow
+      period = dbPeriod
       source = resolved.source
       latestUploadAt = resolved.latestUploadAt
       knownSections = resolved.knownSections
@@ -168,7 +138,6 @@ export async function GET(request: NextRequest) {
       reason: window.reason,
       reportStartDate: window.reportStartDate,
       reportEndDate: window.reportEndDate,
-      debugPeriodRow,
     })
   } catch (error) {
     console.error("ALEKS sync config error:", error)
