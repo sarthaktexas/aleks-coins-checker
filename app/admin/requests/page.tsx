@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
-import { AlertCircle, Mail, Clock, User, Calendar, FileText, EyeOff, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle, Mail, Clock, User, Calendar, FileText, EyeOff, RefreshCw } from "lucide-react"
+import { ThinkingOrb } from "thinking-orbs"
 import { isReviewedTopicsOverride, parseOverrideKind } from "@/lib/override-request"
 import { formatLocalDateTime } from "@/lib/datetime"
 import { useAdminAuth } from "@/components/admin-auth-provider"
@@ -33,6 +34,13 @@ type StudentRequest = {
 }
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+const POLL_MS = 3000
+const MAX_POLL_MS = 8 * 60 * 1000
+
+type WorkflowStatus = {
+  phase: "idle" | "starting" | "polling" | "success" | "failure" | "error"
+  summary: string
+}
 
 export default function AdminRequestsPage() {
   const { user } = useAdminAuth()
@@ -50,11 +58,75 @@ export default function AdminRequestsPage() {
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null)
   const [verifyingReviews, setVerifyingReviews] = useState(false)
+  const [reviewStatus, setReviewStatus] = useState<WorkflowStatus>({
+    phase: "idle",
+    summary: "",
+  })
+  const reviewPollStartedAtRef = React.useRef(0)
+  const reviewAbortPollRef = React.useRef(false)
   const [hidePII] = useHidePII()
 
   useEffect(() => {
     loadRequests()
+    return () => {
+      reviewAbortPollRef.current = true
+    }
   }, [])
+
+  const pollReviewStatus = async (params: { runId?: number | null; since?: string }) => {
+    reviewAbortPollRef.current = false
+    reviewPollStartedAtRef.current = Date.now()
+    setReviewStatus({
+      phase: "polling",
+      summary: params.runId ? "Running reviewed-topics verification…" : "Starting reviewed-topics verification…",
+    })
+
+    while (!reviewAbortPollRef.current) {
+      if (Date.now() - reviewPollStartedAtRef.current > MAX_POLL_MS) {
+        setReviewStatus({
+          phase: "error",
+          summary: "Verification is taking too long. Please try again in a few minutes.",
+        })
+        return
+      }
+
+      const qs = params.runId ? `runId=${params.runId}` : `since=${encodeURIComponent(params.since || "")}`
+      const response = await fetch(`/api/admin/aleks-sync/trigger-reviews?${qs}`, {
+        credentials: "same-origin",
+      })
+      if (response.status === 401) {
+        setReviewStatus({ phase: "error", summary: SESSION_EXPIRED })
+        return
+      }
+      const data = await response.json()
+      if (!response.ok) {
+        setReviewStatus({
+          phase: "error",
+          summary: data.error || "Failed to load verification status",
+        })
+        return
+      }
+
+      if (data.runId && !params.runId) params.runId = data.runId
+      if (data.status === "completed") {
+        const ok = data.conclusion === "success"
+        setReviewStatus({
+          phase: ok ? "success" : "failure",
+          summary: ok
+            ? "Reviewed-topics verification succeeded."
+            : "Reviewed-topics verification did not succeed. Please contact the developer to fix it.",
+        })
+        if (ok) await loadRequests()
+        return
+      }
+
+      setReviewStatus({
+        phase: "polling",
+        summary: data.summary || "Running reviewed-topics verification…",
+      })
+      await new Promise((r) => setTimeout(r, POLL_MS))
+    }
+  }
 
   const loadRequests = async () => {
     setIsLoading(true)
@@ -289,6 +361,8 @@ export default function AdminRequestsPage() {
 
     setVerifyingReviews(true)
     setError("")
+    reviewAbortPollRef.current = true
+    setReviewStatus({ phase: "starting", summary: "Starting reviewed-topics verification…" })
 
     try {
       const response = await fetch("/api/admin/aleks-sync/trigger-reviews", {
@@ -298,18 +372,27 @@ export default function AdminRequestsPage() {
 
       if (response.status === 401) {
         setError(SESSION_EXPIRED)
+        setReviewStatus({ phase: "error", summary: SESSION_EXPIRED })
         return
       }
 
       const data = await response.json()
 
       if (response.ok) {
-        alert(data.message || "Review verification workflow started. Check GitHub → Actions.")
+        await pollReviewStatus({
+          runId: data.runId ?? null,
+          since: data.dispatchedAt,
+        })
       } else {
         setError(data.error || "Failed to start review verification")
+        setReviewStatus({
+          phase: "error",
+          summary: data.error || "Failed to start review verification",
+        })
       }
     } catch {
       setError("Network error. Please try again.")
+      setReviewStatus({ phase: "error", summary: "Network error. Please try again." })
     } finally {
       setVerifyingReviews(false)
     }
@@ -470,6 +553,44 @@ export default function AdminRequestsPage() {
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-red-600" />
             <span className="text-red-800 text-sm">{error}</span>
+          </div>
+        </div>
+      )}
+
+      {reviewStatus.phase !== "idle" && (
+        <div
+          className={
+            reviewStatus.phase === "success"
+              ? "rounded-md border border-green-200 bg-green-50 p-3"
+              : reviewStatus.phase === "failure" || reviewStatus.phase === "error"
+                ? "rounded-md border border-red-200 bg-red-50 p-3"
+                : "rounded-md border border-black/5 bg-black/[0.02] p-3"
+          }
+        >
+          <div className="flex items-center gap-2 text-sm">
+            {reviewStatus.phase === "success" ? (
+              <CheckCircle className="h-4 w-4 shrink-0 text-green-700" />
+            ) : reviewStatus.phase === "failure" || reviewStatus.phase === "error" ? (
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-700" />
+            ) : (
+              <ThinkingOrb
+                state="solving"
+                size={20}
+                aria-label="Checking reviewed-topics verification status"
+                className="shrink-0"
+              />
+            )}
+            <p
+              className={
+                reviewStatus.phase === "success"
+                  ? "text-green-800"
+                  : reviewStatus.phase === "failure" || reviewStatus.phase === "error"
+                    ? "text-red-800"
+                    : "text-utsa-midnight"
+              }
+            >
+              {reviewStatus.summary}
+            </p>
           </div>
         </div>
       )}

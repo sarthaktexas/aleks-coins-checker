@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/admin/aleks-sync/check-login?runId=… | ?since=…
- * Poll workflow status + log excerpt for the Start Here UI. Professors only.
+ * Poll workflow status for the Start Here UI. Professors only.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -85,7 +85,6 @@ export async function GET(request: NextRequest) {
           summary: "Starting login check…",
           runId: null,
           conclusion: null,
-          logExcerpt: null,
         })
       }
       runId = run.id
@@ -98,7 +97,6 @@ export async function GET(request: NextRequest) {
       status: snapshot.status,
       conclusion: snapshot.conclusion,
       summary: snapshot.summary,
-      logExcerpt: snapshot.logExcerpt,
       createdAt: snapshot.createdAt,
       updatedAt: snapshot.updatedAt,
     })

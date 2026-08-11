@@ -12,6 +12,23 @@ export type GitHubWorkflowRun = {
   updated_at: string
   name: string
   display_title?: string
+  event?: string
+}
+
+export type AleksSyncHistoryRun = {
+  id: number
+  ranAt: string
+  timeLabel: string
+  trigger: "nightly" | "manual"
+  status: string
+  conclusion: string | null
+  outcome: "success" | "failure" | "running" | "other"
+}
+
+export type AleksSyncHistoryDay = {
+  dateKey: string
+  dayLabel: string
+  runs: AleksSyncHistoryRun[]
 }
 
 export type WorkflowRunSnapshot = {
@@ -57,7 +74,7 @@ export function requireGitHubConfig():
       ok: false,
       status: 503,
       error:
-        "Login check isn't configured yet (missing GitHub access token). Ask the developer to finish setup.",
+        "This workflow isn't configured yet (missing GitHub access token). Ask the developer to finish setup.",
     }
   }
   const repo = getGitHubRepo()
@@ -66,7 +83,7 @@ export function requireGitHubConfig():
       ok: false,
       status: 503,
       error:
-        "Login check isn't configured yet (missing repository name). Ask the developer to finish setup.",
+        "This workflow isn't configured yet (missing repository name). Ask the developer to finish setup.",
     }
   }
   return { ok: true, pat, repo }
@@ -75,6 +92,7 @@ export function requireGitHubConfig():
 export async function dispatchWorkflow(
   workflowFile: string,
   inputs: Record<string, string | boolean> = {},
+  label = "workflow",
 ): Promise<{ ok: true; dispatchedAt: string } | { ok: false; status: number; error: string; details?: string }> {
   const cfg = requireGitHubConfig()
   if (!cfg.ok) return cfg
@@ -97,7 +115,7 @@ export async function dispatchWorkflow(
   return {
     ok: false,
     status: 502,
-    error: `Could not start the login check (${res.status}).`,
+    error: `Could not start ${label} (${res.status}).`,
     details: detail.slice(0, 500),
   }
 }
@@ -106,15 +124,86 @@ async function listWorkflowRuns(
   pat: string,
   repo: string,
   workflowFile: string,
-  perPage = 10,
+  options?: { perPage?: number; event?: string },
 ): Promise<GitHubWorkflowRun[]> {
-  const url = `https://api.github.com/repos/${repo}/actions/workflows/${workflowFile}/runs?per_page=${perPage}&event=workflow_dispatch`
+  const perPage = options?.perPage ?? 10
+  const params = new URLSearchParams({ per_page: String(perPage) })
+  if (options?.event) params.set("event", options.event)
+  const url = `https://api.github.com/repos/${repo}/actions/workflows/${workflowFile}/runs?${params}`
   const res = await fetch(url, { headers: githubHeaders(pat), cache: "no-store" })
   if (!res.ok) {
     throw new Error(`Failed to list workflow runs (${res.status})`)
   }
   const data = (await res.json()) as { workflow_runs?: GitHubWorkflowRun[] }
   return data.workflow_runs || []
+}
+
+function runOutcome(
+  status: string,
+  conclusion: string | null,
+): AleksSyncHistoryRun["outcome"] {
+  if (status !== "completed") return "running"
+  if (conclusion === "success") return "success"
+  if (conclusion === "failure") return "failure"
+  return "other"
+}
+
+function dayLabelFromIso(iso: string): { dateKey: string; dayLabel: string } {
+  const d = new Date(iso)
+  const dateKey = [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-")
+  const dayLabel = d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+  return { dateKey, dayLabel }
+}
+
+function timeLabelFromIso(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  })
+}
+
+/** Recent ALEKS daily sync runs grouped by local calendar day. */
+export async function getAleksSyncRunHistory(
+  workflowFile = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml",
+  perPage = 90,
+): Promise<AleksSyncHistoryDay[]> {
+  const cfg = requireGitHubConfig()
+  if (!cfg.ok) throw new Error(cfg.error)
+
+  const runs = await listWorkflowRuns(cfg.pat, cfg.repo, workflowFile, { perPage })
+  const byDay = new Map<string, AleksSyncHistoryDay>()
+
+  for (const run of runs) {
+    const { dateKey, dayLabel } = dayLabelFromIso(run.created_at)
+    const entry: AleksSyncHistoryRun = {
+      id: run.id,
+      ranAt: run.created_at,
+      timeLabel: timeLabelFromIso(run.created_at),
+      trigger: run.event === "schedule" ? "nightly" : "manual",
+      status: run.status,
+      conclusion: run.conclusion,
+      outcome: runOutcome(run.status, run.conclusion),
+    }
+    const existing = byDay.get(dateKey)
+    if (existing) {
+      existing.runs.push(entry)
+    } else {
+      byDay.set(dateKey, { dateKey, dayLabel, runs: [entry] })
+    }
+  }
+
+  return [...byDay.values()].sort((a, b) => b.dateKey.localeCompare(a.dateKey))
 }
 
 export async function findWorkflowRunSince(
@@ -125,7 +214,10 @@ export async function findWorkflowRunSince(
   if (!cfg.ok) throw new Error(cfg.error)
 
   const sinceMs = new Date(sinceIso).getTime() - 15_000
-  const runs = await listWorkflowRuns(cfg.pat, cfg.repo, workflowFile)
+  const runs = await listWorkflowRuns(cfg.pat, cfg.repo, workflowFile, {
+    perPage: 10,
+    event: "workflow_dispatch",
+  })
   return (
     runs.find((run) => {
       const created = new Date(run.created_at).getTime()

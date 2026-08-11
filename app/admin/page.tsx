@@ -18,10 +18,13 @@ import {
   Coins,
   Download,
   RefreshCw,
+  XCircle,
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
 import { useAdminAuth } from "@/components/admin-auth-provider"
+import { ThinkingOrb } from "thinking-orbs"
+import { AleksSyncHistory } from "@/components/aleks-sync-history"
 
 type ExamPeriodData = {
   name: string
@@ -31,6 +34,13 @@ type ExamPeriodData = {
 }
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+const POLL_MS = 3000
+const MAX_POLL_MS = 8 * 60 * 1000
+
+type WorkflowStatus = {
+  phase: "idle" | "starting" | "polling" | "success" | "failure" | "error"
+  summary: string
+}
 
 export default function AdminPage() {
   const { user } = useAdminAuth()
@@ -48,6 +58,12 @@ export default function AdminPage() {
   const [isDeletingSection, setIsDeletingSection] = useState(false)
   const [showDeleteSectionConfirm, setShowDeleteSectionConfirm] = useState(false)
   const [isPulling, setIsPulling] = useState(false)
+  const [pullStatus, setPullStatus] = useState<WorkflowStatus>({
+    phase: "idle",
+    summary: "",
+  })
+  const pullPollStartedAtRef = useRef(0)
+  const pullAbortPollRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [overridesEnabled, setOverridesEnabled] = useState(true)
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
@@ -71,8 +87,56 @@ export default function AdminPage() {
   useEffect(() => {
     return () => {
       if (settingsFlashTimeoutRef.current) clearTimeout(settingsFlashTimeoutRef.current)
+      pullAbortPollRef.current = true
     }
   }, [])
+
+  const pollAleksPullStatus = async (params: { runId?: number | null; since?: string }) => {
+    pullAbortPollRef.current = false
+    pullPollStartedAtRef.current = Date.now()
+    setPullStatus({
+      phase: "polling",
+      summary: params.runId ? "Running ALEKS pull…" : "Starting ALEKS pull…",
+    })
+
+    while (!pullAbortPollRef.current) {
+      if (Date.now() - pullPollStartedAtRef.current > MAX_POLL_MS) {
+        setPullStatus({
+          phase: "error",
+          summary: "ALEKS pull is taking too long. Please try again in a few minutes.",
+        })
+        return
+      }
+
+      const qs = params.runId ? `runId=${params.runId}` : `since=${encodeURIComponent(params.since || "")}`
+      const response = await fetch(`/api/admin/aleks-sync/trigger?${qs}`, { credentials: "same-origin" })
+      if (response.status === 401) {
+        setPullStatus({ phase: "error", summary: SESSION_EXPIRED })
+        return
+      }
+
+      const data = await response.json()
+      if (!response.ok) {
+        setPullStatus({ phase: "error", summary: data.error || "Failed to load ALEKS pull status" })
+        return
+      }
+
+      if (data.runId && !params.runId) params.runId = data.runId
+      if (data.status === "completed") {
+        const ok = data.conclusion === "success"
+        setPullStatus({
+          phase: ok ? "success" : "failure",
+          summary: ok
+            ? "ALEKS pull succeeded."
+            : "ALEKS pull did not succeed. Please contact the developer to fix it.",
+        })
+        return
+      }
+
+      setPullStatus({ phase: "polling", summary: data.summary || "Running ALEKS pull…" })
+      await new Promise((r) => setTimeout(r, POLL_MS))
+    }
+  }
 
   const loadPeriods = async () => {
     try {
@@ -118,6 +182,7 @@ export default function AdminPage() {
       if (signal.aborted || settingsEpochRef.current !== epoch) return
       if (response.status === 401) {
         setMessage({ type: "error", text: SESSION_EXPIRED })
+        setPullStatus({ phase: "error", summary: SESSION_EXPIRED })
         return
       }
       const data = await response.json()
@@ -369,6 +434,8 @@ export default function AdminPage() {
 
     setIsPulling(true)
     setMessage(null)
+    pullAbortPollRef.current = true
+    setPullStatus({ phase: "starting", summary: "Starting ALEKS pull…" })
 
     try {
       const response = await fetch("/api/admin/aleks-sync/trigger", {
@@ -384,15 +451,17 @@ export default function AdminPage() {
       const result = await response.json()
 
       if (response.ok) {
-        setMessage({
-          type: "success",
-          text: result.message || "ALEKS pull started. Check GitHub Actions for progress.",
+        await pollAleksPullStatus({
+          runId: result.runId ?? null,
+          since: result.dispatchedAt,
         })
       } else {
         setMessage({ type: "error", text: result.error || "Failed to start ALEKS pull" })
+        setPullStatus({ phase: "error", summary: result.error || "Failed to start ALEKS pull" })
       }
     } catch {
       setMessage({ type: "error", text: "Network error. Please try again." })
+      setPullStatus({ phase: "error", summary: "Network error. Please try again." })
     } finally {
       setIsPulling(false)
     }
@@ -662,10 +731,50 @@ export default function AdminPage() {
                 </>
               )}
             </Button>
+
+            {pullStatus.phase !== "idle" && (
+              <div
+                className={
+                  pullStatus.phase === "success"
+                    ? "rounded-md border border-green-200 bg-green-50 p-3"
+                    : pullStatus.phase === "failure" || pullStatus.phase === "error"
+                      ? "rounded-md border border-red-200 bg-red-50 p-3"
+                      : "rounded-md border border-black/5 bg-black/[0.02] p-3"
+                }
+              >
+                <div className="flex items-start gap-2 text-sm">
+                  {pullStatus.phase === "success" ? (
+                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-700" />
+                  ) : pullStatus.phase === "failure" || pullStatus.phase === "error" ? (
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+                  ) : (
+                    <ThinkingOrb
+                      state="solving"
+                      size={20}
+                      aria-label="Checking ALEKS pull status"
+                      className="mt-0.5 shrink-0"
+                    />
+                  )}
+                  <p
+                    className={
+                      pullStatus.phase === "success"
+                        ? "text-green-800"
+                        : pullStatus.phase === "failure" || pullStatus.phase === "error"
+                          ? "text-red-800"
+                          : "text-utsa-midnight"
+                    }
+                  >
+                    {pullStatus.summary}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
       )}
+
+      {isProfessor && <AleksSyncHistory />}
 
       {message && (
         <Alert

@@ -14,6 +14,7 @@ import {
 import { useAdminAuth } from "@/components/admin-auth-provider"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ThinkingOrb } from "thinking-orbs"
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 const POLL_MS = 3000
@@ -22,7 +23,6 @@ const MAX_POLL_MS = 8 * 60 * 1000
 type CheckStatus = {
   phase: "idle" | "starting" | "polling" | "success" | "failure" | "error"
   summary: string
-  logExcerpt: string | null
   runId: number | null
 }
 
@@ -31,7 +31,6 @@ export default function StartHerePage() {
   const [check, setCheck] = useState<CheckStatus>({
     phase: "idle",
     summary: "",
-    logExcerpt: null,
     runId: null,
   })
   const pollStartedAt = useRef<number>(0)
@@ -83,7 +82,6 @@ export default function StartHerePage() {
         setCheck({
           phase: "error",
           summary: SESSION_EXPIRED,
-          logExcerpt: null,
           runId: null,
         })
         return
@@ -93,7 +91,6 @@ export default function StartHerePage() {
         setCheck({
           phase: "error",
           summary: data.error || "Failed to load login check status",
-          logExcerpt: null,
           runId: params.runId ?? null,
         })
         return
@@ -107,8 +104,9 @@ export default function StartHerePage() {
         const ok = data.conclusion === "success"
         setCheck({
           phase: ok ? "success" : "failure",
-          summary: data.summary || (ok ? "ALEKS login succeeded." : "ALEKS login failed."),
-          logExcerpt: data.logExcerpt || null,
+          summary: ok
+            ? "ALEKS login succeeded."
+            : "ALEKS login did not succeed. Please contact the developer to fix it.",
           runId: data.runId ?? params.runId ?? null,
         })
         return
@@ -117,7 +115,6 @@ export default function StartHerePage() {
       setCheck({
         phase: "polling",
         summary: data.summary || "Running — checking ALEKS login…",
-        logExcerpt: null,
         runId: data.runId ?? params.runId ?? null,
       })
 
@@ -130,7 +127,6 @@ export default function StartHerePage() {
     setCheck({
       phase: "starting",
       summary: "Starting login check…",
-      logExcerpt: null,
       runId: null,
     })
 
@@ -143,7 +139,6 @@ export default function StartHerePage() {
         setCheck({
           phase: "error",
           summary: SESSION_EXPIRED,
-          logExcerpt: null,
           runId: null,
         })
         return
@@ -153,7 +148,6 @@ export default function StartHerePage() {
         setCheck({
           phase: "error",
           summary: result.error || "Failed to start login check",
-          logExcerpt: null,
           runId: null,
         })
         return
@@ -167,7 +161,6 @@ export default function StartHerePage() {
       setCheck({
         phase: "error",
         summary: "Network error. Please try again.",
-        logExcerpt: null,
         runId: null,
       })
     }
@@ -232,7 +225,12 @@ export default function StartHerePage() {
                     ) : check.phase === "failure" || check.phase === "error" ? (
                       <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
                     ) : (
-                      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-utsa-orange" />
+                      <ThinkingOrb
+                        state="solving"
+                        size={20}
+                        aria-label="Checking ALEKS login status"
+                        className="mt-0.5 shrink-0"
+                      />
                     )}
                     <p
                       className={
@@ -246,11 +244,6 @@ export default function StartHerePage() {
                       {check.summary}
                     </p>
                   </div>
-                  {check.logExcerpt && (
-                    <pre className="max-h-48 overflow-auto rounded bg-white/80 p-2 text-xs leading-relaxed text-utsa-midnight whitespace-pre-wrap break-words">
-                      {check.logExcerpt}
-                    </pre>
-                  )}
                 </div>
               )}
             </div>

@@ -1,7 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
+import {
+  dispatchWorkflow,
+  findWorkflowRunSince,
+  getWorkflowRunSnapshot,
+  requireGitHubConfig,
+} from "@/lib/github-actions"
 
 export const dynamic = "force-dynamic"
+const WORKFLOW_FILE = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml"
 
 /**
  * POST /api/admin/aleks-sync/trigger
@@ -29,79 +36,100 @@ export async function POST(request: NextRequest) {
       // empty body is fine
     }
 
-    const pat = process.env.GITHUB_SYNC_PAT || process.env.GITHUB_TOKEN
-    if (!pat) {
-      return NextResponse.json(
-        {
-          error:
-            "GITHUB_SYNC_PAT is not configured. Add a GitHub PAT with Actions write access to Vercel env, or run the workflow from the Actions tab.",
-        },
-        { status: 503 },
-      )
-    }
-
-    const repo =
-      process.env.GITHUB_REPO ||
-      (process.env.VERCEL_GIT_REPO_OWNER && process.env.VERCEL_GIT_REPO_SLUG
-        ? `${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}`
-        : null)
-
-    if (!repo) {
-      return NextResponse.json(
-        { error: "GITHUB_REPO is not configured (expected owner/repo)" },
-        { status: 503 },
-      )
-    }
-
-    const workflowFile = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml"
-    const url = `https://api.github.com/repos/${repo}/actions/workflows/${workflowFile}/dispatches`
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${pat}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ref: process.env.ALEKS_SYNC_REF || "main",
-        inputs: {
-          period: period || "",
-          force: force ? "true" : "false",
-        },
-      }),
-    })
-
-    if (res.status === 204) {
-      const bits = [
-        force ? "forced" : null,
-        period ? `period=${period}` : "auto period",
-      ].filter(Boolean)
-      return NextResponse.json({
-        success: true,
-        message: `ALEKS sync workflow dispatched on ${repo} (${bits.join(", ")}). Check GitHub → Actions for progress.`,
-        repo,
-        workflow: workflowFile,
-        period: period || null,
-        force,
-        actionsUrl: `https://github.com/${repo}/actions/workflows/${workflowFile}`,
-      })
-    }
-
-    const detail = await res.text()
-    return NextResponse.json(
-      {
-        error: `GitHub dispatch failed (${res.status})`,
-        details: detail.slice(0, 500),
-      },
-      { status: 502 },
+    const result = await dispatchWorkflow(
+      WORKFLOW_FILE,
+      { period: period || "", force: force ? "true" : "false" },
+      "ALEKS pull",
     )
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, details: "details" in result ? result.details : undefined },
+        { status: result.status },
+      )
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "ALEKS pull started. Status will appear below.",
+      workflow: WORKFLOW_FILE,
+      dispatchedAt: result.dispatchedAt,
+      runId: null,
+      period: period || null,
+      force,
+    })
   } catch (error) {
     console.error("ALEKS sync trigger error:", error)
     return NextResponse.json(
       {
         error: "Failed to trigger ALEKS sync",
+        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
+      },
+      { status: 500 },
+    )
+  }
+}
+
+/**
+ * GET /api/admin/aleks-sync/trigger?runId=… | ?since=…
+ * Poll ALEKS pull workflow status for in-app professor UI.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const session = await requireAdmin(request)
+    if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
+
+    const cfg = requireGitHubConfig()
+    if (!cfg.ok) {
+      return NextResponse.json({ error: cfg.error }, { status: cfg.status })
+    }
+
+    const runIdParam = request.nextUrl.searchParams.get("runId")
+    const since = request.nextUrl.searchParams.get("since")
+    let runId = runIdParam ? Number(runIdParam) : NaN
+
+    if (!Number.isFinite(runId)) {
+      if (!since) {
+        return NextResponse.json({ error: "Provide runId or since to check status" }, { status: 400 })
+      }
+      const run = await findWorkflowRunSince(WORKFLOW_FILE, since)
+      if (!run) {
+        return NextResponse.json({
+          waiting: true,
+          status: "waiting",
+          summary: "Starting ALEKS pull…",
+          runId: null,
+          conclusion: null,
+        })
+      }
+      runId = run.id
+    }
+
+    const snapshot = await getWorkflowRunSnapshot(runId, { includeLogs: false })
+    const done = snapshot.status === "completed"
+    const summary = done
+      ? snapshot.conclusion === "success"
+        ? "ALEKS pull succeeded."
+        : "ALEKS pull did not succeed. Please contact the developer to fix it."
+      : snapshot.status === "queued" || snapshot.status === "waiting" || snapshot.status === "requested" || snapshot.status === "pending"
+        ? "Queued — waiting to start ALEKS pull…"
+        : "Running ALEKS pull…"
+
+    return NextResponse.json({
+      waiting: !done,
+      runId: snapshot.runId,
+      status: snapshot.status,
+      conclusion: snapshot.conclusion,
+      summary,
+      createdAt: snapshot.createdAt,
+      updatedAt: snapshot.updatedAt,
+    })
+  } catch (error) {
+    console.error("ALEKS sync status error:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to load ALEKS pull status",
         details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
       },
       { status: 500 },
