@@ -9,42 +9,59 @@ import {
 
 export const dynamic = "force-dynamic"
 
-async function getMinutesForRequest(
-  studentId: string,
+type StudentSliceRow = {
+  period: string
+  section_number: string
+  uploaded_at: Date | string
+  student: unknown
+}
+
+/** One student's JSON slice per upload row — avoids pulling entire class blobs (Neon egress). */
+async function loadStudentSlices(studentId: string): Promise<StudentSliceRow[]> {
+  const normalizedId = studentId.toLowerCase().trim()
+  const result = await sql`
+    SELECT
+      period,
+      COALESCE(section_number, 'default') AS section_number,
+      uploaded_at,
+      data->${normalizedId} AS student
+    FROM student_data
+    WHERE data ? ${normalizedId}
+    ORDER BY uploaded_at DESC
+  `
+  return result.rows as StudentSliceRow[]
+}
+
+function minutesFromSlices(
+  rows: StudentSliceRow[],
   dayNumber: number | null,
   overrideDate: string | null,
   period: string | null,
-): Promise<number> {
-  const result = await sql`
-    SELECT 
-      period,
-      COALESCE(section_number, 'default') as section_number,
-      data,
-      uploaded_at
-    FROM student_data 
-    ORDER BY uploaded_at DESC
-  `
-
-  if (result.rows.length === 0) return 0
+): number {
+  if (rows.length === 0) return 0
 
   const normalizedDate = (overrideDate || "").trim()
-  const normalizedId = studentId.toLowerCase().trim()
-
-  const matchingPeriodRows = period ? result.rows.filter((row: any) => row.period === period) : []
-  const rowsToSearch = matchingPeriodRows.length > 0 ? matchingPeriodRows : result.rows
+  const matchingPeriodRows = period ? rows.filter((row) => row.period === period) : []
+  const rowsToSearch = matchingPeriodRows.length > 0 ? matchingPeriodRows : rows
 
   for (const row of rowsToSearch) {
-    const rowStudentData = typeof row.data === "string" ? JSON.parse(row.data) : row.data
-    const student = rowStudentData[normalizedId]
+    let student = row.student as { dailyLog?: Array<{ date?: string; day?: number; minutes?: number }> } | null
+    if (typeof student === "string") {
+      try {
+        student = JSON.parse(student)
+      } catch {
+        continue
+      }
+    }
     if (!student?.dailyLog) continue
 
     if (normalizedDate) {
-      const byDate = student.dailyLog.find((d: any) => d.date === normalizedDate)
+      const byDate = student.dailyLog.find((d) => d.date === normalizedDate)
       if (byDate && byDate.minutes !== undefined) return byDate.minutes || 0
     }
 
     if (dayNumber != null) {
-      const byDay = student.dailyLog.find((d: any) => d.day === dayNumber)
+      const byDay = student.dailyLog.find((d) => d.day === dayNumber)
       if (byDay && byDay.minutes !== undefined) return byDay.minutes || 0
     }
   }
@@ -52,10 +69,27 @@ async function getMinutesForRequest(
   return 0
 }
 
+async function getMinutesForRequest(
+  studentId: string,
+  dayNumber: number | null,
+  overrideDate: string | null,
+  period: string | null,
+  sliceCache?: Map<string, StudentSliceRow[]>,
+): Promise<number> {
+  const key = studentId.toLowerCase().trim()
+  let rows = sliceCache?.get(key)
+  if (!rows) {
+    rows = await loadStudentSlices(key)
+    sliceCache?.set(key, rows)
+  }
+  return minutesFromSlices(rows, dayNumber, overrideDate, period)
+}
+
 /**
  * GET /api/admin/aleks-sync/review-overrides
  * Pending override requests marked as reviewed_topics (for timeline verification).
  * Auth: Bearer IMPORT_API_TOKEN
+ * Optional ?countOnly=1 — return count only (cheap probe for Actions preflight).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -65,6 +99,10 @@ export async function GET(request: NextRequest) {
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
+
+    const countOnly =
+      request.nextUrl.searchParams.get("countOnly") === "1" ||
+      request.nextUrl.searchParams.get("countOnly") === "true"
 
     const pending = await sql`
       SELECT
@@ -86,15 +124,24 @@ export async function GET(request: NextRequest) {
       ORDER BY submitted_at ASC
     `
 
-    const requests = []
-    for (const row of pending.rows) {
-      if (!isReviewedTopicsOverride(row.request_details)) continue
+    const reviewedRows = pending.rows.filter((row) => isReviewedTopicsOverride(row.request_details))
 
+    if (countOnly) {
+      return NextResponse.json({
+        success: true,
+        count: reviewedRows.length,
+      })
+    }
+
+    const sliceCache = new Map<string, StudentSliceRow[]>()
+    const requests = []
+    for (const row of reviewedRows) {
       const minutes = await getMinutesForRequest(
         row.student_id,
         row.day_number,
         row.override_date,
         row.period,
+        sliceCache,
       )
 
       requests.push({
@@ -192,6 +239,7 @@ export async function POST(request: NextRequest) {
     let notedCount = 0
     let skippedCount = 0
     const details: Array<Record<string, unknown>> = []
+    const sliceCache = new Map<string, StudentSliceRow[]>()
 
     for (const result of results) {
       const requestId = Number(result.requestId)
@@ -239,7 +287,13 @@ export async function POST(request: NextRequest) {
       const minutes =
         typeof result.minutes === "number"
           ? result.minutes
-          : await getMinutesForRequest(row.student_id, row.day_number, row.override_date, row.period)
+          : await getMinutesForRequest(
+              row.student_id,
+              row.day_number,
+              row.override_date,
+              row.period,
+              sliceCache,
+            )
 
       const reviewedTopics =
         typeof result.reviewedTopics === "number" && Number.isFinite(result.reviewedTopics)

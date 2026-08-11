@@ -17,6 +17,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: aleks-daily-sync
+  cancel-in-progress: true
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -25,6 +29,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/aleks-sync
 
       - name: Setup Node
         uses: actions/setup-node@v4

@@ -6,16 +6,39 @@ on:
     - cron: "0 13 * * *"
   workflow_dispatch:
 
+concurrency:
+  group: aleks-review-overrides
+  cancel-in-progress: true
+
 jobs:
   verify-reviews:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
+      - name: Check for pending review overrides
+        id: pending
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          IMPORT_API_TOKEN: ${{ secrets.IMPORT_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -fsS -H "Authorization: Bearer ${IMPORT_API_TOKEN}" \
+            "${APP_URL%/}/api/admin/aleks-sync/review-overrides?countOnly=1")
+          count=$(echo "$resp" | jq -r '.count // 0')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Pending reviewed-topics overrides: $count"
+
       - name: Checkout
+        if: steps.pending.outputs.count != '0'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/aleks-sync
 
       - name: Setup Node
+        if: steps.pending.outputs.count != '0'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -23,18 +46,21 @@ jobs:
           cache-dependency-path: scripts/aleks-sync/package-lock.json
 
       - name: Cache Playwright browser
+        if: steps.pending.outputs.count != '0'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('scripts/aleks-sync/package-lock.json') }}
 
       - name: Install sync dependencies
+        if: steps.pending.outputs.count != '0'
         working-directory: scripts/aleks-sync
         run: |
           npm install
           npx playwright install chromium
 
       - name: Verify reviewed-topics overrides
+        if: steps.pending.outputs.count != '0'
         working-directory: scripts/aleks-sync
         env:
           ALEKS_USERNAME: ${{ secrets.ALEKS_USERNAME }}
@@ -44,7 +70,7 @@ jobs:
         run: npm run verify-reviews
 
       - name: Upload debug artifacts
-        if: failure()
+        if: failure() && steps.pending.outputs.count != '0'
         uses: actions/upload-artifact@v4
         with:
           name: aleks-review-verify-debug
