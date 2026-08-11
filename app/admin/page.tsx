@@ -904,13 +904,6 @@ export default function AdminPage() {
         )}
       </div>
 
-      <div className="rounded-md border border-utsa-border bg-utsa-surface p-4 text-xs text-utsa-muted">
-        <p className="mb-1 font-medium text-utsa-midnight">Excel tips</p>
-        <p>
-          Include Student ID, Name, Email, plus Day N Minutes / Day N Topics columns. Exempt days
-          come from the selected period.
-        </p>
-      </div>
       </>
       )}
     </div>
