@@ -507,7 +507,7 @@ export default function AdminPage() {
       </div>
 
       {isProfessor && (
-      <div className="space-y-4 rounded-md border border-utsa-border bg-white p-4 dark:bg-card">
+      <div className="space-y-4 rounded-md border border-utsa-border bg-white p-4">
         <div className="space-y-1.5">
           <Label>Upload method</Label>
           <div
@@ -801,7 +801,7 @@ export default function AdminPage() {
         </Alert>
       )}
 
-      <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4 dark:bg-card">
+      <div className="space-y-3 rounded-md border border-utsa-border bg-white p-4">
         <h2 className="text-sm font-semibold text-utsa-midnight">Settings</h2>
 
         <div className="flex items-center justify-between gap-4 border-b border-utsa-border py-3">
@@ -861,7 +861,7 @@ export default function AdminPage() {
 
       {isProfessor && (
       <>
-      <div className="rounded-md border border-utsa-border bg-white p-4 dark:bg-card">
+      <div className="rounded-md border border-utsa-border bg-white p-4">
         <div className="mb-3 flex items-center gap-2">
           <Trash2 className="h-4 w-4 text-utsa-accessible" />
           <h2 className="text-sm font-semibold text-utsa-midnight">Danger zone</h2>
