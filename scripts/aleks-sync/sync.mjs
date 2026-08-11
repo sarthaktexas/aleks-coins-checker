@@ -39,7 +39,17 @@ async function fetchSyncConfig(appUrl, token, { period, force } = {}) {
   if (period) params.set("period", period)
   if (force) params.set("force", "1")
   const qs = params.toString()
-  return fetchJson(appUrl, token, `/api/admin/aleks-sync/config${qs ? `?${qs}` : ""}`)
+  const endpoint = `/api/admin/aleks-sync/config${qs ? `?${qs}` : ""}`
+  const base = appUrl.replace(/\/$/, "")
+  let appHost = "(invalid APP_URL)"
+  try {
+    appHost = new URL(base).host
+  } catch {
+    /* keep placeholder */
+  }
+  console.log(`Sync config source host: ${appHost}`)
+  console.log(`Sync config request path: ${endpoint}`)
+  return fetchJson(appUrl, token, endpoint)
 }
 
 async function importReport(appUrl, token, { filePath, examPeriod, sectionNumber }) {
