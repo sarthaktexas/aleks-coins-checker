@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -52,6 +52,16 @@ export default function AnalyticsPage() {
   useEffect(() => {
     loadAnalytics()
   }, [])
+
+  const selectedPeriodData = useMemo(() => {
+    if (!selectedPeriod) return null
+    return analytics.find((p) => p.period === selectedPeriod) ?? null
+  }, [analytics, selectedPeriod])
+
+  const chartData = useMemo(
+    () => (selectedPeriodData ? [selectedPeriodData] : []),
+    [selectedPeriodData],
+  )
 
   const loadAnalytics = async () => {
     setIsLoadingAnalytics(true)
@@ -141,30 +151,26 @@ export default function AnalyticsPage() {
               )}
 
               {/* Selected Period Analytics */}
-              {selectedPeriod && (() => {
-                const period = analytics.find(p => p.period === selectedPeriod)
-                if (!period) return null
-                
-                return (
+              {selectedPeriodData && (
                   <div className="space-y-4">
                     {/* Period Header */}
                     <div className="flex items-center justify-between p-4 bg-utsa-surface rounded-md">
                       <div>
                         <h3 className="font-semibold text-utsa-midnight">
-                          {period.periodName ?? period.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {selectedPeriodData.periodName ?? selectedPeriodData.period.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </h3>
                         <p className="text-sm text-utsa-muted">
-                          Sections {period.sections.join(', ')} • {period.totalStudents} students
+                          Sections {selectedPeriodData.sections.join(', ')} • {selectedPeriodData.totalStudents} students
                         </p>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center gap-2 text-sm text-utsa-midnight">
                           <TrendingUp className="h-4 w-4" />
-                          <span className="font-medium">{period.averageCompletion}% avg completion</span>
+                          <span className="font-medium">{selectedPeriodData.averageCompletion}% avg completion</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-utsa-muted">
                           <Clock className="h-4 w-4" />
-                          <span>{period.averageTime.toFixed(1)} min avg time</span>
+                          <span>{selectedPeriodData.averageTime.toFixed(1)} min avg time</span>
                         </div>
                       </div>
                     </div>
@@ -176,13 +182,13 @@ export default function AnalyticsPage() {
                         Completion Trends Over Time
                       </h4>
                       <div className="w-full h-96 bg-white rounded-md p-4">
-                        <CompletionChart data={[period]} />
+                        <CompletionChart data={chartData} />
                       </div>
                     </div>
 
                     {/* Day-by-day stats as bar charts */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                      {period.dayStats.map((day) => {
+                      {selectedPeriodData.dayStats.map((day) => {
                         const completionPercent = Math.min(100, Math.max(0, day.averageCompletion))
                         const isExempt = day.isExcluded
                         
@@ -236,7 +242,7 @@ export default function AnalyticsPage() {
                                 {day.sectionData.length > 1 && (
                                   <div className="pt-1 border-t border-utsa-border">
                                     <div className="text-xs text-utsa-muted">
-                                      {day.sectionData.map((section, idx) => (
+                                      {day.sectionData.map((section) => (
                                         <div key={section.sectionNumber} className="flex justify-between">
                                           <span>Sec {section.sectionNumber}:</span>
                                           <span className="font-medium">{section.completion.toFixed(0)}%</span>
@@ -252,8 +258,7 @@ export default function AnalyticsPage() {
                       })}
                     </div>
                   </div>
-                )
-              })()}
+              )}
             </CardContent>
           </Card>
         )}

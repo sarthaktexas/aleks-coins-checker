@@ -39,42 +39,56 @@ interface CompletionChartProps {
 export function CompletionChart({ data, width = 800, height = 400 }: CompletionChartProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const lastSizeRef = useRef<{ w: number; h: number } | null>(null)
+  const lastDataKeyRef = useRef<string | null>(null)
+  const dataRef = useRef(data)
+  dataRef.current = data
+
+  // Identity for "real" data changes — ignore parent re-renders that pass a new array wrapper
+  const dataKey = data[0]
+    ? `${data[0].period}:${data[0].dayStats.length}:${data[0].sections.join(",")}`
+    : ""
 
   useEffect(() => {
-    if (!data.length || !svgRef.current || !containerRef.current) return
+    if (!dataKey || !svgRef.current || !containerRef.current) return
 
-    const createChart = () => {
+    const createChart = (animate: boolean) => {
+      const chartData = dataRef.current
+      if (!chartData.length || !svgRef.current || !containerRef.current) return
+
       const svg = d3.select(svgRef.current)
-      svg.selectAll("*").remove() // Clear previous chart
+      svg.interrupt()
+      svg.selectAll("*").interrupt()
+      svg.selectAll("*").remove()
 
-      // Get container dimensions
-      const containerRect = containerRef.current!.getBoundingClientRect()
+      const containerRect = containerRef.current.getBoundingClientRect()
       const containerWidth = containerRect.width || width
-      const containerHeight = Math.min(containerRect.height || height, 400) // Max height of 400px
+      const containerHeight = Math.min(containerRect.height || height, 400)
 
-      // Update SVG dimensions to fit container
+      lastSizeRef.current = {
+        w: Math.round(containerWidth),
+        h: Math.round(containerHeight),
+      }
+
       svg.attr("width", containerWidth).attr("height", containerHeight)
 
       const margin = { top: 20, right: 80, bottom: 110, left: 60 }
       const innerWidth = containerWidth - margin.left - margin.right
       const innerHeight = containerHeight - margin.top - margin.bottom
 
-      // Create scales
       const xScale = d3.scaleLinear()
-        .domain(d3.extent(data[0].dayStats, d => d.day) as [number, number])
+        .domain(d3.extent(chartData[0].dayStats, d => d.day) as [number, number])
         .range([0, innerWidth])
 
       const yScale = d3.scaleLinear()
         .domain([0, 100])
         .range([innerHeight, 0])
 
-      // Create line generator
       const line = d3.line<DayData>()
         .x(d => xScale(d.day))
         .y(d => yScale(d.averageCompletion))
         .curve(d3.curveMonotoneX)
 
-      // Create section line generators
       const sectionLine = (sectionNumber: string) => d3.line<DayData>()
         .x(d => xScale(d.day))
         .y(d => {
@@ -83,11 +97,9 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         })
         .curve(d3.curveMonotoneX)
 
-      // Create main group
       const g = svg.append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`)
 
-      // Add grid lines
       g.append("g")
         .attr("class", "grid")
         .attr("transform", `translate(0,${innerHeight})`)
@@ -107,24 +119,20 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         .style("stroke-dasharray", "3,3")
         .style("opacity", 0.3)
 
-      // Add primary x-axis (Day numbers)
       g.append("g")
         .attr("transform", `translate(0,${innerHeight})`)
         .call(d3.axisBottom(xScale))
 
-      // Add secondary x-axis (Days of week)
       const dayOfWeekScale = d3.scaleLinear()
-        .domain(d3.extent(data[0].dayStats, d => d.day) as [number, number])
+        .domain(d3.extent(chartData[0].dayStats, d => d.day) as [number, number])
         .range([0, innerWidth])
 
-      // Create day of week labels
-      const dayLabels = data[0].dayStats.map(d => {
-        // Parse date manually to avoid timezone issues
+      const dayLabels = chartData[0].dayStats.map(d => {
         const [year, month, day] = d.date.split('-').map(Number)
-        const date = new Date(year, month - 1, day) // Manual parsing (month is 0-indexed)
-        const dayOfWeek = date.getDay() // 0 = Sunday, 1 = Monday, etc.
-        const dayNames = ['S', 'M', 'T', 'W', 'R', 'F', 'S'] // Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday
-        
+        const date = new Date(year, month - 1, day)
+        const dayOfWeek = date.getDay()
+        const dayNames = ['S', 'M', 'T', 'W', 'R', 'F', 'S']
+
         return {
           day: d.day,
           dayOfWeek: dayNames[dayOfWeek],
@@ -132,7 +140,6 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         }
       })
 
-      // Add secondary x-axis for days of week
       g.append("g")
         .attr("transform", `translate(0,${innerHeight + 35})`)
         .selectAll("text")
@@ -146,7 +153,6 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         .style("fill", "#6b7280")
         .text(d => d.dayOfWeek)
 
-      // Add "Day" label below the days of week
       g.append("text")
         .attr("x", innerWidth / 2)
         .attr("y", innerHeight + 55)
@@ -166,97 +172,99 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         .style("font-size", "12px")
         .text("Completion %")
 
-      // Color scale for sections
       const colorScale = d3.scaleOrdinal<string, string>()
-        .domain(data[0].sections)
+        .domain(chartData[0].sections)
         .range(["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ef4444"])
 
-      // Draw section lines with animation
-      data[0].sections.forEach(sectionNumber => {
+      chartData[0].sections.forEach(sectionNumber => {
         const path = g.append("path")
-          .datum(data[0].dayStats)
+          .datum(chartData[0].dayStats)
           .attr("fill", "none")
           .attr("stroke", colorScale(sectionNumber))
           .attr("stroke-width", 2)
           .style("opacity", 0.8)
-          .attr("d", sectionLine(sectionNumber)) // Set the path data first
+          .attr("d", sectionLine(sectionNumber))
 
-        // Animate the line drawing
-        const totalLength = path.node()?.getTotalLength() || 0
-        if (totalLength > 0) {
-          path
-            .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
-            .attr("stroke-dashoffset", totalLength)
-            .transition()
-            .duration(1500)
-            .ease(d3.easeLinear)
-            .attr("stroke-dashoffset", 0)
-            .on("end", () => {
-              path.attr("stroke-dasharray", "none")
-            })
+        if (animate) {
+          const totalLength = path.node()?.getTotalLength() || 0
+          if (totalLength > 0) {
+            path
+              .attr("stroke-dasharray", `${totalLength} ${totalLength}`)
+              .attr("stroke-dashoffset", totalLength)
+              .transition()
+              .duration(1500)
+              .ease(d3.easeLinear)
+              .attr("stroke-dashoffset", 0)
+              .on("end", () => {
+                path.attr("stroke-dasharray", "none")
+              })
+          }
         }
       })
 
-      // Draw combined line with animation
       const combinedPath = g.append("path")
-        .datum(data[0].dayStats)
+        .datum(chartData[0].dayStats)
         .attr("fill", "none")
         .attr("stroke", "#1f2937")
         .attr("stroke-width", 3)
         .style("opacity", 1)
-        .attr("d", line) // Set the path data first
+        .attr("d", line)
 
-      // Animate the combined line drawing
-      const combinedTotalLength = combinedPath.node()?.getTotalLength() || 0
-      if (combinedTotalLength > 0) {
-        combinedPath
-          .attr("stroke-dasharray", `${combinedTotalLength} ${combinedTotalLength}`)
-          .attr("stroke-dashoffset", combinedTotalLength)
-          .transition()
-          .duration(2000)
-          .ease(d3.easeLinear)
-          .attr("stroke-dashoffset", 0)
-          .on("end", () => {
-            combinedPath.attr("stroke-dasharray", "none")
-          })
+      if (animate) {
+        const combinedTotalLength = combinedPath.node()?.getTotalLength() || 0
+        if (combinedTotalLength > 0) {
+          combinedPath
+            .attr("stroke-dasharray", `${combinedTotalLength} ${combinedTotalLength}`)
+            .attr("stroke-dashoffset", combinedTotalLength)
+            .transition()
+            .duration(2000)
+            .ease(d3.easeLinear)
+            .attr("stroke-dashoffset", 0)
+            .on("end", () => {
+              combinedPath.attr("stroke-dasharray", "none")
+            })
+        }
       }
 
-      // Add dots for data points with animation
-      g.selectAll(".dot")
-        .data(data[0].dayStats)
+      const dots = g.selectAll(".dot")
+        .data(chartData[0].dayStats)
         .enter().append("circle")
         .attr("class", "dot")
         .attr("cx", d => xScale(d.day))
         .attr("cy", d => yScale(d.averageCompletion))
-        .attr("r", 0) // Start with radius 0
-        .attr("fill", d => d.isExcluded ? "#9ca3af" : "#1f2937") // Gray for exempt days, dark for regular
-        .attr("stroke", d => d.isExcluded ? "#6b7280" : "white") // Darker gray border for exempt days
-        .attr("stroke-width", d => d.isExcluded ? 2 : 1) // Thicker border for exempt days
+        .attr("fill", d => d.isExcluded ? "#9ca3af" : "#1f2937")
+        .attr("stroke", d => d.isExcluded ? "#6b7280" : "white")
+        .attr("stroke-width", d => d.isExcluded ? 2 : 1)
         .style("cursor", "pointer")
-        .on("mouseover", function(event, d: DayData) {
+        .on("mouseover", function(_event, d: DayData) {
           d3.select(this)
             .transition()
             .duration(200)
             .attr("r", 5)
             .attr("stroke-width", d.isExcluded ? 3 : 2)
         })
-        .on("mouseout", function(event, d: DayData) {
+        .on("mouseout", function(_event, d: DayData) {
           d3.select(this)
             .transition()
             .duration(200)
             .attr("r", 3)
             .attr("stroke-width", d.isExcluded ? 2 : 1)
         })
-        .transition()
-        .delay((d, i) => i * 100) // Stagger the animation
-        .duration(500)
-        .attr("r", 3)
 
-      // Add legend
+      if (animate) {
+        dots
+          .attr("r", 0)
+          .transition()
+          .delay((_d, i) => i * 100)
+          .duration(500)
+          .attr("r", 3)
+      } else {
+        dots.attr("r", 3)
+      }
+
       const legend = g.append("g")
         .attr("transform", `translate(${innerWidth - 150}, 20)`)
 
-      // Combined line legend
       legend.append("line")
         .attr("x1", 0)
         .attr("x2", 20)
@@ -272,8 +280,7 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
         .style("font-size", "12px")
         .text("Combined")
 
-      // Section legends
-      data[0].sections.forEach((sectionNumber, i) => {
+      chartData[0].sections.forEach((sectionNumber, i) => {
         const legendItem = legend.append("g")
           .attr("transform", `translate(0, ${(i + 1) * 20})`)
 
@@ -294,25 +301,50 @@ export function CompletionChart({ data, width = 800, height = 400 }: CompletionC
       })
     }
 
-    // Create initial chart
-    createChart()
+    // Defer initial draw so React Strict Mode's effect remount cancels the first
+    // frame and we only animate once in development. Observe resize only after
+    // the first draw so the observer's initial callback can't race it.
+    let cancelled = false
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
 
-    // Add resize observer
     const resizeObserver = new ResizeObserver(() => {
-      createChart()
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (cancelled || !containerRef.current) return
+        const rect = containerRef.current.getBoundingClientRect()
+        const next = {
+          w: Math.round(rect.width),
+          h: Math.round(Math.min(rect.height || height, 400)),
+        }
+        const prev = lastSizeRef.current
+        if (prev && prev.w === next.w && prev.h === next.h) return
+        createChart(false)
+      }, 150)
     })
 
-    if (containerRef.current) {
+    const frame = requestAnimationFrame(() => {
+      if (cancelled || !containerRef.current) return
+      const animate = lastDataKeyRef.current !== dataKey
+      createChart(animate)
+      lastDataKeyRef.current = dataKey
       resizeObserver.observe(containerRef.current)
-    }
+    })
 
     return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+      if (resizeTimer) clearTimeout(resizeTimer)
       resizeObserver.disconnect()
+      if (svgRef.current) {
+        const svg = d3.select(svgRef.current)
+        svg.interrupt()
+        svg.selectAll("*").interrupt()
+      }
     }
-  }, [data, width, height])
+  }, [dataKey, width, height])
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="w-full h-full min-h-[300px] flex items-center justify-center"
     >
