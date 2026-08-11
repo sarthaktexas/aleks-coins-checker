@@ -435,7 +435,7 @@ export default function AdminCoinAdjustmentsPage() {
                           {hidePII ? getFakeDataForStudent(adjustment.student_id).name : adjustment.student_name}
                         </h3>
                         <Badge 
-                          className={adjustment.adjustment_amount >= 0 ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
+                          className={adjustment.adjustment_amount >= 0 ? "bg-green-500 hover:bg-green-600 text-white" : "bg-red-500 hover:bg-red-600 text-white"}
                         >
                           {adjustment.adjustment_amount >= 0 ? '+' : ''}{adjustment.adjustment_amount} coins
                         </Badge>

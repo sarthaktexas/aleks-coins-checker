@@ -155,10 +155,10 @@ export default function AdminLeaderboardPage() {
   }
 
   const getRankBadgeColor = (rank: number) => {
-    if (rank === 1) return "bg-yellow-500 hover:bg-yellow-600"
-    if (rank === 2) return "bg-gray-400 hover:bg-gray-500"
-    if (rank === 3) return "bg-amber-600 hover:bg-amber-700"
-    return "bg-utsa-orange"
+    if (rank === 1) return "bg-yellow-500 hover:bg-yellow-600 text-white"
+    if (rank === 2) return "bg-gray-400 hover:bg-gray-500 text-white"
+    if (rank === 3) return "bg-amber-600 hover:bg-amber-700 text-white"
+    return "bg-utsa-orange text-white"
   }
 
   return (

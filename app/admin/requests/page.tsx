@@ -359,11 +359,11 @@ export default function AdminRequestsPage() {
     switch (type) {
       case 'assignment_replacement':
       case 'quiz_replacement':
-        return 'bg-green-500 hover:bg-green-600'
+        return 'bg-green-500 hover:bg-green-600 text-white'
       case 'override_request':
-        return 'bg-utsa-orange'
+        return 'bg-utsa-orange text-white'
       default:
-        return 'bg-slate-500 hover:bg-slate-600'
+        return 'bg-slate-500 hover:bg-slate-600 text-white'
     }
   }
 
