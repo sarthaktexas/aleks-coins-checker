@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react"
+import Link from "next/link"
 import { AlertTriangle, Lock, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -183,10 +184,13 @@ export function AdminUserBadge() {
   const { user, logout } = useAdminAuth()
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden text-xs text-utsa-muted sm:inline">
+      <Link
+        href="/admin/profile"
+        className="hidden text-xs text-utsa-muted hover:text-utsa-orange sm:inline"
+      >
         {user.displayName}
         <span className="text-utsa-muted/70"> · {user.role}</span>
-      </span>
+      </Link>
       <Button
         type="button"
         variant="ghost"

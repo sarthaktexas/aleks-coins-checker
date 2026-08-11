@@ -223,6 +223,26 @@ export async function findActiveUserByUsername(username: string): Promise<
   }
 }
 
+export async function findActiveUserById(id: number): Promise<
+  | (AdminUser & { pinHash: string; pinSalt: string })
+  | null
+> {
+  await ensureAdminUsersTable()
+  const result = await sql`
+    SELECT id, username, display_name, role, active, pin_hash, pin_salt
+    FROM admin_users
+    WHERE id = ${id} AND active = TRUE
+    LIMIT 1
+  `
+  if (result.rows.length === 0) return null
+  const row = result.rows[0]
+  return {
+    ...rowToUser(row as any),
+    pinHash: row.pin_hash as string,
+    pinSalt: row.pin_salt as string,
+  }
+}
+
 export async function listAdminUsers(): Promise<AdminUser[]> {
   await ensureAdminUsersTable()
   const result = await sql`

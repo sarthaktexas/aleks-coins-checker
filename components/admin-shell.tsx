@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/admin/coin-adjustments", label: "Coins" },
   { href: "/admin/email-students", label: "Email" },
   { href: "/admin/leaderboard", label: "Leaderboard" },
+  { href: "/admin/profile", label: "Profile" },
   { href: "/admin/users", label: "Staff", professorOnly: true },
 ] as const
 
