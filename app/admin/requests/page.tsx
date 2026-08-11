@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
-import { HidePIIToggle } from "@/components/hide-pii-toggle"
-import { AlertCircle, Mail, Clock, User, Calendar, FileText, EyeOff } from "lucide-react"
+import { AlertCircle, Mail, Clock, User, Calendar, FileText, EyeOff, RefreshCw } from "lucide-react"
+import { isReviewedTopicsOverride, parseOverrideKind } from "@/lib/override-request"
 import { formatLocalDateTime } from "@/lib/datetime"
+import { useAdminAuth } from "@/components/admin-auth-provider"
 
 type StudentRequest = {
   id: number
@@ -34,6 +35,7 @@ type StudentRequest = {
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 
 export default function AdminRequestsPage() {
+  const { user } = useAdminAuth()
   const [requests, setRequests] = useState<StudentRequest[]>([])
   const [filteredRequests, setFilteredRequests] = useState<StudentRequest[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -47,8 +49,8 @@ export default function AdminRequestsPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [dayDetails, setDayDetails] = useState<Record<number, {minutes: number, topics: number}>>({})
   const [fastApproving, setFastApproving] = useState<string | null>(null)
-  const [magicApproving, setMagicApproving] = useState<string | null>(null)
-  const [hidePII, setHidePII] = useHidePII()
+  const [verifyingReviews, setVerifyingReviews] = useState(false)
+  const [hidePII] = useHidePII()
 
   useEffect(() => {
     loadRequests()
@@ -273,25 +275,25 @@ export default function AdminRequestsPage() {
     }
   }
 
-  const handleMagicApprove = async (studentId: string) => {
-    if (!confirm(`Are you sure you want to magic approve day overrides with 31+ minutes and "review" in reason for ${studentId}? Only day overrides with 31+ logged minutes and "review" in the reason will be approved.`)) {
+  const handleVerifyReviewedTopics = async () => {
+    const count = pendingReviewedOverrides
+    if (
+      !confirm(
+        count > 0
+          ? `Run ALEKS timeline verification for ${count} pending reviewed-topics override${count === 1 ? "" : "s"}? This starts a GitHub Action.`
+          : "No pending reviewed-topics overrides right now. Still start the ALEKS timeline verification workflow?",
+      )
+    ) {
       return
     }
 
-    setMagicApproving(studentId)
+    setVerifyingReviews(true)
     setError("")
 
     try {
-      const response = await fetch('/api/admin/requests/magic-approve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch("/api/admin/aleks-sync/trigger-reviews", {
+        method: "POST",
         credentials: "same-origin",
-        body: JSON.stringify({
-          studentId: studentId,
-          adminNotes: 'Magic approved: 31+ minutes logged'
-        })
       })
 
       if (response.status === 401) {
@@ -302,22 +304,14 @@ export default function AdminRequestsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        // Reload requests
-        await loadRequests()
-        
-        // Show success message
-        if (data.approvedCount > 0) {
-          alert(`Magic approved ${data.approvedCount} day override(s) with 31+ minutes and "review" in reason.${data.skippedCount > 0 ? ` Skipped ${data.skippedCount} request(s) that didn't meet criteria.` : ''}`)
-        } else {
-          alert(data.message || "No day overrides met the criteria (31+ minutes and 'review' in reason).")
-        }
+        alert(data.message || "Review verification workflow started. Check GitHub → Actions.")
       } else {
-        setError(data.error || "Failed to magic approve requests")
+        setError(data.error || "Failed to start review verification")
       }
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.")
     } finally {
-      setMagicApproving(null)
+      setVerifyingReviews(false)
     }
   }
 
@@ -372,6 +366,12 @@ export default function AdminRequestsPage() {
 
   // Get unique sections
   const sections = Array.from(new Set(requests.map(r => r.section_number))).sort()
+  const pendingReviewedOverrides = requests.filter(
+    (r) =>
+      r.status === "pending" &&
+      r.request_type === "override_request" &&
+      isReviewedTopicsOverride(r.request_details),
+  ).length
 
   return (
     <div className="space-y-6">
@@ -384,13 +384,29 @@ export default function AdminRequestsPage() {
             {selectedStatus !== "all" && ` with status: ${selectedStatus}`}
           </p>
         </div>
-        <Button onClick={() => loadRequests()} variant="outline" disabled={isLoading} className="border-utsa-border">
-          {isLoading ? "Loading..." : "Refresh"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {user.role === "professor" && (
+            <Button
+              onClick={handleVerifyReviewedTopics}
+              disabled={verifyingReviews || isLoading}
+            >
+              {verifyingReviews ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Starting…
+                </>
+              ) : (
+                `Verify reviewed topics${pendingReviewedOverrides > 0 ? ` (${pendingReviewedOverrides})` : ""}`
+              )}
+            </Button>
+          )}
+          <Button onClick={() => loadRequests()} variant="outline" disabled={isLoading} className="border-utsa-border">
+            {isLoading ? "Loading..." : "Refresh"}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-4 items-end rounded-md border border-utsa-border bg-white p-4">
-        <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
         <div className="space-y-1.5 flex-1 min-w-[160px]">
           <Label htmlFor="section-filter">Section</Label>
           <Select value={selectedSection} onValueChange={setSelectedSection}>
@@ -489,7 +505,6 @@ export default function AdminRequestsPage() {
               const studentRequests = groupedRequests[studentId]
               const firstRequest = studentRequests[0]
               const pendingCount = studentRequests.filter(r => r.status === 'pending').length
-              const pendingDayOverrides = studentRequests.filter(r => r.status === 'pending' && r.request_type === 'override_request').length
               const totalCount = studentRequests.length
 
               return (
@@ -533,25 +548,12 @@ export default function AdminRequestsPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        {pendingDayOverrides > 0 && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMagicApprove(studentId)}
-                            disabled={magicApproving === studentId || fastApproving === studentId}
-                          >
-                            {magicApproving === studentId ? (
-                              "Approving..."
-                            ) : (
-                              `Magic Approve (${pendingDayOverrides})`
-                            )}
-                          </Button>
-                        )}
                         {pendingCount > 1 && (
                           <Button
                             size="sm"
                             variant="success"
                             onClick={() => handleFastApproveAll(studentId)}
-                            disabled={fastApproving === studentId || magicApproving === studentId}
+                            disabled={fastApproving === studentId || verifyingReviews}
                           >
                             {fastApproving === studentId ? (
                               "Approving..."
@@ -649,6 +651,22 @@ export default function AdminRequestsPage() {
                           </div>
                           <div>
                             <p className="text-sm font-medium text-utsa-midnight mb-1">Details:</p>
+                            {request.request_type === 'override_request' && (() => {
+                              const kind = parseOverrideKind(request.request_details)
+                              if (!kind) return null
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    kind === 'reviewed_topics'
+                                      ? 'mb-2 border-green-600 text-green-700'
+                                      : 'mb-2 border-amber-600 text-amber-700'
+                                  }
+                                >
+                                  {kind === 'reviewed_topics' ? 'Reviewed topics (auto-check)' : 'Manual review'}
+                                </Badge>
+                              )
+                            })()}
                             <p className="text-sm text-utsa-midnight whitespace-pre-wrap">{request.request_details}</p>
                           </div>
                           

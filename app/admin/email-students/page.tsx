@@ -13,7 +13,6 @@ import { Mail, Users, Filter, Edit3, Send, Copy, CheckCircle, AlertTriangle, Tar
 import { EXAM_PERIODS, CURRENT_YEAR } from "@/lib/exam-periods"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
-import { HidePIIToggle } from "@/components/hide-pii-toggle"
 
 type StudentData = {
   [studentId: string]: {
@@ -190,7 +189,7 @@ export default function EmailStudentsPage() {
   const [filteredStudents, setFilteredStudents] = useState<Array<{id: string, data: any}>>([])
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [copiedEmails, setCopiedEmails] = useState(false)
-  const [hidePII, setHidePII] = useHidePII()
+  const [hidePII] = useHidePII()
 
   // Load periods from database
   const loadPeriods = async () => {
@@ -493,7 +492,6 @@ export default function EmailStudentsPage() {
           <h1 className="text-xl font-semibold text-utsa-midnight">Email Students</h1>
           <p className="text-sm text-utsa-muted">Send targeted emails based on progress and criteria</p>
         </div>
-        <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

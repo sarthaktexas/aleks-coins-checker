@@ -25,7 +25,6 @@ import {
 } from "lucide-react"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { useHidePII } from "@/hooks/use-hide-pii"
-import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { CondensedCalendarView } from "@/components/condensed-calendar-view"
 import { groupBySemester, getExamLabel } from "@/lib/exam-periods"
 import { formatLocalDateTime } from "@/lib/datetime"
@@ -67,7 +66,7 @@ export default function ViewDataPage() {
   const [toastMessage, setToastMessage] = useState("")
   const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
   const [showExportDropdown, setShowExportDropdown] = useState(false)
-  const [hideStudentData, setHideStudentData] = useHidePII()
+  const [hideStudentData] = useHidePII()
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null)
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
 
@@ -660,7 +659,6 @@ Total: ${extraCreditStudents.length} students`
                     )}
                   </div>
                 )}
-                <HidePIIToggle hidePII={hideStudentData} onToggle={setHideStudentData} showAlert={false} />
                 <Button size="sm" variant="outline" onClick={handleExport} disabled={hideStudentData}>
                   <Download className="h-4 w-4 mr-2" />
                   Export

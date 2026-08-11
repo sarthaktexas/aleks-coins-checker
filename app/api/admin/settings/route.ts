@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -90,6 +90,8 @@ export async function PUT(request: NextRequest) {
   try {
     const session = requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const body = await request.json()
     const { overridesEnabled, redemptionRequestsEnabled } = body

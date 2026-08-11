@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "sync": "node sync.mjs",
-    "sync:headed": "HEADED=1 node sync.mjs"
+    "sync:headed": "HEADED=1 node sync.mjs",
+    "verify-reviews": "node verify-reviews.mjs",
+    "verify-reviews:headed": "HEADED=1 node verify-reviews.mjs"
   },
   "dependencies": {
     "playwright": "^1.54.2"

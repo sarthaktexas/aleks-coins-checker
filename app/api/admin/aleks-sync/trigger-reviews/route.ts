@@ -4,11 +4,8 @@ import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 export const dynamic = "force-dynamic"
 
 /**
- * POST /api/admin/aleks-sync/trigger
- * Body (optional JSON):
- *   { period?: string, force?: boolean }
- *
- * Dispatches the GitHub Actions "ALEKS daily sync" workflow (workflow_dispatch).
+ * POST /api/admin/aleks-sync/trigger-reviews
+ * Dispatches the GitHub Actions "ALEKS review overrides" workflow (workflow_dispatch).
  * Professors only.
  */
 export async function POST(request: NextRequest) {
@@ -17,17 +14,6 @@ export async function POST(request: NextRequest) {
     if (!isSession(session)) return session
     const professorGate = requireProfessor(session)
     if (professorGate !== true) return professorGate
-
-    let period = ""
-    let force = false
-    try {
-      const body = await request.json()
-      if (typeof body?.period === "string") period = body.period.trim()
-      if (typeof body?.force === "boolean") force = body.force
-      if (body?.force === "1" || body?.force === "true") force = true
-    } catch {
-      // empty body is fine
-    }
 
     const pat = process.env.GITHUB_SYNC_PAT || process.env.GITHUB_TOKEN
     if (!pat) {
@@ -53,7 +39,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const workflowFile = process.env.ALEKS_SYNC_WORKFLOW || "aleks-sync.yml"
+    const workflowFile = process.env.ALEKS_REVIEW_WORKFLOW || "aleks-review-overrides.yml"
     const url = `https://api.github.com/repos/${repo}/actions/workflows/${workflowFile}/dispatches`
 
     const res = await fetch(url, {
@@ -66,25 +52,15 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         ref: process.env.ALEKS_SYNC_REF || "main",
-        inputs: {
-          period: period || "",
-          force: force ? "true" : "false",
-        },
       }),
     })
 
     if (res.status === 204) {
-      const bits = [
-        force ? "forced" : null,
-        period ? `period=${period}` : "auto period",
-      ].filter(Boolean)
       return NextResponse.json({
         success: true,
-        message: `ALEKS sync workflow dispatched on ${repo} (${bits.join(", ")}). Check GitHub → Actions for progress.`,
+        message: `ALEKS review-overrides workflow dispatched on ${repo}. Check GitHub → Actions for progress.`,
         repo,
         workflow: workflowFile,
-        period: period || null,
-        force,
         actionsUrl: `https://github.com/${repo}/actions/workflows/${workflowFile}`,
       })
     }
@@ -98,10 +74,10 @@ export async function POST(request: NextRequest) {
       { status: 502 },
     )
   } catch (error) {
-    console.error("ALEKS sync trigger error:", error)
+    console.error("ALEKS review-overrides trigger error:", error)
     return NextResponse.json(
       {
-        error: "Failed to trigger ALEKS sync",
+        error: "Failed to trigger ALEKS review verification",
         details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined,
       },
       { status: 500 },

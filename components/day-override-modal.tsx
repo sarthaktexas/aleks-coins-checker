@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -15,7 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertTriangle, CheckCircle, Loader2, Shield } from "lucide-react"
+import { AlertTriangle, BookOpen, CheckCircle, Loader2, Shield } from "lucide-react"
+import {
+  OVERRIDE_KIND_MANUAL,
+  OVERRIDE_KIND_REVIEWED,
+  buildOverrideRequestDetails,
+  type OverrideKind,
+} from "@/lib/override-request"
 
 type DayOverrideModalProps = {
   isOpen: boolean
@@ -38,21 +42,22 @@ type DayOverrideModalProps = {
   }
 }
 
-export function DayOverrideModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess, 
-  dayInfo, 
-  studentInfo 
+export function DayOverrideModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  dayInfo,
+  studentInfo,
 }: DayOverrideModalProps) {
+  const [overrideKind, setOverrideKind] = useState<OverrideKind>(OVERRIDE_KIND_REVIEWED)
   const [reason, setReason] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [submittedKind, setSubmittedKind] = useState<OverrideKind | null>(null)
   const [overridesEnabled, setOverridesEnabled] = useState(true)
   const [isCheckingSettings, setIsCheckingSettings] = useState(false)
 
-  // Check if overrides are enabled when modal opens
   useEffect(() => {
     if (isOpen) {
       setIsCheckingSettings(true)
@@ -63,7 +68,6 @@ export function DayOverrideModal({
         })
         .catch((err) => {
           console.error("Error checking settings:", err)
-          // Default to enabled on error
           setOverridesEnabled(true)
         })
         .finally(() => {
@@ -72,20 +76,60 @@ export function DayOverrideModal({
     }
   }, [isOpen])
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return ""
+    const [year, month, day] = dateString.split("-").map(Number)
+    const date = new Date(year, month - 1, day)
+    const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ]
+    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
+  }
+
+  const canSubmit =
+    !isLoading &&
+    !(dayInfo.isLatestDay && !dayInfo.isLastDay) &&
+    overridesEnabled &&
+    !isCheckingSettings &&
+    (overrideKind === OVERRIDE_KIND_REVIEWED || reason.trim().length > 0)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Prevent submission if this is the latest day but NOT the last day
+
     if (dayInfo.isLatestDay && !dayInfo.isLastDay) {
-      setError("Override requests are disabled for the latest day. Data may not be accurate based on when it was uploaded.")
+      setError(
+        "Override requests are disabled for the latest day. Data may not be accurate based on when it was uploaded.",
+      )
       return
     }
-    
+
+    if (overrideKind === OVERRIDE_KIND_MANUAL && !reason.trim()) {
+      setError("Please explain why this override needs manual review.")
+      return
+    }
+
     setIsLoading(true)
     setError("")
 
     try {
-      const requestDetails = `Day ${dayInfo.dayNumber} (${formatDate(dayInfo.date)})\nCurrent Status: ${dayInfo.currentQualified ? 'Qualified' : 'Not Qualified'}\nRequested Change: To be marked as Qualified\n${reason ? `\nReason: ${reason}` : ''}`
+      const requestDetails = buildOverrideRequestDetails({
+        dayNumber: dayInfo.dayNumber,
+        dateLabel: formatDate(dayInfo.date),
+        currentQualified: dayInfo.currentQualified,
+        kind: overrideKind,
+        reason: reason.trim(),
+      })
 
       const response = await fetch("/api/student/requests", {
         method: "POST",
@@ -95,32 +139,34 @@ export function DayOverrideModal({
         body: JSON.stringify({
           studentId: studentInfo.studentId,
           studentName: studentInfo.name,
-          studentEmail: studentInfo.email || '',
-          period: studentInfo.period || 'Unknown',
-          sectionNumber: studentInfo.sectionNumber || 'default',
-          requestType: 'override_request',
-          requestDetails: requestDetails,
+          studentEmail: studentInfo.email || "",
+          period: studentInfo.period || "Unknown",
+          sectionNumber: studentInfo.sectionNumber || "default",
+          requestType: "override_request",
+          requestDetails,
           dayNumber: dayInfo.dayNumber,
-          overrideDate: dayInfo.date
+          overrideDate: dayInfo.date,
         }),
       })
 
       const result = await response.json()
 
       if (response.ok && result.success) {
+        setSubmittedKind(overrideKind)
         setSuccess(true)
         setReason("")
         setError("")
-        // Close after showing success
         setTimeout(() => {
           setSuccess(false)
+          setSubmittedKind(null)
+          setOverrideKind(OVERRIDE_KIND_REVIEWED)
           onSuccess()
           onClose()
         }, 1500)
       } else {
         setError(result.error || "Failed to submit override request")
       }
-    } catch (error) {
+    } catch {
       setError("Network error. Please try again.")
     } finally {
       setIsLoading(false)
@@ -130,19 +176,12 @@ export function DayOverrideModal({
   const handleClose = () => {
     if (!isLoading) {
       setReason("")
+      setOverrideKind(OVERRIDE_KIND_REVIEWED)
+      setSubmittedKind(null)
       setError("")
       setSuccess(false)
       onClose()
     }
-  }
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return ""
-    const [year, month, day] = dateString.split('-').map(Number)
-    const date = new Date(year, month - 1, day)
-    const monthNames = ["January", "February", "March", "April", "May", "June", 
-      "July", "August", "September", "October", "November", "December"]
-    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
   }
 
   if (success) {
@@ -155,7 +194,9 @@ export function DayOverrideModal({
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Override Request Submitted!</h3>
             <p className="text-sm text-gray-600">
-              Your override request has been sent to your instructor for review.
+              {submittedKind === OVERRIDE_KIND_REVIEWED
+                ? "Your review override will be checked against ALEKS automatically."
+                : "Your override request has been sent to your instructor for manual review."}
             </p>
           </div>
         </DialogContent>
@@ -165,7 +206,7 @@ export function DayOverrideModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="p-1 bg-blue-100 rounded">
@@ -179,89 +220,128 @@ export function DayOverrideModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Current Status Display */}
           <div className="p-3 bg-slate-50 rounded-lg border">
             <div className="text-sm text-slate-600 mb-2">Current Status:</div>
             <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${dayInfo.currentQualified ? 'bg-green-500' : 'bg-red-500'}`} />
+              <div
+                className={`w-3 h-3 rounded-full ${dayInfo.currentQualified ? "bg-green-500" : "bg-red-500"}`}
+              />
               <span className="font-medium">
                 {dayInfo.currentQualified ? "✅ Qualified" : "❌ Not Qualified"}
               </span>
             </div>
             {dayInfo.currentReason && (
-              <div className="text-sm text-slate-600 mt-1">
-                Reason: {dayInfo.currentReason}
-              </div>
+              <div className="text-sm text-slate-600 mt-1">Reason: {dayInfo.currentReason}</div>
             )}
           </div>
 
-          {/* Warning for latest day (but not last day) */}
           {dayInfo.isLatestDay && !dayInfo.isLastDay && (
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">
-                Override requests are disabled for the latest day. Data may not be accurate based on when it was uploaded.
+                Override requests are disabled for the latest day. Data may not be accurate based on when
+                it was uploaded.
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Warning if overrides are disabled */}
           {!overridesEnabled && (
             <Alert className="border-red-200 bg-red-50">
               <AlertTriangle className="h-4 w-4 text-red-600" />
               <AlertDescription className="text-red-800">
-                Day override requests are currently disabled. Please contact your instructor if you need assistance.
+                Day override requests are currently disabled. Please contact your instructor if you need
+                assistance.
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Info about what student is requesting */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Why do you need an override?</Label>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => setOverrideKind(OVERRIDE_KIND_REVIEWED)}
+                className={`text-left p-3 rounded-lg border transition-colors ${
+                  overrideKind === OVERRIDE_KIND_REVIEWED
+                    ? "border-utsa-orange bg-orange-50 ring-1 ring-utsa-orange"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <BookOpen className="h-4 w-4 mt-0.5 text-utsa-orange shrink-0" />
+                  <div>
+                    <div className="font-medium text-sm text-slate-900">I reviewed topics this day</div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      We will verify this in ALEKS automatically.
+                    </p>
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOverrideKind(OVERRIDE_KIND_MANUAL)}
+                className={`text-left p-3 rounded-lg border transition-colors ${
+                  overrideKind === OVERRIDE_KIND_MANUAL
+                    ? "border-utsa-orange bg-orange-50 ring-1 ring-utsa-orange"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="font-medium text-sm text-slate-900">Something else (manual review)</div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Use this only if it was not a review day. Your instructor will handle it manually.
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="text-sm text-blue-800">
               <strong>Your Request:</strong> Mark this day as qualified
             </div>
           </div>
 
-          {/* Reason */}
           <div className="space-y-2">
             <Label htmlFor="reason" className="text-sm font-medium">
-              Reason for Override Request
+              {overrideKind === OVERRIDE_KIND_MANUAL
+                ? "Why should this be done manually?"
+                : "Optional note"}
             </Label>
             <Textarea
               id="reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Explain why this day should be marked as qualified..."
+              placeholder={
+                overrideKind === OVERRIDE_KIND_MANUAL
+                  ? "Explain the issue (e.g. technical problem, special circumstance)…"
+                  : "Optional details about your review work…"
+              }
               className="min-h-[80px]"
-              required
+              required={overrideKind === OVERRIDE_KIND_MANUAL}
             />
             <p className="text-xs text-slate-500">
-              Provide details about why you believe this day should be marked as qualified (e.g., technical issues, special circumstances)
+              {overrideKind === OVERRIDE_KIND_MANUAL
+                ? "Required so your instructor knows why this cannot be auto-verified as a review day."
+                : "You can leave this blank — confirming review above is enough."}
             </p>
           </div>
 
           {error && (
             <Alert className="border-red-200 bg-red-50">
               <AlertTriangle className="h-4 w-4 text-red-600" />
-              <AlertDescription className="text-red-800">
-                {error}
-              </AlertDescription>
+              <AlertDescription className="text-red-800">{error}</AlertDescription>
             </Alert>
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isLoading}
-            >
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={isLoading || !reason.trim() || (dayInfo.isLatestDay && !dayInfo.isLastDay) || !overridesEnabled || isCheckingSettings}
-            >
+            <Button type="submit" disabled={!canSubmit}>
               {isLoading ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -280,4 +360,3 @@ export function DayOverrideModal({
     </Dialog>
   )
 }
-

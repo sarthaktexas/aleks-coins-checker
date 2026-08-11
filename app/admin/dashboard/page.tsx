@@ -81,7 +81,9 @@ export default function AdminDashboard() {
   }
 
   const tools = [
-    { title: "Upload & Settings", href: "/admin", icon: Upload },
+    ...(user.role === "professor"
+      ? [{ title: "Upload & Settings", href: "/admin", icon: Upload }]
+      : []),
     { title: "Student Data", href: "/admin/view-data", icon: Database },
     { title: "Exam Periods", href: "/admin/manage-periods", icon: Calendar },
     { title: "Day Overrides", href: "/admin/view-overrides", icon: Settings },

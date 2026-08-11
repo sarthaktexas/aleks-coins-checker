@@ -1,6 +1,6 @@
 # ALEKS daily sync (GitHub Actions)
 
-Automates downloading **Time and Topic** Excel reports from ALEKS and importing them into this app.
+Automates downloading **Time and Topic** Excel reports from ALEKS and importing them into this app. A second daily job verifies **reviewed-topics** day overrides on each student’s Timeline (reviews are not in the Excel export).
 
 ## What is `IMPORT_API_TOKEN`?
 
@@ -19,6 +19,8 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 
 ## How it works
 
+### Excel sync (`npm run sync`)
+
 1. GitHub Actions runs daily (or via Admin → **Pull from ALEKS now** / Actions → Run workflow)
 2. App config API picks the **active exam period** whose date range includes today (Central); if none, the most recent period that already ended
 3. Playwright logs into ALEKS and scrapes the **Class** dropdown (active + archived)
@@ -27,7 +29,18 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 
 Section numbers are derived from the ALEKS class name (e.g. “Section 003” → `003`), preferring values that already exist for that period in the DB.
 
-Manual admin upload still works as a fallback.
+### Reviewed-topics verification (`npm run verify-reviews`)
+
+Reviewed topics do not appear in the Time and Topic Excel. Students request overrides with **“I reviewed topics this day”** (or **manual** for everything else).
+
+1. Workflow runs daily ~1 hour after Excel sync (or via Admin → Requests → **Verify reviewed topics** / Actions → **ALEKS review overrides**)
+2. Fetches pending `reviewed_topics` overrides from `/api/admin/aleks-sync/review-overrides`
+3. For each request: select class → student dropdown → Timeline → scroll to the override date → open the review checkmark → read topic count
+4. Auto-approves when **reviewed topics ≥ 1** and **minutes ≥ 31**; otherwise leaves the request pending with verification notes for the instructor
+
+Manual overrides are never auto-verified — they stay in the admin requests queue.
+
+Manual admin upload still works as a fallback for Excel.
 
 ## One-time setup
 
@@ -51,12 +64,13 @@ APP_URL="https://aleks-coins.vercel.app"
 
 ### 3. Deploy + run
 
-Deploy so `/api/admin/aleks-sync/config` is live, then:
+Deploy so `/api/admin/aleks-sync/config` and `/api/admin/aleks-sync/review-overrides` are live, then:
 
 **Actions → ALEKS daily sync → Run workflow**  
-or Admin → **Pull from ALEKS now**
+**Actions → ALEKS review overrides → Run workflow**  
+or Admin → **Pull from ALEKS now** (Excel only)
 
-On failure, download the `aleks-sync-debug` artifact (screenshots).
+On failure, download the debug artifact (screenshots).
 
 ## Local test
 
@@ -71,4 +85,5 @@ export APP_URL=http://localhost:3000
 export IMPORT_API_TOKEN=...
 
 HEADED=1 DRY_RUN=1 npm run sync
+HEADED=1 DRY_RUN=1 npm run verify-reviews
 ```

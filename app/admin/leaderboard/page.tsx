@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
-import { HidePIIToggle } from "@/components/hide-pii-toggle"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type UploadRecord = {
@@ -51,7 +50,7 @@ export default function AdminLeaderboardPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalStudents, setTotalStudents] = useState(0)
   const pageSize = 20
-  const [hidePII, setHidePII] = useHidePII()
+  const [hidePII] = useHidePII()
 
   useEffect(() => {
     loadUploadRecords()
@@ -241,7 +240,6 @@ export default function AdminLeaderboardPage() {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
               <div className="text-right">
                 <p className="text-xs text-utsa-muted">Total Students: {totalStudents}</p>
                 <p className="text-xs text-utsa-muted">Page {currentPage} of {totalPages}</p>

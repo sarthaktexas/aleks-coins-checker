@@ -182,10 +182,30 @@ export async function PUT(request: NextRequest) {
     }
 
     // Note: Coins are already deducted when the request is submitted
+    const isRedemption =
+      requestData.request_type === "assignment_replacement" ||
+      requestData.request_type === "quiz_replacement"
+
+    // On approve: drop "Pending" from the linked adjustment reason and credit the approver
+    if (status === "approved" && isRedemption) {
+      try {
+        await sql`
+          UPDATE coin_adjustments
+          SET
+            reason = regexp_replace(reason, '^Pending\\s+', '', 'i'),
+            created_by = ${session.displayName}
+          WHERE request_id = ${requestId}
+            AND is_active = true
+        `
+      } catch (finalizeError) {
+        console.error(`Error finalizing coin adjustment for request ${requestId}:`, finalizeError)
+      }
+    }
+
     // If rejecting a redemption request, deactivate the original coin adjustment (only if not already rejected)
     let adjustmentDeactivated = false
     const wasAlreadyRejected = requestData.status === 'rejected'
-    if (status === 'rejected' && !wasAlreadyRejected && (requestData.request_type === 'assignment_replacement' || requestData.request_type === 'quiz_replacement')) {
+    if (status === 'rejected' && !wasAlreadyRejected && isRedemption) {
       try {
         // Find and deactivate the coin adjustment linked to this request
         // Use request_id for direct, reliable lookup
@@ -371,6 +391,28 @@ export async function POST(request: NextRequest) {
             processed_by = ${session.displayName}
           WHERE id = ${requestData.id}
         `
+
+        // Finalize linked redemption coin adjustment (drop Pending, set approver)
+        if (
+          requestData.request_type === "assignment_replacement" ||
+          requestData.request_type === "quiz_replacement"
+        ) {
+          try {
+            await sql`
+              UPDATE coin_adjustments
+              SET
+                reason = regexp_replace(reason, '^Pending\\s+', '', 'i'),
+                created_by = ${session.displayName}
+              WHERE request_id = ${requestData.id}
+                AND is_active = true
+            `
+          } catch (finalizeError) {
+            console.error(
+              `Error finalizing coin adjustment for request ${requestData.id}:`,
+              finalizeError,
+            )
+          }
+        }
 
         approvedCount++
       } catch (error) {

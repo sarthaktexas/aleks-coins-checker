@@ -4,6 +4,7 @@
 /node_modules
 scripts/aleks-sync/node_modules
 scripts/aleks-sync/.downloads
+scripts/aleks-sync/.downloads-reviews
 
 # next.js
 /.next/

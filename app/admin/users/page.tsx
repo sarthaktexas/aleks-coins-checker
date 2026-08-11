@@ -136,20 +136,30 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      <div className="rounded-md bg-white p-4 text-sm text-utsa-midnight">
-        <h2 className="font-semibold">Roles</h2>
-        <ul className="mt-2 list-disc space-y-1.5 pl-5 text-utsa-muted">
-          <li>
-            <span className="font-medium text-utsa-midnight">TA</span> — full access to admin tools
-            (uploads, requests, overrides, coins, email, etc.). Their display name is recorded on
-            actions they take.
-          </li>
-          <li>
-            <span className="font-medium text-utsa-midnight">Professor</span> — same admin access as
-            TAs, plus managing staff on this page (add accounts, reset PINs, change roles, activate
-            or deactivate people).
-          </li>
-        </ul>
+      <div className="rounded-md bg-white p-4 text-sm text-utsa-midnight space-y-4">
+        <div>
+          <h2 className="font-semibold">Roles</h2>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-utsa-muted">
+            <li>
+              <span className="font-medium text-utsa-midnight">TA</span> — access to student data,
+              requests, overrides, coins, email, periods, and related tools. Their display name is
+              recorded on actions they take. TAs cannot upload ALEKS data, run reviewed-topics
+              verification, hide PII, or manage staff accounts.
+            </li>
+            <li>
+              <span className="font-medium text-utsa-midnight">Professor</span> — everything TAs can
+              do, plus Upload &amp; Settings, Hide PII, Verify reviewed topics, and managing staff
+              on this page (add accounts, reset PINs, change roles, activate or deactivate people).
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h2 className="font-semibold">Accounts</h2>
+          <p className="mt-2 text-utsa-muted">
+            Staff accounts cannot be deleted. You can edit role and PIN, and deactivate an account
+            instead of deleting it. Deactivated accounts cannot sign in until activated again.
+          </p>
+        </div>
       </div>
 
       {message && (

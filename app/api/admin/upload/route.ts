@@ -1,11 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { isSession, requireAdmin } from "@/lib/admin-auth"
+import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 import { parseAleksWorkbook, processExcelData, saveStudentData } from "@/lib/aleks-excel"
 
 export async function POST(request: NextRequest) {
   try {
     const session = requireAdmin(request)
     if (!isSession(session)) return session
+    const professorGate = requireProfessor(session)
+    if (professorGate !== true) return professorGate
 
     const formData = await request.formData()
     const file = formData.get("file") as File

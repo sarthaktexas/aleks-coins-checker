@@ -3,13 +3,16 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { AdminUserBadge, useAdminAuth } from "@/components/admin-auth-provider"
+import { HidePIIToggle } from "@/components/hide-pii-toggle"
+import { useHidePII } from "@/hooks/use-hide-pii"
 import "@/app/admin/admin.css"
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin", label: "Upload", exact: true },
+  { href: "/admin", label: "Upload", exact: true, professorOnly: true },
   { href: "/admin/view-data", label: "Data" },
   { href: "/admin/manage-periods", label: "Periods" },
   { href: "/admin/view-overrides", label: "Overrides" },
@@ -30,9 +33,16 @@ function isActive(pathname: string, href: string, exact?: boolean) {
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const { user } = useAdminAuth()
+  const [hidePII, setHidePII] = useHidePII()
+  const isProfessor = user.role === "professor"
+
+  // TAs should always see real student PII
+  useEffect(() => {
+    if (!isProfessor && hidePII) setHidePII(false)
+  }, [isProfessor, hidePII, setHidePII])
 
   const navItems = NAV_ITEMS.filter(
-    (item) => !("professorOnly" in item && item.professorOnly) || user.role === "professor",
+    (item) => !("professorOnly" in item && item.professorOnly) || isProfessor,
   )
 
   return (
@@ -40,9 +50,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 bg-white">
         <div className="h-1 w-full" />
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
-          <Link href="/admin/dashboard" className="shrink-0 text-sm font-bold text-utsa-midnight">
-            ALEKS Admin
-          </Link>
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/admin/dashboard" className="shrink-0 text-sm font-bold text-utsa-midnight">
+              ALEKS Admin
+            </Link>
+            {isProfessor && (
+              <HidePIIToggle hidePII={hidePII} onToggle={setHidePII} showAlert={false} />
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <AdminUserBadge />
             <Link href="/" className="text-xs text-utsa-muted hover:text-utsa-orange">
