@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { normalizeOverrideDate } from "@/lib/day-overrides"
 
 type DailyLog = {
   day: number
@@ -12,6 +13,8 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
+  isOverridden?: boolean
+  overrideType?: "qualified" | "not_qualified" | string
 }
 
 type DayOverride = {
@@ -54,9 +57,12 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
   const overrideMap = new Map<number, DayOverride>()
   if (minDate && maxDate) {
     overrides
-      .filter((o) => o.date >= minDate && o.date <= maxDate)
+      .filter((o) => {
+        const date = normalizeOverrideDate(o.date)
+        return date >= minDate && date <= maxDate
+      })
       .forEach((override) => {
-        const match = dailyLog.find((log) => log.date === override.date)
+        const match = dailyLog.find((log) => normalizeOverrideDate(log.date) === normalizeOverrideDate(override.date))
         if (match) overrideMap.set(match.day, override)
       })
   }
@@ -119,6 +125,20 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
     if (day.reason === "⏳ No data available") {
       return { emoji: "⏳", className: "bg-gray-50 border-gray-200 text-gray-400", hasOverride: false }
     }
+
+    const override = overrideMap.get(day.day)
+    const hasOverride = !!(override || day.isOverridden)
+    if (hasOverride) {
+      const isQualified = override
+        ? override.override_type === "qualified"
+        : day.overrideType === "qualified" || day.qualified
+      return {
+        emoji: isQualified ? "✅🔧" : "❌🔧",
+        className: "bg-blue-50 border-blue-300 text-blue-800 ring-1 ring-blue-200",
+        hasOverride: true,
+      }
+    }
+
     if (day.isExcluded) {
       if (day.isCoinOnlyExempt) {
         return day.wouldHaveQualified
@@ -128,16 +148,6 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
       return day.wouldHaveQualified
         ? { emoji: "🎁", className: "bg-amber-50 border-amber-300 text-amber-800 ring-1 ring-amber-200", hasOverride: false }
         : { emoji: "📅", className: "bg-slate-100 border-slate-300 text-slate-600", hasOverride: false }
-    }
-
-    const override = overrideMap.get(day.day)
-    if (override) {
-      const isQualified = override.override_type === "qualified"
-      return {
-        emoji: isQualified ? "✅🔧" : "❌🔧",
-        className: "bg-blue-50 border-blue-300 text-blue-800 ring-1 ring-blue-200",
-        hasOverride: true,
-      }
     }
 
     return day.qualified
