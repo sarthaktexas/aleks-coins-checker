@@ -15,6 +15,8 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
+  isOverridden?: boolean
+  overrideType?: string
 }
 
 type StudentData = {

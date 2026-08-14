@@ -48,20 +48,27 @@ async function ensureOverridesTable() {
   // overrides across exam periods that share the same day number. Migrate to date.
   await sql`
     DO $$
+    DECLARE
+      r RECORD;
     BEGIN
-      IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'student_day_overrides_student_id_day_number_key'
-      ) THEN
-        ALTER TABLE student_day_overrides
-          DROP CONSTRAINT student_day_overrides_student_id_day_number_key;
-      END IF;
+      FOR r IN
+        SELECT c.conname
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        WHERE t.relname = 'student_day_overrides'
+          AND c.contype = 'u'
+          AND pg_get_constraintdef(c.oid) ILIKE '%day_number%'
+      LOOP
+        EXECUTE format('ALTER TABLE student_day_overrides DROP CONSTRAINT %I', r.conname);
+      END LOOP;
 
       IF NOT EXISTS (
         SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'student_day_overrides_student_id_date_key'
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        WHERE t.relname = 'student_day_overrides'
+          AND c.contype = 'u'
+          AND pg_get_constraintdef(c.oid) ILIKE '%(student_id, date)%'
       ) THEN
         ALTER TABLE student_day_overrides
           ADD CONSTRAINT student_day_overrides_student_id_date_key UNIQUE (student_id, date);

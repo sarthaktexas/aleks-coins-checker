@@ -567,9 +567,7 @@ export default function ManagePeriodsPage() {
           <p>• Changes to exam periods will affect all future data uploads</p>
           <p>• Changing the period key updates student_data, coin_adjustments, and student_requests</p>
           <p>• The period name (not the key) is shown to students on their lookup page</p>
-          <p>• Excluded dates are automatically excluded from progress calculations</p>
-          <p>• Exempt days can still earn a coin and count toward extra credit %</p>
-          <p>• Exempt (coins only) days can earn a coin but never count toward extra credit %</p>
+          <p>• Special days are excluded from the working-day denominator; re-upload/sync after changing them</p>
         </div>
       </div>
 
@@ -685,79 +683,108 @@ export default function ManagePeriodsPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Special days</Label>
-              <p className="text-[11px] text-utsa-muted">
-                Exempt: coin + extra credit %. Coins only: coin, never extra credit %.
-              </p>
+            <div className="space-y-3 rounded-md border border-utsa-border bg-utsa-surface/40 p-3">
+              <div>
+                <Label>Special days</Label>
+                <p className="text-[11px] text-utsa-muted mt-0.5">
+                  Holidays and other non-required days. Skipping never hurts progress.
+                </p>
+              </div>
+
               {specialDays.length === 0 ? (
                 <p className="text-xs text-utsa-muted">No special days yet.</p>
               ) : (
                 <div className="space-y-2">
                   {specialDays.map(({ date, kind }) => (
-                    <div key={`${kind}-${date}`} className="flex items-center gap-2">
-                      <Input
-                        type="date"
-                        value={date}
-                        readOnly
-                        className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
-                      />
-                      <Select
-                        value={kind}
-                        onValueChange={(value) => setSpecialDayKind(date, value as SpecialDayKind)}
-                      >
-                        <SelectTrigger className="w-[140px] border-utsa-border">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="exempt">Exempt</SelectItem>
-                          <SelectItem value="coins_only">Coins only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={() => removeSpecialDay(date, kind)}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div
+                      key={`${kind}-${date}`}
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-utsa-border bg-white px-2.5 py-2"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-utsa-midnight">
+                          {formatDateForDisplay(date, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p className="text-[11px] text-utsa-muted font-mono">{date}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={kind}
+                          onValueChange={(value) => setSpecialDayKind(date, value as SpecialDayKind)}
+                        >
+                          <SelectTrigger className="h-8 w-[11.5rem] border-utsa-border text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="exempt">Exempt</SelectItem>
+                            <SelectItem value="coins_only">Exempt (coins only)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={() => removeSpecialDay(date, kind)}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+
+              <div className="space-y-2 border-t border-utsa-border pt-3">
+                <Label htmlFor="special-day-date" className="text-xs">
+                  Add a special day
+                </Label>
                 <Input
+                  id="special-day-date"
                   type="date"
                   value={specialDayDate}
                   onChange={(e) => setSpecialDayDate(e.target.value)}
-                  className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
+                  className="border-utsa-border focus-visible:ring-utsa-orange"
                 />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() => addSpecialDay("exempt")}
-                    disabled={!specialDayDate}
-                    className="border-utsa-border"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Exempt
-                  </Button>
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() => addSpecialDay("coins_only")}
-                    disabled={!specialDayDate}
-                    className="border-utsa-border"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Coins only
-                  </Button>
-                </div>
+
+                {specialDayDate ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-utsa-midnight">
+                      If a student qualifies on{" "}
+                      {formatDateForDisplay(specialDayDate, { month: "short", day: "numeric" })},
+                      should it count toward extra credit?
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addSpecialDay("exempt")}
+                        className="text-left rounded-md border border-amber-200 bg-amber-50/70 p-3 hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-amber-900">Yes — Exempt</p>
+                        <p className="text-[11px] text-amber-800/90 mt-1 leading-snug">
+                          Earns a coin and counts toward the extra credit %.
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addSpecialDay("coins_only")}
+                        className="text-left rounded-md border border-violet-200 bg-violet-50/70 p-3 hover:border-violet-400 hover:bg-violet-50 transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-violet-900">No — Exempt (coins only)</p>
+                        <p className="text-[11px] text-violet-800/90 mt-1 leading-snug">
+                          Earns a coin, but never counts toward the extra credit %.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-utsa-muted">
+                    Pick a date, then answer one question to choose the type.
+                  </p>
+                )}
               </div>
             </div>
           </div>
