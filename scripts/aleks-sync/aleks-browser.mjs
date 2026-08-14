@@ -57,13 +57,16 @@ export async function screenshot(page, downloadDir, name) {
   }
 }
 
-export async function clickFirst(page, selectors, { timeout = 15000 } = {}) {
+export async function clickFirst(page, selectors, { timeout = 15000, force = false } = {}) {
   const errors = []
   for (const selector of selectors) {
     try {
       const loc = page.locator(selector).first()
-      await loc.waitFor({ state: "visible", timeout: Math.min(timeout, 5000) })
-      await loc.click({ timeout })
+      await loc.waitFor({
+        state: force ? "attached" : "visible",
+        timeout: Math.min(timeout, 5000),
+      })
+      await loc.click({ timeout, force })
       return selector
     } catch (err) {
       errors.push(`${selector}: ${err.message}`)
@@ -147,8 +150,33 @@ export async function login(page, username, password, downloadDir) {
 export async function dismissOverlays(page) {
   for (let i = 0; i < 3; i++) {
     await page.keyboard.press("Escape").catch(() => {})
+    await page.waitForTimeout(150)
+  }
+
+  // Excel format chooser leaves #overlay_img / .popupOverlay_trans up; Escape
+  // often does not clear it, and it intercepts all Class-menu clicks.
+  const overlay = page.locator("#overlay_img .popupOverlay_trans, #overlay_img, .popupOverlay_trans").first()
+  if (await overlay.isVisible().catch(() => false)) {
+    await overlay.click({ force: true, timeout: 2000 }).catch(() => {})
     await page.waitForTimeout(200)
   }
+
+  await page
+    .evaluate(() => {
+      const kill = (el) => {
+        if (!el) return
+        el.style.display = "none"
+        el.style.visibility = "hidden"
+        el.style.pointerEvents = "none"
+        el.setAttribute("aria-hidden", "true")
+      }
+      for (const sel of ["#overlay_img", ".popupOverlay_trans", ".popupOverlay", "#popup_overlay"]) {
+        document.querySelectorAll(sel).forEach(kill)
+      }
+    })
+    .catch(() => {})
+
+  await page.waitForTimeout(100)
 }
 
 /**
@@ -183,12 +211,17 @@ export async function openClassDropdown(page) {
   if (await searchbar.count()) {
     const list = page.locator("#sim_nav_sel_searchbar_1 .scroll_divSB, #sim_nav_sel_searchbar_1 .tableSB")
     if (!(await list.first().isVisible().catch(() => false))) {
-      await clickFirst(page, [
-        "#sim_nav_sel_searchbar_1 .pulldownSB",
-        "#sim_nav_sel_searchbar_1_selected",
-        "#sim_nav_sel_searchbar_1_button",
-        "#sim_nav_sel_searchbar_1",
-      ])
+      // force: Excel download overlay can linger and intercept pointer events
+      await clickFirst(
+        page,
+        [
+          "#sim_nav_sel_searchbar_1 .pulldownSB",
+          "#sim_nav_sel_searchbar_1_selected",
+          "#sim_nav_sel_searchbar_1_button",
+          "#sim_nav_sel_searchbar_1",
+        ],
+        { force: true },
+      )
       await page.waitForTimeout(500)
     }
     return
@@ -201,7 +234,7 @@ export async function openClassDropdown(page) {
     'button:has-text("Class")',
     '#class_selector',
     '.class-selector',
-  ])
+  ], { force: true })
 }
 
 export async function expandArchivedInClassMenu(page) {
