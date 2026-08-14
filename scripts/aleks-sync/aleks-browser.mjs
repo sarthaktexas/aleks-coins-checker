@@ -143,7 +143,42 @@ export async function login(page, username, password, downloadDir) {
   }
 }
 
+/** Close ALEKS popups/submenus that block the Class / Reports chrome. */
+export async function dismissOverlays(page) {
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Escape").catch(() => {})
+    await page.waitForTimeout(200)
+  }
+}
+
+/**
+ * After a hung download or accidental navigation, get back to instructor UI
+ * that has the Class selector / Reports menu.
+ */
+export async function ensureInstructorChrome(page, downloadDir) {
+  const chrome = page.locator("#sim_nav_sel_searchbar_1, #navigation_report").first()
+  if (await chrome.isVisible().catch(() => false)) return true
+
+  console.log("Instructor chrome missing — dismissing overlays / going back…")
+  await dismissOverlays(page)
+  if (await chrome.isVisible().catch(() => false)) return true
+
+  await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {})
+  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {})
+  await page.waitForTimeout(1000)
+  if (await chrome.isVisible().catch(() => false)) return true
+
+  await page.goto("https://www.aleks.com/", { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {})
+  await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
+  await page.waitForTimeout(1500)
+  const ok = await chrome.isVisible().catch(() => false)
+  if (!ok && downloadDir) await screenshot(page, downloadDir, "recover-chrome-failed")
+  return ok
+}
+
 export async function openClassDropdown(page) {
+  await dismissOverlays(page)
+
   const searchbar = page.locator("#sim_nav_sel_searchbar_1")
   if (await searchbar.count()) {
     const list = page.locator("#sim_nav_sel_searchbar_1 .scroll_divSB, #sim_nav_sel_searchbar_1 .tableSB")
@@ -317,6 +352,11 @@ export async function discoverClasses(page, downloadDir, knownSections = [], per
 }
 
 export async function selectClass(page, { aleksName, archived }, downloadDir) {
+  const ready = await ensureInstructorChrome(page, downloadDir)
+  if (!ready) {
+    throw new Error(`Could not restore ALEKS instructor chrome before selecting "${aleksName}"`)
+  }
+
   await openClassDropdown(page)
   await page.waitForTimeout(400)
   if (archived) await expandArchivedInClassMenu(page)

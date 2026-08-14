@@ -24,7 +24,9 @@ import { fileURLToPath } from "node:url"
 import {
   clickFirst,
   discoverClasses,
+  dismissOverlays,
   ensureDownloadDir,
+  ensureInstructorChrome,
   fetchJson,
   login,
   requireEnv,
@@ -240,7 +242,26 @@ async function setDateRangeAndCompute(page, startIso, endIso, downloadDir) {
   }
 }
 
+async function fetchXlsxHref(page, href, target) {
+  const url = new URL(href, page.url()).toString()
+  console.log(`Fetching xlsx ${url.slice(0, 120)}…`)
+  const cookies = await page.context().cookies()
+  const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ")
+  const res = await fetch(url, {
+    headers: {
+      Cookie: cookieHeader,
+      Referer: page.url(),
+    },
+  })
+  if (!res.ok) throw new Error(`Direct xlsx fetch failed (${res.status})`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  await fs.writeFile(target, buf)
+  return target
+}
+
 async function downloadExcel(page, downloadDir, sectionNumber) {
+  await dismissOverlays(page)
+
   await clickFirst(page, [
     'text=/Download\\s*Excel\\s*Spreadsheet/i',
     'a:has-text("Download Excel Spreadsheet")',
@@ -254,33 +275,50 @@ async function downloadExcel(page, downloadDir, sectionNumber) {
     .filter({ hasText: /Excel\s*2007.*later|\.xlsx/i })
     .first()
 
+  await xlsxLink.waitFor({ state: "attached", timeout: 15000 })
+
   const safe = String(sectionNumber).replace(/\W+/g, "_")
   const target = path.join(downloadDir, `time-and-topic-section-${safe}.xlsx`)
 
+  // Capture href before any click — ALEKS often navigates the page on click,
+  // which kills Playwright's download event and the Class menu chrome.
+  const href = await xlsxLink.getAttribute("href").catch(() => null)
+  const fetchable = href && !/^javascript:/i.test(href)
+
+  if (fetchable) {
+    try {
+      await fetchXlsxHref(page, href, target)
+      await dismissOverlays(page)
+      return target
+    } catch (fetchErr) {
+      console.log(`Prefetch failed (${fetchErr.message}); trying Playwright download…`)
+    }
+  }
+
   try {
     const [download] = await Promise.all([
-      page.waitForEvent("download", { timeout: 120000 }),
+      page.waitForEvent("download", { timeout: 45000 }),
       xlsxLink.click({ force: true, timeout: 15000 }),
     ])
     await download.saveAs(target)
+    await dismissOverlays(page)
     return target
   } catch (err) {
-    const href = await xlsxLink.getAttribute("href").catch(() => null)
-    if (!href) throw err
-    const url = new URL(href, page.url()).toString()
-    console.log(`Download click failed; fetching ${url.slice(0, 120)}…`)
-    const cookies = await page.context().cookies()
-    const cookieHeader = cookies.map((c) => `${c.name}=${c.value}`).join("; ")
-    const res = await fetch(url, {
-      headers: {
-        Cookie: cookieHeader,
-        Referer: page.url(),
-      },
-    })
-    if (!res.ok) throw new Error(`Direct xlsx fetch failed (${res.status}): ${err.message}`)
-    const buf = Buffer.from(await res.arrayBuffer())
-    await fs.writeFile(target, buf)
-    return target
+    const hrefAfter = fetchable
+      ? href
+      : await xlsxLink.getAttribute("href").catch(() => null)
+    if (hrefAfter && !/^javascript:/i.test(hrefAfter)) {
+      try {
+        await fetchXlsxHref(page, hrefAfter, target)
+        await dismissOverlays(page)
+        return target
+      } catch (fetchErr) {
+        await dismissOverlays(page)
+        throw new Error(`${err.message}; fetch fallback: ${fetchErr.message}`)
+      }
+    }
+    await dismissOverlays(page)
+    throw err
   }
 }
 
@@ -370,15 +408,27 @@ async function main() {
         } else {
           await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
           await page.waitForTimeout(1500)
-          const currentRange = await readReportDateRange(page)
-          console.log(`After class switch: ${currentRange?.label || "(range not found)"}`)
-          if (
-            !currentRange ||
-            currentRange.start !== config.reportStartDate ||
-            currentRange.end !== config.reportEndDate
-          ) {
-            console.log("Date range reset after class switch — re-applying…")
+          // Class switch sometimes leaves us off Time and Topic (or on a blank report shell).
+          const stillOnReport = await readReportDateRange(page)
+          const hasDownload = await page
+            .locator('text=/Download\\s*Excel/i')
+            .first()
+            .isVisible()
+            .catch(() => false)
+          if (!stillOnReport && !hasDownload) {
+            console.log("Time and Topic UI missing after class switch — reopening…")
+            await openTimeAndTopic(page)
             await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
+          } else {
+            console.log(`After class switch: ${stillOnReport?.label || "(range not found)"}`)
+            if (
+              !stillOnReport ||
+              stillOnReport.start !== config.reportStartDate ||
+              stillOnReport.end !== config.reportEndDate
+            ) {
+              console.log("Date range reset after class switch — re-applying…")
+              await setDateRangeAndCompute(page, config.reportStartDate, config.reportEndDate, downloadDir)
+            }
           }
         }
 
@@ -423,6 +473,10 @@ async function main() {
           ok: false,
           error: err.message,
         })
+        // Hung downloads / navigations leave Class menu unavailable for later sections.
+        onTimeAndTopic = false
+        await dismissOverlays(page)
+        await ensureInstructorChrome(page, downloadDir)
       }
     }
   } finally {
