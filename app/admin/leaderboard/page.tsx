@@ -35,6 +35,7 @@ type LeaderboardStudent = {
   baseCoins: number
   adjustments: number
   exemptDayCredits: number
+  coinOnlyExemptCredits?: number
   avgMinutesPerDay: number
   percentComplete: number
 }

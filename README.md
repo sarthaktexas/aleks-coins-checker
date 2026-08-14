@@ -115,8 +115,9 @@ See older schema snippets in git history if you need full DDL; runtime migration
 Per period:
 
 1. Base coins = qualified working days (minutes ≥ 31 and topics ≥ 1)
-2. Plus exempt-day credits when an excluded day would have qualified
-3. Plus/minus active `coin_adjustments` for that period
+2. Plus exempt-day credits when an excluded day would have qualified (also counts toward extra credit %)
+3. Plus coins-only exempt credits when a coins-only exempt day would have qualified (coin only — does **not** count toward extra credit %)
+4. Plus/minus active `coin_adjustments` for that period
 
 Total coins = sum across periods. Approved day overrides rewrite qualification before totals.
 

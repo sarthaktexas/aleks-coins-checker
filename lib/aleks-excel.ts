@@ -2,12 +2,42 @@ import { sql } from "@vercel/postgres"
 import * as XLSX from "xlsx"
 import { bustStudentDataCache } from "@/lib/student-cache"
 
-function getWorkingDays(startDate: string, endDate: string, excludedDates: string[] = []) {
+export async function ensureExamPeriodsSchema() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS exam_periods (
+      id SERIAL PRIMARY KEY,
+      period_key VARCHAR(50) UNIQUE NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      excluded_dates JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS coin_only_exempt_dates JSONB DEFAULT '[]'::jsonb
+  `
+}
+
+function getWorkingDays(
+  startDate: string,
+  endDate: string,
+  excludedDates: string[] = [],
+  coinOnlyExemptDates: string[] = [],
+) {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number)
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number)
 
   const excluded = new Set(excludedDates)
-  const workingDays: Array<{ day: number; date: string; isExcluded: boolean }> = []
+  const coinOnly = new Set(coinOnlyExemptDates)
+  const workingDays: Array<{
+    day: number
+    date: string
+    isExcluded: boolean
+    isCoinOnlyExempt: boolean
+  }> = []
 
   let currentYear = startYear
   let currentMonth = startMonth
@@ -46,10 +76,13 @@ function getWorkingDays(startDate: string, endDate: string, excludedDates: strin
 
   while (isDateBeforeOrEqual(currentYear, currentMonth, currentDay, endYear, endMonth, endDay)) {
     const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
+    const isStandardExempt = excluded.has(dateString)
+    const isCoinOnlyExempt = coinOnly.has(dateString) && !isStandardExempt
     workingDays.push({
       day: dayNumber,
       date: dateString,
-      isExcluded: excluded.has(dateString),
+      isExcluded: isStandardExempt || isCoinOnlyExempt,
+      isCoinOnlyExempt,
     })
     dayNumber++
     incrementDate()
@@ -170,21 +203,10 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     throw new Error("Database not configured")
   }
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS exam_periods (
-      id SERIAL PRIMARY KEY,
-      period_key VARCHAR(50) UNIQUE NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      excluded_dates JSONB DEFAULT '[]'::jsonb,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `
+  await ensureExamPeriodsSchema()
 
   const result = await sql`
-    SELECT period_key, name, start_date, end_date, excluded_dates
+    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
     FROM exam_periods
     WHERE period_key = ${examPeriod}
   `
@@ -206,6 +228,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     startDate: formatDate(row.start_date),
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
+    coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
   }
 
   let maxDayFromExcel = 0
@@ -219,7 +242,12 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     })
   })
 
-  const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
+  const allDays = getWorkingDays(
+    period.startDate,
+    period.endDate,
+    period.excludedDates,
+    period.coinOnlyExemptDates,
+  )
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalWorkingDays = workingDays.length
 
@@ -244,6 +272,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
       let coins = 0
       const dailyLog: Array<Record<string, unknown>> = []
       let exemptDayCredits = 0
+      let coinOnlyExemptCredits = 0
 
       for (let dayNum = 1; dayNum <= maxDayFromExcel; dayNum++) {
         const dayInfo = allDays.find((d) => d.day === dayNum)
@@ -255,6 +284,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
         const calendarDay = dayInfo.day
         const date = dayInfo.date
         const isExcluded = dayInfo.isExcluded
+        const isCoinOnlyExempt = dayInfo.isCoinOnlyExempt
         const timeCol = `h:mm_${calendarDay}`
         const topicCol = `added to pie_${calendarDay}`
         const minutes = timeToMinutes(dataRow[timeCol])
@@ -272,8 +302,15 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
               : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
           wouldHaveQualified = !minMsg && !topicMsg
           if (wouldHaveQualified) {
-            exemptDayCredits++
-            reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+            if (isCoinOnlyExempt) {
+              coinOnlyExemptCredits++
+              reason = `🪙 Exempt (coins only): Would have qualified (${minutes} mins + ${topics} topics)`
+            } else {
+              exemptDayCredits++
+              reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+            }
+          } else if (isCoinOnlyExempt) {
+            reason = "📅 Exempt (coins only) - earns a coin if you qualify, does not count toward extra credit %"
           } else {
             reason = "📅 Exempt day - does not count toward progress"
           }
@@ -304,6 +341,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
           topics,
           reason,
           isExcluded,
+          isCoinOnlyExempt,
           wouldHaveQualified,
         })
       }
@@ -313,18 +351,19 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
       const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
       const percentComplete =
         completedWorkingDays > 0
-          ? Math.round((qualifiedWorkingDays / completedWorkingDays) * 100 * 10) / 10
+          ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10
           : 0
 
       processedData[studentId] = {
         name,
         email,
-        coins: coins + exemptDayCredits,
+        coins: coins + exemptDayCredits + coinOnlyExemptCredits,
         totalDays: maxDayFromExcel,
         periodDays: totalWorkingDays,
         percentComplete,
         dailyLog,
         exemptDayCredits,
+        coinOnlyExemptCredits,
       }
     } catch (error) {
       console.error(`Error processing row ${index + 1}:`, error)
@@ -399,6 +438,7 @@ export type PeriodDateInfo = {
   startDate: string
   endDate: string
   excludedDates: string[]
+  coinOnlyExemptDates: string[]
 }
 
 export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo | null> {
@@ -406,21 +446,10 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
     throw new Error("Database not configured")
   }
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS exam_periods (
-      id SERIAL PRIMARY KEY,
-      period_key VARCHAR(50) UNIQUE NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      excluded_dates JSONB DEFAULT '[]'::jsonb,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `
+  await ensureExamPeriodsSchema()
 
   const result = await sql`
-    SELECT period_key, name, start_date, end_date, excluded_dates
+    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
     FROM exam_periods
     WHERE period_key = ${periodKey}
   `
@@ -440,6 +469,7 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
     startDate: formatDate(row.start_date),
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
+    coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
   }
 }
 
@@ -459,19 +489,7 @@ export async function resolveActivePeriod(): Promise<{
   }
 
   await ensureStudentDataTable()
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS exam_periods (
-      id SERIAL PRIMARY KEY,
-      period_key VARCHAR(50) UNIQUE NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      excluded_dates JSONB DEFAULT '[]'::jsonb,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `
+  await ensureExamPeriodsSchema()
 
   const today = todayInCentral()
 

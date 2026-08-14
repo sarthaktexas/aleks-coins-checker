@@ -33,6 +33,7 @@ import { BugReportModal } from "@/components/bug-report-modal"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { formatLocalDateTime } from "@/lib/datetime"
+import { countExemptCredits } from "@/lib/day-credits"
 
 type DailyLog = {
   day: number
@@ -42,6 +43,7 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
 }
 
@@ -56,6 +58,7 @@ type StudentInfo = {
   percentComplete: number
   dailyLog: DailyLog[]
   exemptDayCredits?: number
+  coinOnlyExemptCredits?: number
   period?: string
   sectionNumber?: string
   uploadedAt?: string | null
@@ -75,6 +78,7 @@ type PeriodInfo = {
   percentComplete: number
   dailyLog: DailyLog[]
   exemptDayCredits?: number
+  coinOnlyExemptCredits?: number
 }
 
 type CoinAdjustment = {
@@ -346,13 +350,15 @@ export default function StudentLookup() {
     const workingDaysWithData = workingDays.filter((d) => d.day <= totalDays)
     const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
     
-    // Calculate exempt day credits (from days that would have qualified on exempt days)
-    const exemptDayCredits = dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= totalDays).length
+    // Standard exempt credits count toward extra credit %; coins-only do not
+    const { exemptDayCredits } = countExemptCredits(
+      dailyLog.filter((d) => d.day <= totalDays),
+    )
     
     const daysMissed = workingDaysWithData.length - qualifiedDaysWithData
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
-    // Include exempt day credits in percentage to allow over 100% for extra credit
+    // Include standard exempt day credits in percentage to allow over 100% for extra credit
     const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
 
     // Check if student has qualified for extra credit (>=90% days qualified)
@@ -584,7 +590,7 @@ export default function StudentLookup() {
                 </div>
 
                 {/* Inline metadata chips */}
-                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0)) && (
+                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0) || (studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0)) && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {coinAdjustments.length > 0 && (
                       <span className="inline-flex items-center text-xs bg-utsa-surface text-utsa-midnight rounded-full px-2.5 py-1 font-medium">
@@ -594,6 +600,11 @@ export default function StudentLookup() {
                     {studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0 && (
                       <span className="inline-flex items-center text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-2.5 py-1 font-medium">
                         {studentInfo.exemptDayCredits} exempt day credit{studentInfo.exemptDayCredits !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0 && (
+                      <span className="inline-flex items-center text-xs bg-slate-50 text-slate-700 border border-slate-200 rounded-full px-2.5 py-1 font-medium">
+                        {studentInfo.coinOnlyExemptCredits} coins-only exempt credit{studentInfo.coinOnlyExemptCredits !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
@@ -614,7 +625,9 @@ export default function StudentLookup() {
               const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
               const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
               const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
-              const exemptDayCredits = studentInfo.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified && d.day <= studentInfo.totalDays).length
+              const { exemptDayCredits } = countExemptCredits(
+                studentInfo.dailyLog.filter((d) => d.day <= studentInfo.totalDays),
+              )
               const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
               const isProgressComplete = studentInfo.percentComplete >= 100
               const isExtraCreditQualified = qualificationPercentage >= 90
@@ -843,6 +856,12 @@ export default function StudentLookup() {
                             <>
                               <span>·</span>
                               <span>{periodData.exemptDayCredits} exempt bonus coin{periodData.exemptDayCredits !== 1 ? 's' : ''}</span>
+                            </>
+                          )}
+                          {periodData.coinOnlyExemptCredits !== undefined && periodData.coinOnlyExemptCredits > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>{periodData.coinOnlyExemptCredits} coins-only exempt coin{periodData.coinOnlyExemptCredits !== 1 ? 's' : ''}</span>
                             </>
                           )}
                         </div>

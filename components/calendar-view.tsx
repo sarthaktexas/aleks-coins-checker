@@ -15,7 +15,11 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
+  /** Set by API when a day override was applied */
+  isOverridden?: boolean
+  overrideType?: "qualified" | "not_qualified" | string
 }
 
 type DayOverride = {
@@ -208,8 +212,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
 
   const getDayState = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
-    const hasOverride = !!override
-    const isQualified = override ? override.override_type === "qualified" : day.qualified
+    const hasOverride = !!(override || day.isOverridden)
+    const isQualified = override
+      ? override.override_type === "qualified"
+      : day.isOverridden
+        ? day.overrideType === "qualified" || day.qualified
+        : day.qualified
 
     if (day.reason === "⏳ No data available") {
       return {
@@ -219,7 +227,30 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
       }
     }
 
+    // Overrides win over exempt styling so force-qualify days stay visible
+    if (hasOverride) {
+      return {
+        label: isQualified ? "Override: Qualified" : "Override: Not qualified",
+        symbol: isQualified ? "O+" : "O-",
+        className: "bg-blue-50 border-blue-300 text-blue-800 ring-1 ring-blue-200",
+      }
+    }
+
     if (day.isExcluded) {
+      if (day.isCoinOnlyExempt) {
+        if (day.wouldHaveQualified) {
+          return {
+            label: "Exempt (coins only, earned)",
+            symbol: "C+",
+            className: "bg-violet-50 border-violet-300 text-violet-800 ring-1 ring-violet-200",
+          }
+        }
+        return {
+          label: "Exempt (coins only)",
+          symbol: "C",
+          className: "bg-violet-50/60 border-violet-200 text-violet-700",
+        }
+      }
       if (day.wouldHaveQualified) {
         return {
           label: "Exempt (earned)",
@@ -231,14 +262,6 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
         label: "Exempt",
         symbol: "E",
         className: "bg-slate-100 border-slate-300 text-slate-600",
-      }
-    }
-
-    if (hasOverride) {
-      return {
-        label: isQualified ? "Override: Qualified" : "Override: Not qualified",
-        symbol: isQualified ? "O+" : "O-",
-        className: "bg-blue-50 border-blue-300 text-blue-800 ring-1 ring-blue-200",
       }
     }
 
@@ -267,6 +290,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
         return "📅"
       case "E+":
         return "🎁"
+      case "C":
+        return "🪙"
+      case "C+":
+        return "🪙"
       case "O+":
         return "✅🔧"
       case "O-":
@@ -297,16 +324,25 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
   const canRequestOverride = (day: DailyLog) => {
     if (!studentInfo || day.reason === "⏳ No data available") return false
     const override = overrideMap.get(day.day)
-    const isQualified = override ? override.override_type === "qualified" : day.qualified
+    const hasOverride = !!(override || day.isOverridden)
+    const isQualified = override
+      ? override.override_type === "qualified"
+      : day.isOverridden
+        ? day.overrideType === "qualified" || day.qualified
+        : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     // Latest day overrides are intentionally disabled.
     if (isLatestDay) return false
-    return !(isQualified && !override)
+    return !(isQualified && !hasOverride)
   }
 
   const buildOverrideDayInfo = (day: DailyLog) => {
     const override = overrideMap.get(day.day)
-    const isQualified = override ? override.override_type === "qualified" : day.qualified
+    const isQualified = override
+      ? override.override_type === "qualified"
+      : day.isOverridden
+        ? day.overrideType === "qualified" || day.qualified
+        : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
     return {
@@ -349,7 +385,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
       const state = getDayState(day, day.day)
       if (state.symbol === "Q") acc.qualified += 1
       if (state.symbol === "NQ") acc.notQualified += 1
-      if (state.symbol === "E" || state.symbol === "E+") acc.exempt += 1
+      if (state.symbol === "E" || state.symbol === "E+" || state.symbol === "C" || state.symbol === "C+") acc.exempt += 1
       if (state.symbol === "—") acc.future += 1
       return acc
     },
@@ -393,8 +429,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
         <div className="mt-4 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-1.5 sm:gap-2">
           {allDays.map((day) => {
             const override = overrideMap.get(day.day)
-            const hasOverride = !!override
-            const isQualified = override ? override.override_type === "qualified" : day.qualified
+            const hasOverride = !!(override || day.isOverridden)
+            const isQualified = override
+              ? override.override_type === "qualified"
+              : day.isOverridden
+                ? day.overrideType === "qualified" || day.qualified
+                : day.qualified
             const currentReason = override ? override.reason || day.reason : day.reason
             const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
             const canClick = studentInfo && day.reason !== "⏳ No data available"
@@ -442,7 +482,13 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
                   )}
                   {day.isExcluded && (
                     <div className="text-gray-300 text-xs mt-1">
-                      {day.wouldHaveQualified ? "🎁 Extra credit earned" : "Exempt - Not counted in progress"}
+                      {day.isCoinOnlyExempt
+                        ? day.wouldHaveQualified
+                          ? "🪙 Coin earned (does not count toward extra credit %)"
+                          : "Exempt (coins only) — not counted in progress"
+                        : day.wouldHaveQualified
+                          ? "🎁 Extra credit earned"
+                          : "Exempt - Not counted in progress"}
                     </div>
                   )}
                   {requestable && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
@@ -467,6 +513,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-amber-50 border border-amber-300 rounded"></div>
             <span className="text-amber-800 font-medium">🎁/📅 Exempt</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-violet-50 border border-violet-300 rounded"></div>
+            <span className="text-violet-800 font-medium">🪙 Exempt (coins only)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-gray-50 border border-gray-200 rounded"></div>
@@ -575,9 +625,13 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
 
                 {day.isExcluded && (
                   <p className="text-xs text-utsa-muted">
-                    {day.wouldHaveQualified
-                      ? "This exempt day still earned extra credit."
-                      : "This exempt day does not count toward progress."}
+                    {day.isCoinOnlyExempt
+                      ? day.wouldHaveQualified
+                        ? "This exempt (coins only) day earned a coin, but does not count toward extra credit %."
+                        : "This exempt (coins only) day does not count toward progress."
+                      : day.wouldHaveQualified
+                        ? "This exempt day still earned extra credit."
+                        : "This exempt day does not count toward progress."}
                   </p>
                 )}
 

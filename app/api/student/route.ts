@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
+import { countExemptCredits } from "@/lib/day-credits"
+import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
 
 type DailyLog = {
   day: number
@@ -11,6 +13,7 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
 }
 
@@ -24,6 +27,7 @@ type StudentData = {
     percentComplete: number
     dailyLog: DailyLog[]
     exemptDayCredits?: number
+    coinOnlyExemptCredits?: number
   }
 }
 
@@ -304,34 +308,21 @@ function applyOverridesInMemory(
     reason: string
   }>
 ): StudentData {
-  const overridesMap = new Map<string, Map<string, (typeof overrides)[number]>>()
-
-  overrides.forEach((override) => {
-    if (!overridesMap.has(override.student_id)) {
-      overridesMap.set(override.student_id, new Map())
-    }
-    overridesMap.get(override.student_id)!.set(override.date, override)
-  })
+  const overridesMap = buildOverridesMap(overrides)
 
   // Clone so we never mutate objects stored in unstable_cache
   const updatedStudentData: StudentData = JSON.parse(JSON.stringify(studentData))
 
   Object.keys(updatedStudentData).forEach((id) => {
     const student = updatedStudentData[id]
-    const studentOverrides = overridesMap.get(id)
+    const studentOverrides = overridesMap.get(id.toLowerCase())
 
     if (!student.dailyLog) return
 
     if (studentOverrides) {
       student.dailyLog = student.dailyLog.map((day) => {
-        const override = studentOverrides.get(day.date)
-        if (override) {
-          return {
-            ...day,
-            qualified: override.override_type === "qualified",
-            reason: override.reason || day.reason,
-          }
-        }
+        const override = studentOverrides.get(normalizeOverrideDate(day.date))
+        if (override) return applyOverrideToDay(day, override)
         return day
       })
     }
@@ -339,9 +330,7 @@ function applyOverridesInMemory(
     const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
     const completedWorkingDays = workingDayLogs.length
     const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-    const exemptDayCredits = student.dailyLog.filter(
-      (d) => d.isExcluded && d.wouldHaveQualified
-    ).length
+    const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
     const percentComplete =
       completedWorkingDays > 0
         ? Math.round(
@@ -350,8 +339,9 @@ function applyOverridesInMemory(
         : 0
 
     student.percentComplete = percentComplete
-    student.coins = qualifiedWorkingDays + exemptDayCredits
+    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
     student.exemptDayCredits = exemptDayCredits
+    student.coinOnlyExemptCredits = coinOnlyExemptCredits
   })
 
   return updatedStudentData
@@ -557,6 +547,7 @@ export async function POST(request: NextRequest) {
         percentComplete: studentWithOverrides.percentComplete,
         dailyLog: studentWithOverrides.dailyLog,
         exemptDayCredits: studentWithOverrides.exemptDayCredits,
+        coinOnlyExemptCredits: studentWithOverrides.coinOnlyExemptCredits,
         uploadedAt: periodData.uploadedAt,
       }
     })
@@ -623,6 +614,7 @@ export async function POST(request: NextRequest) {
         period: periodInfo?.period || 'Unknown',
         sectionNumber: studentSectionNumber,
         exemptDayCredits: student.exemptDayCredits,
+        coinOnlyExemptCredits: student.coinOnlyExemptCredits,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
       },
       periods: periodsData,

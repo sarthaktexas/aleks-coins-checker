@@ -28,7 +28,7 @@ function normalizeDate(value: unknown): string | null {
 async function fetchPeriodFromDb(periodKey: string): Promise<PeriodDateInfo | null> {
   try {
     const row = await sql`
-      SELECT period_key, name, start_date, end_date, excluded_dates, updated_at
+      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, updated_at
       FROM exam_periods
       WHERE period_key = ${periodKey}
       LIMIT 1
@@ -51,6 +51,7 @@ async function fetchPeriodFromDb(periodKey: string): Promise<PeriodDateInfo | nu
       startDate,
       endDate,
       excludedDates: (r.excluded_dates as string[]) || [],
+      coinOnlyExemptDates: (r.coin_only_exempt_dates as string[]) || [],
     }
   } catch (err) {
     console.error("Failed to read exam_periods row:", err)
@@ -132,6 +133,7 @@ export async function GET(request: NextRequest) {
         startDate: period.startDate,
         endDate: period.endDate,
         excludedDates: period.excludedDates,
+        coinOnlyExemptDates: period.coinOnlyExemptDates,
       },
       today: window.today,
       shouldSync: window.shouldSync,

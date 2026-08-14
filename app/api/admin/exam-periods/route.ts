@@ -2,6 +2,25 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
+async function ensureExamPeriodsSchema() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS exam_periods (
+      id SERIAL PRIMARY KEY,
+      period_key VARCHAR(50) UNIQUE NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      excluded_dates JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS coin_only_exempt_dates JSONB DEFAULT '[]'::jsonb
+  `
+}
+
 // GET - Fetch all exam periods
 export async function GET(request: NextRequest) {
   try {
@@ -16,18 +35,7 @@ export async function GET(request: NextRequest) {
 
     // Ensure the table exists
     try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS exam_periods (
-          id SERIAL PRIMARY KEY,
-          period_key VARCHAR(50) UNIQUE NOT NULL,
-          name VARCHAR(255) NOT NULL,
-          start_date DATE NOT NULL,
-          end_date DATE NOT NULL,
-          excluded_dates JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `
+      await ensureExamPeriodsSchema()
       console.log("Exam periods table created/verified successfully")
     } catch (tableError) {
       console.error("Table creation error:", tableError)
@@ -36,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all exam periods
     const result = await sql`
-      SELECT period_key, name, start_date, end_date, excluded_dates
+      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
       FROM exam_periods
       ORDER BY start_date ASC
     `
@@ -58,6 +66,7 @@ export async function GET(request: NextRequest) {
         startDate: formatDate(row.start_date),
         endDate: formatDate(row.end_date),
         excludedDates: row.excluded_dates || [],
+        coinOnlyExemptDates: row.coin_only_exempt_dates || [],
       }
     })
 
@@ -78,11 +87,21 @@ export async function POST(request: NextRequest) {
     if (professorGate !== true) return professorGate
 
     const body = await request.json()
-    const { periodKey, name, startDate, endDate, excludedDates } = body
+    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates } = body
 
     // Validate required fields
     if (!periodKey || !name || !startDate || !endDate) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    const standardExempt = Array.isArray(excludedDates) ? excludedDates : []
+    const coinOnlyExempt = Array.isArray(coinOnlyExemptDates) ? coinOnlyExemptDates : []
+    const overlap = standardExempt.filter((d: string) => coinOnlyExempt.includes(d))
+    if (overlap.length > 0) {
+      return NextResponse.json(
+        { error: `A date cannot be both Exempt and Exempt (coins only): ${overlap.join(", ")}` },
+        { status: 400 },
+      )
     }
 
     // Check if database is available
@@ -92,18 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure the table exists
     try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS exam_periods (
-          id SERIAL PRIMARY KEY,
-          period_key VARCHAR(50) UNIQUE NOT NULL,
-          name VARCHAR(255) NOT NULL,
-          start_date DATE NOT NULL,
-          end_date DATE NOT NULL,
-          excluded_dates JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `
+      await ensureExamPeriodsSchema()
     } catch (tableError) {
       console.error("Table creation error:", tableError)
       return NextResponse.json({ error: "Database table setup failed" }, { status: 500 })
@@ -111,16 +119,17 @@ export async function POST(request: NextRequest) {
 
     // Insert or update the exam period
     const result = await sql`
-      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, updated_at)
-      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(excludedDates || [])}, NOW())
+      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, updated_at)
+      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(standardExempt)}, ${JSON.stringify(coinOnlyExempt)}, NOW())
       ON CONFLICT (period_key) 
       DO UPDATE SET 
         name = EXCLUDED.name,
         start_date = EXCLUDED.start_date,
         end_date = EXCLUDED.end_date,
         excluded_dates = EXCLUDED.excluded_dates,
+        coin_only_exempt_dates = EXCLUDED.coin_only_exempt_dates,
         updated_at = NOW()
-      RETURNING period_key, name, start_date, end_date, excluded_dates
+      RETURNING period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
     `
 
     console.log(`Exam period ${periodKey} saved successfully`)

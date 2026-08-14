@@ -11,48 +11,56 @@ const EXAM_PERIODS = {
     startDate: `${CURRENT_YEAR}-01-15`,
     endDate: `${CURRENT_YEAR}-02-10`,
     excludedDates: [`${CURRENT_YEAR}-01-20`, `${CURRENT_YEAR}-02-03`], // MLK Day, random Monday
+    coinOnlyExemptDates: [],
   },
   spring2025_exam2: {
     name: `Spring ${CURRENT_YEAR} - Exam 2 Period`,
     startDate: `${CURRENT_YEAR}-02-11`,
     endDate: `${CURRENT_YEAR}-03-10`,
     excludedDates: [`${CURRENT_YEAR}-02-17`, `${CURRENT_YEAR}-03-03`], // Presidents Day, Spring Break start
+    coinOnlyExemptDates: [],
   },
   spring2025_final: {
     name: `Spring ${CURRENT_YEAR} - Final Exam Period`,
     startDate: `${CURRENT_YEAR}-03-11`,
     endDate: `${CURRENT_YEAR}-04-28`,
     excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-04-21`], // Spring Break, Easter Monday
+    coinOnlyExemptDates: [],
   },
   summer2025_exam1: {
     name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
     startDate: `${CURRENT_YEAR}-05-31`,
     endDate: `${CURRENT_YEAR}-06-23`,
     excludedDates: [`${CURRENT_YEAR}-06-07`, `${CURRENT_YEAR}-06-08`], // Weekend
+    coinOnlyExemptDates: [],
   },
   summer2025_exam2: {
     name: `Summer ${CURRENT_YEAR} - Exam 2 Period`,
     startDate: `${CURRENT_YEAR}-06-24`,
     endDate: `${CURRENT_YEAR}-07-17`,
     excludedDates: [`${CURRENT_YEAR}-07-04`, `${CURRENT_YEAR}-07-05`, `${CURRENT_YEAR}-07-06`], // July 4th weekend
+    coinOnlyExemptDates: [],
   },
   summer2025_final: {
     name: `Summer ${CURRENT_YEAR} - Final Exam Period`,
     startDate: `${CURRENT_YEAR}-07-18`,
     endDate: `${CURRENT_YEAR}-08-10`,
     excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`], // Weekend
+    coinOnlyExemptDates: [],
   },
   fall2025_exam1: {
     name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
     startDate: `${CURRENT_YEAR}-08-26`,
     endDate: `${CURRENT_YEAR}-09-20`,
     excludedDates: [`${CURRENT_YEAR}-09-02`, `${CURRENT_YEAR}-09-16`], // Labor Day, random Monday
+    coinOnlyExemptDates: [],
   },
   fall2025_exam2: {
     name: `Fall ${CURRENT_YEAR} - Exam 2 Period`,
     startDate: `${CURRENT_YEAR}-09-21`,
     endDate: `${CURRENT_YEAR}-10-18`,
     excludedDates: [`${CURRENT_YEAR}-10-14`], // Columbus Day
+    coinOnlyExemptDates: [],
   },
   fall2025_final: {
     name: `Fall ${CURRENT_YEAR} - Final Exam Period`,
@@ -65,13 +73,15 @@ const EXAM_PERIODS = {
       `${CURRENT_YEAR}-11-28`,
       `${CURRENT_YEAR}-11-29`,
     ], // Thanksgiving week
+    coinOnlyExemptDates: [],
   },
 }
 
-function getWorkingDays(startDate, endDate, excludedDates = []) {
+function getWorkingDays(startDate, endDate, excludedDates = [], coinOnlyExemptDates = []) {
   const start = new Date(startDate)
   const end = new Date(endDate)
   const excluded = new Set(excludedDates)
+  const coinOnly = new Set(coinOnlyExemptDates)
   const workingDays = []
 
   const currentDate = new Date(start)
@@ -79,12 +89,14 @@ function getWorkingDays(startDate, endDate, excludedDates = []) {
 
   while (currentDate <= end) {
     const dateString = currentDate.toISOString().split("T")[0]
+    const isStandardExempt = excluded.has(dateString)
+    const isCoinOnlyExempt = coinOnly.has(dateString) && !isStandardExempt
 
-    // Add all days but mark excluded ones
     workingDays.push({
       day: dayNumber,
       date: dateString,
-      isExcluded: excluded.has(dateString),
+      isExcluded: isStandardExempt || isCoinOnlyExempt,
+      isCoinOnlyExempt,
     })
     dayNumber++
 
@@ -119,7 +131,7 @@ function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
   console.log(`Excluded dates: ${period.excludedDates.join(", ")}`)
 
   // Get all days for the period (including excluded ones)
-  const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates)
+  const allDays = getWorkingDays(period.startDate, period.endDate, period.excludedDates, period.coinOnlyExemptDates || [])
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalPeriodDays = allDays.length
   const totalWorkingDays = workingDays.length
@@ -147,9 +159,10 @@ function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
       const dailyLog = []
       let coins = 0
       let exemptDayCredits = 0 // Track extra credit coins from exempt days
+      let coinOnlyExemptCredits = 0
 
       // Look for day columns for ALL days (including excluded ones)
-      allDays.forEach(({ day, date, isExcluded }) => {
+      allDays.forEach(({ day, date, isExcluded, isCoinOnlyExempt }) => {
         const minutesCol = `Day ${day} Minutes` || `D${day} Minutes` || `Day${day}_Minutes`
         const topicsCol = `Day ${day} Topics` || `D${day} Topics` || `Day${day}_Topics`
 
@@ -165,9 +178,15 @@ function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
           wouldHaveQualified = minutes >= 31 && topics >= 1
           
           if (wouldHaveQualified) {
-            // Give extra credit Aleks coin for qualifying on exempt day
-            exemptDayCredits++
-            reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+            if (isCoinOnlyExempt) {
+              coinOnlyExemptCredits++
+              reason = `🪙 Exempt (coins only): Would have qualified (${minutes} mins + ${topics} topics)`
+            } else {
+              exemptDayCredits++
+              reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
+            }
+          } else if (isCoinOnlyExempt) {
+            reason = "📅 Exempt (coins only) - earns a coin if you qualify, does not count toward extra credit %"
           } else {
             reason = "📅 Exempt day - does not count toward progress"
           }
@@ -199,6 +218,7 @@ function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
           topics,
           reason,
           isExcluded,
+          isCoinOnlyExempt,
           wouldHaveQualified,
         })
       })
@@ -207,23 +227,24 @@ function processExcelFile(filePath, examPeriod = "summer2025_exam1") {
       const workingDayLogs = dailyLog.filter((d) => !d.isExcluded)
       const completedWorkingDays = workingDayLogs.length
       const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-      // Include exempt day credits in percentage to allow over 100% for extra credit
+      // Standard exempt credits count toward %; coins-only do not
       const percentComplete =
         completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
 
       processedData[studentId] = {
         name,
         email,
-        coins: coins + exemptDayCredits, // Include exempt day credits in total coins
+        coins: coins + exemptDayCredits + coinOnlyExemptCredits,
         totalDays: completedWorkingDays, // Only count working days
         periodDays: totalWorkingDays, // Only count working days for period
         percentComplete,
         dailyLog, // Include all days (working + excluded)
-        exemptDayCredits, // Track exempt day credits separately for display
+        exemptDayCredits,
+        coinOnlyExemptCredits,
       }
 
       console.log(
-        `Processed: ${name} (${studentId}) - ${coins + exemptDayCredits} coins (${coins} regular + ${exemptDayCredits} exempt), ${percentComplete}% complete (${qualifiedWorkingDays}/${completedWorkingDays} working days)`,
+        `Processed: ${name} (${studentId}) - ${coins + exemptDayCredits + coinOnlyExemptCredits} coins (${coins} regular + ${exemptDayCredits} exempt + ${coinOnlyExemptCredits} coins-only), ${percentComplete}% complete (${qualifiedWorkingDays}/${completedWorkingDays} working days)`,
       )
     } catch (error) {
       console.error(`Error processing row ${index + 1}:`, error)
@@ -268,10 +289,10 @@ function main() {
     console.log(`📊 Total students: ${Object.keys(processedData).length}`)
     console.log(`📅 Period: ${EXAM_PERIODS[examPeriod].name}`)
     console.log(
-      `🗓️  Total days: ${getWorkingDays(EXAM_PERIODS[examPeriod].startDate, EXAM_PERIODS[examPeriod].endDate, EXAM_PERIODS[examPeriod].excludedDates).length}`,
+      `🗓️  Total days: ${getWorkingDays(EXAM_PERIODS[examPeriod].startDate, EXAM_PERIODS[examPeriod].endDate, EXAM_PERIODS[examPeriod].excludedDates, EXAM_PERIODS[examPeriod].coinOnlyExemptDates || []).length}`,
     )
     console.log(
-      `📝 Working days: ${getWorkingDays(EXAM_PERIODS[examPeriod].startDate, EXAM_PERIODS[examPeriod].endDate, EXAM_PERIODS[examPeriod].excludedDates).filter((d) => !d.isExcluded).length}`,
+      `📝 Working days: ${getWorkingDays(EXAM_PERIODS[examPeriod].startDate, EXAM_PERIODS[examPeriod].endDate, EXAM_PERIODS[examPeriod].excludedDates, EXAM_PERIODS[examPeriod].coinOnlyExemptDates || []).filter((d) => !d.isExcluded).length}`,
     )
   } catch (error) {
     console.error("Error processing file:", error.message)

@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { countExemptCredits } from "@/lib/day-credits"
+import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
 
@@ -23,9 +25,11 @@ type StudentData = {
       topics: number
       reason: string
       isExcluded?: boolean
+      isCoinOnlyExempt?: boolean
       wouldHaveQualified?: boolean
     }>
     exemptDayCredits?: number
+    coinOnlyExemptCredits?: number
   }
 }
 
@@ -88,36 +92,21 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
       rows: allOverrides.rows.filter(row => studentIdsSet.has(row.student_id.toLowerCase()))
     }
 
-    // Group overrides by student_id and date (not day_number, since day numbers are period-specific)
-    const overridesMap = new Map<string, Map<string, any>>()
-    
-    overridesResult.rows.forEach(override => {
-      if (!overridesMap.has(override.student_id)) {
-        overridesMap.set(override.student_id, new Map())
-      }
-      // Use date as the key instead of day_number to match the correct period
-      overridesMap.get(override.student_id)!.set(override.date, override)
-    })
+    const overridesMap = buildOverridesMap(overridesResult.rows)
 
     // Apply overrides to each student's daily log
     const updatedStudentData = { ...studentData }
     
     Object.keys(updatedStudentData).forEach(studentId => {
       const student = updatedStudentData[studentId]
-      const studentOverrides = overridesMap.get(studentId)
+      const studentOverrides = overridesMap.get(studentId.toLowerCase())
       
       if (student.dailyLog) {
         // Apply overrides to daily log by matching date (not day_number) if they exist
         if (studentOverrides) {
           student.dailyLog = student.dailyLog.map(day => {
-            const override = studentOverrides.get(day.date)
-            if (override) {
-              return {
-                ...day,
-                qualified: override.override_type === "qualified",
-                reason: override.reason || day.reason
-              }
-            }
+            const override = studentOverrides.get(normalizeOverrideDate(day.date))
+            if (override) return applyOverrideToDay(day, override)
             return day
           })
         }
@@ -126,16 +115,15 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
         const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
         const completedWorkingDays = workingDayLogs.length
         const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-        
-        // Calculate exempt day credits (from days that would have qualified on exempt days)
-        const exemptDayCredits = student.dailyLog.filter((d) => d.isExcluded && d.wouldHaveQualified).length
-        
-        // Include exempt day credits in percentage to allow over 100% for extra credit
+        const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
+
+        // Standard exempt credits count toward extra credit %; coins-only exempt do not
         const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
-        
+
         student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays + exemptDayCredits
+        student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
         student.exemptDayCredits = exemptDayCredits
+        student.coinOnlyExemptCredits = coinOnlyExemptCredits
       }
     })
 

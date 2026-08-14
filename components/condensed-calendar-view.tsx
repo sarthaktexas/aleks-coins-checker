@@ -10,6 +10,7 @@ type DailyLog = {
   topics: number
   reason: string
   isExcluded?: boolean
+  isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
 }
 
@@ -119,6 +120,11 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
       return { emoji: "⏳", className: "bg-gray-50 border-gray-200 text-gray-400", hasOverride: false }
     }
     if (day.isExcluded) {
+      if (day.isCoinOnlyExempt) {
+        return day.wouldHaveQualified
+          ? { emoji: "🪙", className: "bg-violet-50 border-violet-300 text-violet-800 ring-1 ring-violet-200", hasOverride: false }
+          : { emoji: "🪙", className: "bg-violet-50/60 border-violet-200 text-violet-700", hasOverride: false }
+      }
       return day.wouldHaveQualified
         ? { emoji: "🎁", className: "bg-amber-50 border-amber-300 text-amber-800 ring-1 ring-amber-200", hasOverride: false }
         : { emoji: "📅", className: "bg-slate-100 border-slate-300 text-slate-600", hasOverride: false }
@@ -159,7 +165,7 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
       if (state.hasOverride) acc.overrides += 1
       else if (state.emoji === "✅") acc.qualified += 1
       else if (state.emoji === "❌") acc.notQualified += 1
-      else if (state.emoji === "🎁" || state.emoji === "📅") acc.exempt += 1
+      else if (state.emoji === "🎁" || state.emoji === "📅" || state.emoji === "🪙") acc.exempt += 1
       else acc.future += 1
       return acc
     },
@@ -218,6 +224,10 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 shrink-0 rounded border border-amber-300 bg-amber-50" />
           🎁/📅 Exempt
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 shrink-0 rounded border border-violet-300 bg-violet-50" />
+          🪙 Exempt (coins only)
         </span>
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 shrink-0 rounded border border-gray-200 bg-gray-50" />

@@ -53,6 +53,7 @@ type ExamPeriodData = {
   startDate: string
   endDate: string
   excludedDates: readonly string[] | string[]
+  coinOnlyExemptDates?: readonly string[] | string[]
 }
 
 type PeriodFormState = {
@@ -64,6 +65,7 @@ type PeriodFormState = {
   startDate: string
   endDate: string
   excludedDates: string[]
+  coinOnlyExemptDates: string[]
 }
 
 const emptyForm = (): PeriodFormState => ({
@@ -75,6 +77,7 @@ const emptyForm = (): PeriodFormState => ({
   startDate: "",
   endDate: "",
   excludedDates: [],
+  coinOnlyExemptDates: [],
 })
 
 function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormState {
@@ -92,6 +95,7 @@ function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormSt
     startDate: formatDateForInput(period.startDate),
     endDate: formatDateForInput(period.endDate),
     excludedDates: [...period.excludedDates],
+    coinOnlyExemptDates: [...(period.coinOnlyExemptDates || [])],
   }
 }
 
@@ -164,8 +168,20 @@ export default function ManagePeriodsPage() {
   const [dialogMode, setDialogMode] = useState<"add" | "edit" | null>(null)
   const [editingOriginalKey, setEditingOriginalKey] = useState<string | null>(null)
   const [form, setForm] = useState<PeriodFormState>(emptyForm)
-  const [newExcludedDate, setNewExcludedDate] = useState("")
+  const [specialDayDate, setSpecialDayDate] = useState("")
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
+
+  type SpecialDayKind = "exempt" | "coins_only"
+  type SpecialDay = { date: string; kind: SpecialDayKind }
+
+  const specialDays = useMemo<SpecialDay[]>(() => {
+    const days: SpecialDay[] = [
+      ...form.excludedDates.map((date) => ({ date, kind: "exempt" as const })),
+      ...form.coinOnlyExemptDates.map((date) => ({ date, kind: "coins_only" as const })),
+    ]
+    return days.sort((a, b) => a.date.localeCompare(b.date))
+  }, [form.excludedDates, form.coinOnlyExemptDates])
+
 
   const semesterGroups = useMemo(
     () =>
@@ -201,7 +217,7 @@ export default function ManagePeriodsPage() {
   const openAddDialog = () => {
     setDialogMode("add")
     setEditingOriginalKey(null)
-    setNewExcludedDate("")
+    setSpecialDayDate("")
     setForm(emptyForm())
     setMessage(null)
   }
@@ -211,7 +227,7 @@ export default function ManagePeriodsPage() {
     if (!period) return
     setDialogMode("edit")
     setEditingOriginalKey(periodKey)
-    setNewExcludedDate("")
+    setSpecialDayDate("")
     setForm(formFromPeriod(periodKey, period))
     setMessage(null)
   }
@@ -219,7 +235,7 @@ export default function ManagePeriodsPage() {
   const closeDialog = () => {
     setDialogMode(null)
     setEditingOriginalKey(null)
-    setNewExcludedDate("")
+    setSpecialDayDate("")
   }
 
   const updateFormPart = <K extends keyof PeriodFormState>(key: K, value: PeriodFormState[K]) => {
@@ -287,6 +303,7 @@ export default function ManagePeriodsPage() {
           startDate: form.startDate,
           endDate: form.endDate,
           excludedDates: form.excludedDates,
+          coinOnlyExemptDates: form.coinOnlyExemptDates,
         }),
       })
 
@@ -317,24 +334,69 @@ export default function ManagePeriodsPage() {
     }
   }
 
-  const addExcludedDate = () => {
-    if (!newExcludedDate) return
-    if (form.excludedDates.includes(newExcludedDate)) {
-      setNewExcludedDate("")
+  const addSpecialDay = (kind: SpecialDayKind) => {
+    if (!specialDayDate) return
+
+    const alreadyExempt = form.excludedDates.includes(specialDayDate)
+    const alreadyCoinsOnly = form.coinOnlyExemptDates.includes(specialDayDate)
+    if (alreadyExempt || alreadyCoinsOnly) {
+      setMessage({
+        type: "error",
+        text: "That date is already a special day. Change its type in the list below, or remove it first.",
+      })
       return
     }
-    setForm((prev) => ({
-      ...prev,
-      excludedDates: [...prev.excludedDates, newExcludedDate].sort(),
-    }))
-    setNewExcludedDate("")
+
+    setForm((prev) => {
+      if (kind === "exempt") {
+        return {
+          ...prev,
+          excludedDates: [...prev.excludedDates, specialDayDate].sort(),
+        }
+      }
+      return {
+        ...prev,
+        coinOnlyExemptDates: [...prev.coinOnlyExemptDates, specialDayDate].sort(),
+      }
+    })
+    setSpecialDayDate("")
+    setMessage(null)
   }
 
-  const removeExcludedDate = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      excludedDates: prev.excludedDates.filter((_, i) => i !== index),
-    }))
+  const removeSpecialDay = (date: string, kind: SpecialDayKind) => {
+    setForm((prev) => {
+      if (kind === "exempt") {
+        return {
+          ...prev,
+          excludedDates: prev.excludedDates.filter((d) => d !== date),
+        }
+      }
+      return {
+        ...prev,
+        coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
+      }
+    })
+  }
+
+  const setSpecialDayKind = (date: string, kind: SpecialDayKind) => {
+    setForm((prev) => {
+      const without = {
+        excludedDates: prev.excludedDates.filter((d) => d !== date),
+        coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
+      }
+      if (kind === "exempt") {
+        return {
+          ...prev,
+          ...without,
+          excludedDates: [...without.excludedDates, date].sort(),
+        }
+      }
+      return {
+        ...prev,
+        ...without,
+        coinOnlyExemptDates: [...without.coinOnlyExemptDates, date].sort(),
+      }
+    })
   }
 
   const toggleSemester = (semesterKey: string) => {
@@ -447,17 +509,30 @@ export default function ManagePeriodsPage() {
                           <p className="text-xs text-utsa-muted">
                             {formatDateRange(period.startDate, period.endDate)}
                             {period.excludedDates.length > 0 && (
-                              <> · {period.excludedDates.length} exempt {period.excludedDates.length === 1 ? "day" : "days"}</>
+                              <> · {period.excludedDates.length} exempt</>
+                            )}
+                            {(period.coinOnlyExemptDates?.length || 0) > 0 && (
+                              <> · {period.coinOnlyExemptDates!.length} coins-only</>
                             )}
                           </p>
-                          {period.excludedDates.length > 0 && (
+                          {(period.excludedDates.length > 0 || (period.coinOnlyExemptDates?.length || 0) > 0) && (
                             <div className="flex flex-wrap gap-1.5 pt-0.5">
                               {period.excludedDates.map((date, index) => (
                                 <span
-                                  key={`${periodKey}-${date}-${index}`}
+                                  key={`${periodKey}-ex-${date}-${index}`}
                                   className="px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs"
+                                  title="Exempt (counts toward extra credit %)"
                                 >
                                   {formatDateForDisplay(date, { month: "short", day: "numeric" })}
+                                </span>
+                              ))}
+                              {(period.coinOnlyExemptDates || []).map((date, index) => (
+                                <span
+                                  key={`${periodKey}-co-${date}-${index}`}
+                                  className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded text-xs"
+                                  title="Exempt (coins only)"
+                                >
+                                  {formatDateForDisplay(date, { month: "short", day: "numeric" })} · coins
                                 </span>
                               ))}
                             </div>
@@ -493,6 +568,8 @@ export default function ManagePeriodsPage() {
           <p>• Changing the period key updates student_data, coin_adjustments, and student_requests</p>
           <p>• The period name (not the key) is shown to students on their lookup page</p>
           <p>• Excluded dates are automatically excluded from progress calculations</p>
+          <p>• Exempt days can still earn a coin and count toward extra credit %</p>
+          <p>• Exempt (coins only) days can earn a coin but never count toward extra credit %</p>
         </div>
       </div>
 
@@ -609,28 +686,39 @@ export default function ManagePeriodsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Excluded Dates</Label>
-              {form.excludedDates.length === 0 ? (
-                <p className="text-xs text-utsa-muted">No exempt days yet.</p>
+              <Label>Special days</Label>
+              <p className="text-[11px] text-utsa-muted">
+                Exempt: coin + extra credit %. Coins only: coin, never extra credit %.
+              </p>
+              {specialDays.length === 0 ? (
+                <p className="text-xs text-utsa-muted">No special days yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {form.excludedDates.map((date, index) => (
-                    <div key={`${date}-${index}`} className="flex items-center gap-2">
+                  {specialDays.map(({ date, kind }) => (
+                    <div key={`${kind}-${date}`} className="flex items-center gap-2">
                       <Input
                         type="date"
                         value={date}
-                        onChange={(e) => {
-                          const next = [...form.excludedDates]
-                          next[index] = e.target.value
-                          setForm((prev) => ({ ...prev, excludedDates: next }))
-                        }}
+                        readOnly
                         className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
                       />
+                      <Select
+                        value={kind}
+                        onValueChange={(value) => setSpecialDayKind(date, value as SpecialDayKind)}
+                      >
+                        <SelectTrigger className="w-[140px] border-utsa-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="exempt">Exempt</SelectItem>
+                          <SelectItem value="coins_only">Coins only</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <Button
                         size="sm"
                         variant="outline"
                         type="button"
-                        onClick={() => removeExcludedDate(index)}
+                        onClick={() => removeSpecialDay(date, kind)}
                         className="text-red-600 border-red-200 hover:bg-red-50"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -639,21 +727,37 @@ export default function ManagePeriodsPage() {
                   ))}
                 </div>
               )}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <Input
                   type="date"
-                  value={newExcludedDate}
-                  onChange={(e) => setNewExcludedDate(e.target.value)}
+                  value={specialDayDate}
+                  onChange={(e) => setSpecialDayDate(e.target.value)}
                   className="flex-1 border-utsa-border focus-visible:ring-utsa-orange"
                 />
-                <Button
-                  size="sm"
-                  type="button"
-                  onClick={addExcludedDate}
-                  disabled={!newExcludedDate}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    onClick={() => addSpecialDay("exempt")}
+                    disabled={!specialDayDate}
+                    className="border-utsa-border"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Exempt
+                  </Button>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                    onClick={() => addSpecialDay("coins_only")}
+                    disabled={!specialDayDate}
+                    className="border-utsa-border"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Coins only
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

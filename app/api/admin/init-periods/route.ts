@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { EXAM_PERIODS } from "@/lib/exam-periods"
+import { ensureExamPeriodsSchema } from "@/lib/aleks-excel"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 
 // POST - Initialize exam periods with default data
@@ -18,18 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure the table exists
     try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS exam_periods (
-          id SERIAL PRIMARY KEY,
-          period_key VARCHAR(50) UNIQUE NOT NULL,
-          name VARCHAR(255) NOT NULL,
-          start_date DATE NOT NULL,
-          end_date DATE NOT NULL,
-          excluded_dates JSONB DEFAULT '[]'::jsonb,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `
+      await ensureExamPeriodsSchema()
       console.log("Exam periods table created/verified successfully")
     } catch (tableError) {
       console.error("Table creation error:", tableError)
@@ -52,9 +42,11 @@ export async function POST(request: NextRequest) {
 
     for (const [periodKey, period] of periods) {
       try {
+        const coinOnly =
+          "coinOnlyExemptDates" in period ? [...(period as { coinOnlyExemptDates: readonly string[] }).coinOnlyExemptDates] : []
         await sql`
-          INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates)
-          VALUES (${periodKey}, ${period.name}, ${period.startDate}, ${period.endDate}, ${JSON.stringify(period.excludedDates)})
+          INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates)
+          VALUES (${periodKey}, ${period.name}, ${period.startDate}, ${period.endDate}, ${JSON.stringify([...period.excludedDates])}, ${JSON.stringify(coinOnly)})
         `
         insertedCount++
         console.log(`Inserted exam period: ${periodKey} - ${period.name}`)

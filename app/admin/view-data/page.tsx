@@ -28,6 +28,7 @@ import { useHidePII } from "@/hooks/use-hide-pii"
 import { CondensedCalendarView } from "@/components/condensed-calendar-view"
 import { groupBySemester, getExamLabel } from "@/lib/exam-periods"
 import { formatLocalDateTime } from "@/lib/datetime"
+import { countExemptCredits } from "@/lib/day-credits"
 
 type StudentData = {
   name: string
@@ -744,7 +745,7 @@ Total: ${extraCreditStudents.length} students`
                   const isExpanded = expandedStudentId === studentId
                   const workingDays = (data.dailyLog || []).filter((d: any) => !d.isExcluded)
                   const qualifiedDays = workingDays.filter((d: any) => d.qualified).length
-                  const exemptCredits = (data.dailyLog || []).filter((d: any) => d.isExcluded && d.wouldHaveQualified).length
+                  const { exemptDayCredits: exemptCredits, coinOnlyExemptCredits } = countExemptCredits(data.dailyLog || [])
                   const avgMins = data.dailyLog && data.dailyLog.length > 0
                     ? Math.round(
                         data.dailyLog.filter((d: any) => d.minutes > 0).reduce((s: number, d: any) => s + d.minutes, 0) /
@@ -803,6 +804,12 @@ Total: ${extraCreditStudents.length} students`
                               </span>
                               {" "}/ {workingDays.length} qualified days
                             </span>
+                            {coinOnlyExemptCredits > 0 && (
+                              <span>
+                                <span className="font-medium text-utsa-midnight">+{coinOnlyExemptCredits}</span>
+                                {" "}coins-only exempt
+                              </span>
+                            )}
                             {avgMins !== null && (
                               <span><span className="font-medium text-utsa-midnight">{avgMins}</span> avg min/day</span>
                             )}

@@ -30,6 +30,7 @@ type ExamPeriodData = {
   startDate: string
   endDate: string
   excludedDates: readonly string[]
+  coinOnlyExemptDates?: readonly string[]
 }
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
