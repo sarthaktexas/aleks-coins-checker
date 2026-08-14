@@ -103,6 +103,8 @@ export default function ViewOverridesPage() {
         body: JSON.stringify({
           studentId: override.student_id,
           dayNumber: override.day_number,
+          date: override.date,
+          id: override.id,
         }),
       })
 

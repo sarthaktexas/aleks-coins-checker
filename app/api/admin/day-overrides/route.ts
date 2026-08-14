@@ -43,6 +43,31 @@ async function ensureOverridesTable() {
     ALTER TABLE student_day_overrides
     ADD COLUMN IF NOT EXISTS created_by VARCHAR(255)
   `
+
+  // Older DBs used UNIQUE(student_id, day_number), which silently blocked / replaced
+  // overrides across exam periods that share the same day number. Migrate to date.
+  await sql`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'student_day_overrides_student_id_day_number_key'
+      ) THEN
+        ALTER TABLE student_day_overrides
+          DROP CONSTRAINT student_day_overrides_student_id_day_number_key;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'student_day_overrides_student_id_date_key'
+      ) THEN
+        ALTER TABLE student_day_overrides
+          ADD CONSTRAINT student_day_overrides_student_id_date_key UNIQUE (student_id, date);
+      END IF;
+    END $$;
+  `
 }
 
 // Create or update day override
@@ -139,28 +164,7 @@ export async function POST(request: NextRequest) {
         RETURNING id, created_at, updated_at
       `
     } else {
-      const existingByDayNumber = await sql`
-        SELECT id, date, admin_password_hash
-        FROM student_day_overrides
-        WHERE student_id = ${normalizedStudentId}
-          AND day_number = ${dayNumber}
-      `
-
-      if (existingByDayNumber.rows.length > 0) {
-        const existing = existingByDayNumber.rows[0]
-        if (!canModifyOverride(session, existing.admin_password_hash)) {
-          return NextResponse.json(
-            { error: "You can only edit overrides you created. Ask a professor to change this one." },
-            { status: 403 },
-          )
-        }
-
-        await sql`
-          DELETE FROM student_day_overrides
-          WHERE id = ${existing.id}
-        `
-      }
-
+      // Unique key is (student_id, date) — same day_number in another period is fine
       result = await sql`
         INSERT INTO student_day_overrides (
           student_id, day_number, date,
@@ -170,6 +174,14 @@ export async function POST(request: NextRequest) {
           ${normalizedStudentId}, ${dayNumber}, ${normalizedDate},
           ${overrideType}, ${reason || null}, ${adminPasswordHash}, ${createdBy}
         )
+        ON CONFLICT (student_id, date)
+        DO UPDATE SET
+          day_number = EXCLUDED.day_number,
+          override_type = EXCLUDED.override_type,
+          reason = EXCLUDED.reason,
+          admin_password_hash = EXCLUDED.admin_password_hash,
+          created_by = EXCLUDED.created_by,
+          updated_at = NOW()
         RETURNING id, created_at, updated_at
       `
     }
@@ -317,9 +329,9 @@ export async function DELETE(request: NextRequest) {
     const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
-    const { studentId, dayNumber } = await request.json()
+    const { studentId, dayNumber, date, id } = await request.json()
 
-    if (!studentId || !dayNumber) {
+    if (!studentId || (!id && !date && !dayNumber)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
@@ -328,13 +340,34 @@ export async function DELETE(request: NextRequest) {
     }
 
     const normalizedStudentId = (studentId || "").toLowerCase().trim()
+    const normalizedDate = typeof date === "string" ? date.trim() : ""
 
-    const existing = await sql`
-      SELECT id, admin_password_hash
-      FROM student_day_overrides
-      WHERE student_id = ${normalizedStudentId}
-        AND day_number = ${dayNumber}
-    `
+    // Prefer id, then date — day_number alone is ambiguous across periods
+    let existing
+    if (id) {
+      existing = await sql`
+        SELECT id, admin_password_hash
+        FROM student_day_overrides
+        WHERE id = ${id}
+          AND student_id = ${normalizedStudentId}
+      `
+    } else if (normalizedDate) {
+      existing = await sql`
+        SELECT id, admin_password_hash
+        FROM student_day_overrides
+        WHERE student_id = ${normalizedStudentId}
+          AND date = ${normalizedDate}
+      `
+    } else {
+      existing = await sql`
+        SELECT id, admin_password_hash
+        FROM student_day_overrides
+        WHERE student_id = ${normalizedStudentId}
+          AND day_number = ${dayNumber}
+        ORDER BY date DESC
+        LIMIT 1
+      `
+    }
 
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: "Override not found" }, { status: 404 })
