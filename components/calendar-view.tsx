@@ -6,6 +6,7 @@ import { Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 import { DayOverrideModal } from "@/components/day-override-modal"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { normalizeOverrideDate } from "@/lib/day-overrides"
 
 type DailyLog = {
   day: number
@@ -81,7 +82,8 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
   // Use string comparison since dates are stored as 'YYYY-MM-DD' strings
   const filteredOverrides = minDate && maxDate
     ? overrides.filter(override => {
-        return override.date >= minDate && override.date <= maxDate
+        const date = normalizeOverrideDate(override.date)
+        return date >= minDate && date <= maxDate
       })
     : []
   
@@ -90,7 +92,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
   const overrideMap = new Map<number, DayOverride>()
   filteredOverrides.forEach(override => {
     // Find the day in dailyLog that matches this override's date
-    const matchingDay = dailyLog.find(log => log.date === override.date)
+    const matchingDay = dailyLog.find(log => normalizeOverrideDate(log.date) === normalizeOverrideDate(override.date))
     if (matchingDay) {
       overrideMap.set(matchingDay.day, override)
     }
