@@ -691,6 +691,17 @@ export default function ManagePeriodsPage() {
                 </p>
               </div>
 
+              <div className="rounded-md border border-utsa-border bg-white px-3 py-2.5 text-[11px] text-utsa-muted space-y-1.5">
+                <p>
+                  <span className="font-semibold text-utsa-midnight">Exempt:</span>{" "}
+                  if a student qualifies, they earn a coin and it counts toward extra credit %.
+                </p>
+                <p>
+                  <span className="font-semibold text-utsa-midnight">Exempt (coins only):</span>{" "}
+                  if a student qualifies, they earn a coin, but it never counts toward extra credit %.
+                </p>
+              </div>
+
               {specialDays.length === 0 ? (
                 <p className="text-xs text-utsa-muted">No special days yet.</p>
               ) : (
@@ -700,16 +711,13 @@ export default function ManagePeriodsPage() {
                       key={`${kind}-${date}`}
                       className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-utsa-border bg-white px-2.5 py-2"
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-utsa-midnight">
-                          {formatDateForDisplay(date, {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </p>
-                        <p className="text-[11px] text-utsa-muted font-mono">{date}</p>
-                      </div>
+                      <p className="flex-1 min-w-0 text-sm font-medium text-utsa-midnight">
+                        {formatDateForDisplay(date, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
                       <div className="flex items-center gap-2">
                         <Select
                           value={kind}
@@ -753,9 +761,7 @@ export default function ManagePeriodsPage() {
                 {specialDayDate ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-utsa-midnight">
-                      If a student qualifies on{" "}
-                      {formatDateForDisplay(specialDayDate, { month: "short", day: "numeric" })},
-                      should it count toward extra credit?
+                      If a student qualifies on this day, should it count toward extra credit?
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
@@ -765,7 +771,7 @@ export default function ManagePeriodsPage() {
                       >
                         <p className="text-sm font-semibold text-amber-900">Yes — Exempt</p>
                         <p className="text-[11px] text-amber-800/90 mt-1 leading-snug">
-                          Earns a coin and counts toward the extra credit %.
+                          Coin + extra credit %
                         </p>
                       </button>
                       <button
@@ -775,7 +781,7 @@ export default function ManagePeriodsPage() {
                       >
                         <p className="text-sm font-semibold text-violet-900">No — Exempt (coins only)</p>
                         <p className="text-[11px] text-violet-800/90 mt-1 leading-snug">
-                          Earns a coin, but never counts toward the extra credit %.
+                          Coin only, no extra credit %
                         </p>
                       </button>
                     </div>

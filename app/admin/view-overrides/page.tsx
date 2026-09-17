@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Search,
   Download,
   Trash2,
@@ -32,6 +39,9 @@ type DayOverride = {
   created_at: string
   updated_at: string
   can_modify: boolean
+  period?: string | null
+  period_name?: string | null
+  section_number?: string | null
 }
 
 type StudentGroup = {
@@ -40,16 +50,33 @@ type StudentGroup = {
   overrides: DayOverride[]
   qualifiedCount: number
   notQualifiedCount: number
+  sections: string[]
 }
 
 type TypeFilter = "all" | "qualified" | "not_qualified"
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
+const UNKNOWN_SECTION = "__unknown__"
+
+function sectionLabel(section: string | null | undefined) {
+  if (!section || section === UNKNOWN_SECTION) return "Unknown class"
+  if (section === "default") return "Default"
+  return `Section ${section}`
+}
+
+function shortPeriodLabel(override: DayOverride) {
+  if (override.period_name) return override.period_name
+  if (override.period) {
+    return override.period.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+  return null
+}
 
 export default function ViewOverridesPage() {
   const { user } = useAdminAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all")
+  const [sectionFilter, setSectionFilter] = useState<string>("all")
   const [overrides, setOverrides] = useState<DayOverride[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -74,7 +101,9 @@ export default function ViewOverridesPage() {
       const result = await response.json()
 
       if (response.ok) {
-        setOverrides(result.overrides || [])
+        const list: DayOverride[] = result.overrides || []
+        setOverrides(list)
+        setExpandedIds(new Set(list.map((o) => o.student_id)))
       } else {
         setError(result.error || "Failed to load overrides")
       }
@@ -127,23 +156,47 @@ export default function ViewOverridesPage() {
     }
   }
 
+  const sectionOptions = useMemo(() => {
+    const set = new Set<string>()
+    let hasUnknown = false
+    for (const o of overrides) {
+      if (o.section_number) set.add(o.section_number)
+      else hasUnknown = true
+    }
+    const sorted = Array.from(set).sort((a, b) => {
+      const na = Number(a)
+      const nb = Number(b)
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb
+      return a.localeCompare(b)
+    })
+    return { sections: sorted, hasUnknown }
+  }, [overrides])
+
   const filteredOverrides = useMemo(() => {
     const q = searchTerm.toLowerCase().trim()
     return overrides.filter((override) => {
       if (typeFilter !== "all" && override.override_type !== typeFilter) return false
+      if (sectionFilter === UNKNOWN_SECTION) {
+        if (override.section_number) return false
+      } else if (sectionFilter !== "all") {
+        if (override.section_number !== sectionFilter) return false
+      }
       if (!q) return true
       const displayName = hidePII ? getFakeDataForStudent(override.student_id).name : override.student_name
       const displayId = hidePII ? getFakeDataForStudent(override.student_id).studentId : override.student_id
+      const periodText = shortPeriodLabel(override)?.toLowerCase() || ""
       return (
         displayId.toLowerCase().includes(q) ||
         displayName.toLowerCase().includes(q) ||
         override.reason?.toLowerCase().includes(q) ||
         override.created_by?.toLowerCase().includes(q) ||
         override.date.includes(q) ||
-        String(override.day_number).includes(q)
+        String(override.day_number).includes(q) ||
+        periodText.includes(q) ||
+        (override.section_number && `section ${override.section_number}`.includes(q))
       )
     })
-  }, [overrides, searchTerm, typeFilter, hidePII])
+  }, [overrides, searchTerm, typeFilter, sectionFilter, hidePII])
 
   const studentGroups = useMemo(() => {
     const map = new Map<string, StudentGroup>()
@@ -156,12 +209,25 @@ export default function ViewOverridesPage() {
           overrides: [],
           qualifiedCount: 0,
           notQualifiedCount: 0,
+          sections: [],
         }
         map.set(override.student_id, group)
       }
       group.overrides.push(override)
       if (override.override_type === "qualified") group.qualifiedCount += 1
       else group.notQualifiedCount += 1
+      if (override.section_number && !group.sections.includes(override.section_number)) {
+        group.sections.push(override.section_number)
+      }
+    }
+
+    for (const group of map.values()) {
+      group.sections.sort((a, b) => {
+        const na = Number(a)
+        const nb = Number(b)
+        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb
+        return a.localeCompare(b)
+      })
     }
 
     return Array.from(map.values()).sort((a, b) => {
@@ -199,13 +265,27 @@ export default function ViewOverridesPage() {
       return
     }
 
-    const headers = ["Student Name", "Student ID", "Day Number", "Date", "Override Type", "Reason", "Created By", "Created At", "Updated At"]
+    const headers = [
+      "Student Name",
+      "Student ID",
+      "Section",
+      "Period",
+      "Day Number",
+      "Date",
+      "Override Type",
+      "Reason",
+      "Created By",
+      "Created At",
+      "Updated At",
+    ]
     const csvData = [
       headers.join(","),
       ...filteredOverrides.map((override) =>
         [
           `"${override.student_name}"`,
           override.student_id,
+          `"${override.section_number || ""}"`,
+          `"${shortPeriodLabel(override) || override.period || ""}"`,
           override.day_number,
           override.date,
           `"${override.override_type}"`,
@@ -276,12 +356,32 @@ export default function ViewOverridesPage() {
           <div className="relative min-w-[200px] flex-1">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-utsa-muted" />
             <Input
-              placeholder={hidePII ? "Search placeholder name, ID, day, reason…" : "Search name, ID, day, staff, reason…"}
+              placeholder={
+                hidePII
+                  ? "Search placeholder name, ID, day, period, reason…"
+                  : "Search name, ID, day, period, staff, reason…"
+              }
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="h-8 border-utsa-border pl-8 text-sm focus-visible:ring-utsa-orange"
             />
           </div>
+          <Select value={sectionFilter} onValueChange={setSectionFilter}>
+            <SelectTrigger className="h-8 w-[150px] border-utsa-border text-sm">
+              <SelectValue placeholder="Class" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classes</SelectItem>
+              {sectionOptions.sections.map((section) => (
+                <SelectItem key={section} value={section}>
+                  {sectionLabel(section)}
+                </SelectItem>
+              ))}
+              {sectionOptions.hasUnknown && (
+                <SelectItem value={UNKNOWN_SECTION}>{sectionLabel(null)}</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
           <div className="flex gap-1">
             {(
               [
@@ -332,7 +432,11 @@ export default function ViewOverridesPage() {
                 ? getFakeDataForStudent(group.studentId)
                 : { name: group.studentName, studentId: group.studentId }
               const expanded = expandedIds.has(group.studentId)
-              const sorted = [...group.overrides].sort((a, b) => a.day_number - b.day_number)
+              const sorted = [...group.overrides].sort((a, b) => {
+                const periodCmp = (a.period || "").localeCompare(b.period || "")
+                if (periodCmp !== 0) return periodCmp
+                return a.day_number - b.day_number || a.date.localeCompare(b.date)
+              })
 
               return (
                 <div key={group.studentId}>
@@ -349,6 +453,15 @@ export default function ViewOverridesPage() {
                     <div className="min-w-0 flex-1">
                       <span className="truncate text-sm font-medium text-utsa-midnight">{display.name}</span>
                       <span className="ml-2 font-mono text-xs text-utsa-muted">{display.studentId}</span>
+                      {group.sections.map((section) => (
+                        <Badge
+                          key={section}
+                          variant="outline"
+                          className="ml-2 h-5 border-utsa-border px-1.5 text-[10px] font-normal text-utsa-muted"
+                        >
+                          {sectionLabel(section)}
+                        </Badge>
+                      ))}
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {group.qualifiedCount > 0 && (
@@ -372,6 +485,7 @@ export default function ViewOverridesPage() {
                           <tr className="text-left text-utsa-muted">
                             <th className="px-3 py-1.5 font-medium w-14">Day</th>
                             <th className="px-2 py-1.5 font-medium w-20">Date</th>
+                            <th className="px-2 py-1.5 font-medium min-w-[8rem]">Period</th>
                             <th className="px-2 py-1.5 font-medium w-24">Status</th>
                             <th className="px-2 py-1.5 font-medium">Reason</th>
                             <th className="px-2 py-1.5 font-medium w-28">By</th>
@@ -380,56 +494,62 @@ export default function ViewOverridesPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {sorted.map((override) => (
-                            <tr key={override.id} className="border-t border-utsa-border/70 bg-white">
-                              <td className="px-3 py-1.5 font-semibold text-utsa-midnight">{override.day_number}</td>
-                              <td className="px-2 py-1.5 text-utsa-muted whitespace-nowrap">
-                                {formatOverrideDate(override.date)}
-                              </td>
-                              <td className="px-2 py-1.5">
-                                {override.override_type === "qualified" ? (
-                                  <span className="inline-flex items-center gap-1 text-green-700">
-                                    <CheckCircle className="h-3 w-3" />
-                                    Qual
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-red-700">
-                                    <XCircle className="h-3 w-3" />
-                                    NQ
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1.5 text-utsa-muted max-w-[10rem] truncate" title={override.reason || undefined}>
-                                {override.reason || <span className="italic text-utsa-muted/70">—</span>}
-                              </td>
-                              <td className="px-2 py-1.5 text-utsa-muted truncate max-w-[7rem]" title={override.created_by || undefined}>
-                                {override.created_by || <span className="italic text-utsa-muted/70">—</span>}
-                              </td>
-                              <td className="px-2 py-1.5 text-utsa-muted whitespace-nowrap hidden sm:table-cell">
-                                {formatDate(override.created_at)}
-                              </td>
-                              <td className="px-2 py-1.5 text-right">
-                                {override.can_modify ? (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleDeleteOverride(override)}
-                                    disabled={deletingId === override.id}
-                                    className="h-6 w-6 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
-                                    aria-label={`Delete day ${override.day_number} override`}
-                                  >
-                                    {deletingId === override.id ? (
-                                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-                                    ) : (
-                                      <Trash2 className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                ) : (
-                                  <span className="inline-block w-6" title="Read-only — created by someone else" />
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                          {sorted.map((override) => {
+                            const period = shortPeriodLabel(override)
+                            return (
+                              <tr key={override.id} className="border-t border-utsa-border/70 bg-white">
+                                <td className="px-3 py-1.5 font-semibold text-utsa-midnight">{override.day_number}</td>
+                                <td className="px-2 py-1.5 text-utsa-muted whitespace-nowrap">
+                                  {formatOverrideDate(override.date)}
+                                </td>
+                                <td className="px-2 py-1.5 text-utsa-muted max-w-[12rem] truncate" title={period || undefined}>
+                                  {period || <span className="italic text-utsa-muted/70">—</span>}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  {override.override_type === "qualified" ? (
+                                    <span className="inline-flex items-center gap-1 text-green-700">
+                                      <CheckCircle className="h-3 w-3" />
+                                      Qual
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-red-700">
+                                      <XCircle className="h-3 w-3" />
+                                      NQ
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-utsa-muted max-w-[10rem] truncate" title={override.reason || undefined}>
+                                  {override.reason || <span className="italic text-utsa-muted/70">—</span>}
+                                </td>
+                                <td className="px-2 py-1.5 text-utsa-muted truncate max-w-[7rem]" title={override.created_by || undefined}>
+                                  {override.created_by || <span className="italic text-utsa-muted/70">—</span>}
+                                </td>
+                                <td className="px-2 py-1.5 text-utsa-muted whitespace-nowrap hidden sm:table-cell">
+                                  {formatDate(override.created_at)}
+                                </td>
+                                <td className="px-2 py-1.5 text-right">
+                                  {override.can_modify ? (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeleteOverride(override)}
+                                      disabled={deletingId === override.id}
+                                      className="h-6 w-6 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                      aria-label={`Delete day ${override.day_number} override`}
+                                    >
+                                      {deletingId === override.id ? (
+                                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                                      ) : (
+                                        <Trash2 className="h-3 w-3" />
+                                      )}
+                                    </Button>
+                                  ) : (
+                                    <span className="inline-block w-6" title="Read-only — created by someone else" />
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
