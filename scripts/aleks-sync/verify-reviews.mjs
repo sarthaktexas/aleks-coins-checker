@@ -508,6 +508,7 @@ async function main() {
     console.log("Logging into ALEKS…")
     await login(page, username, password, downloadDir)
     await screenshot(page, downloadDir, "01-after-login")
+    console.log(`Logged in at ${page.url()}`)
 
     const periodKey = requests[0]?.period || ""
     const knownSections = [...bySection.keys()]
@@ -585,6 +586,10 @@ async function main() {
         }
       }
     }
+  } catch (err) {
+    await screenshot(page, downloadDir, "error-fatal")
+    console.error(`Fatal error at ${page.url()}: ${err.message}`)
+    throw err
   } finally {
     await browser.close()
   }

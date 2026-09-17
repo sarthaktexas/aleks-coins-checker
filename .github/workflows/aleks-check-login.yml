@@ -52,5 +52,6 @@ jobs:
         with:
           name: aleks-check-login-debug
           path: scripts/aleks-sync/.downloads-check-login/
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7

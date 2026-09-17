@@ -377,6 +377,7 @@ async function main() {
     console.log("Logging into ALEKS…")
     await login(page, username, password, downloadDir)
     await screenshot(page, downloadDir, "01-after-login")
+    console.log(`Logged in at ${page.url()}`)
 
     console.log("Discovering classes from ALEKS Class menu…")
     const classes = await discoverClasses(
@@ -479,6 +480,10 @@ async function main() {
         await ensureInstructorChrome(page, downloadDir)
       }
     }
+  } catch (err) {
+    await screenshot(page, downloadDir, "error-fatal")
+    console.error(`Fatal error at ${page.url()}: ${err.message}`)
+    throw err
   } finally {
     await browser.close()
   }

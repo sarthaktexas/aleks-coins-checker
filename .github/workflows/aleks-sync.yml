@@ -70,5 +70,6 @@ jobs:
         with:
           name: aleks-sync-debug
           path: scripts/aleks-sync/.downloads/
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7

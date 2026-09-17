@@ -50,11 +50,33 @@ export function sectionFromClassName(aleksName, knownSections = []) {
 }
 
 export async function screenshot(page, downloadDir, name) {
+  if (!downloadDir) return
+  const dest = path.join(downloadDir, `${name}.png`)
   try {
-    await page.screenshot({ path: path.join(downloadDir, `${name}.png`), fullPage: true })
-  } catch {
-    /* ignore */
+    await page.screenshot({ path: dest, fullPage: true })
+  } catch (err) {
+    console.warn(`Screenshot ${name} (fullPage) failed: ${err.message}`)
+    try {
+      await page.screenshot({ path: dest })
+    } catch (err2) {
+      console.warn(`Screenshot ${name} failed: ${err2.message}`)
+    }
   }
+}
+
+/** URL / title / text snippet for CI logs when ALEKS UI is not what we expected. */
+export async function describePage(page) {
+  const url = page.url()
+  const title = await page.title().catch(() => "")
+  const text = await page.locator("body").innerText().catch(() => "")
+  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 280)
+  return { url, title, snippet }
+}
+
+export async function logPageState(page, label = "ALEKS page") {
+  const { url, title, snippet } = await describePage(page)
+  console.log(`${label}: url=${url} title=${JSON.stringify(title)} text=${JSON.stringify(snippet)}`)
+  return { url, title, snippet }
 }
 
 export async function clickFirst(page, selectors, { timeout = 15000, force = false } = {}) {
@@ -144,6 +166,15 @@ export async function login(page, username, password, downloadDir) {
     if (downloadDir) await screenshot(page, downloadDir, "00-login-still-on-form")
     throw new Error("ALEKS login did not navigate away from the login form (check credentials)")
   }
+
+  // Instructor chrome is JS-rendered and often lags the login redirect.
+  // Leaving here without waiting made discoverClasses race the dashboard.
+  const ready = await ensureInstructorChrome(page, downloadDir, { timeout: 45000 })
+  if (!ready) {
+    await logPageState(page, "Instructor UI missing after login")
+    if (downloadDir) await screenshot(page, downloadDir, "00-login-no-chrome")
+    throw new Error(`ALEKS login succeeded but the Class / Reports menu never appeared (${page.url()})`)
+  }
 }
 
 /** Close ALEKS popups/submenus that block the Class / Reports chrome. */
@@ -179,62 +210,85 @@ export async function dismissOverlays(page) {
   await page.waitForTimeout(100)
 }
 
+async function instructorChromeLocator(page) {
+  return page.locator("#sim_nav_sel_searchbar_1, #navigation_report").first()
+}
+
 /**
- * After a hung download or accidental navigation, get back to instructor UI
- * that has the Class selector / Reports menu.
+ * After login, a hung download, or accidental navigation, get back to
+ * instructor UI that has the Class selector / Reports menu.
+ *
+ * Wait first — `isVisible()` without a timeout races ALEKS's post-login
+ * render and used to immediately `goBack()` onto the login form.
  */
-export async function ensureInstructorChrome(page, downloadDir) {
-  const chrome = page.locator("#sim_nav_sel_searchbar_1, #navigation_report").first()
-  if (await chrome.isVisible().catch(() => false)) return true
+export async function ensureInstructorChrome(page, downloadDir, { timeout = 8000 } = {}) {
+  const chrome = await instructorChromeLocator(page)
+  try {
+    await chrome.waitFor({ state: "visible", timeout })
+    return true
+  } catch {
+    /* recover */
+  }
 
-  console.log("Instructor chrome missing — dismissing overlays / going back…")
+  console.log("Instructor chrome not visible yet — dismissing overlays…")
   await dismissOverlays(page)
-  if (await chrome.isVisible().catch(() => false)) return true
+  try {
+    await chrome.waitFor({ state: "visible", timeout: 10000 })
+    return true
+  } catch {
+    /* recover */
+  }
 
-  await page.goBack({ waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {})
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {})
-  await page.waitForTimeout(1000)
-  if (await chrome.isVisible().catch(() => false)) return true
-
+  console.log("Instructor chrome still missing — reloading ALEKS home…")
   await page.goto("https://www.aleks.com/", { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {})
   await page.waitForLoadState("networkidle", { timeout: 45000 }).catch(() => {})
+  await dismissOverlays(page)
   await page.waitForTimeout(1500)
-  const ok = await chrome.isVisible().catch(() => false)
-  if (!ok && downloadDir) await screenshot(page, downloadDir, "recover-chrome-failed")
-  return ok
+  try {
+    await chrome.waitFor({ state: "visible", timeout: 20000 })
+    return true
+  } catch {
+    if (downloadDir) await screenshot(page, downloadDir, "recover-chrome-failed")
+    await logPageState(page, "recover-chrome-failed")
+    return false
+  }
 }
 
 export async function openClassDropdown(page) {
   await dismissOverlays(page)
 
   const searchbar = page.locator("#sim_nav_sel_searchbar_1")
-  if (await searchbar.count()) {
-    const list = page.locator("#sim_nav_sel_searchbar_1 .scroll_divSB, #sim_nav_sel_searchbar_1 .tableSB")
-    if (!(await list.first().isVisible().catch(() => false))) {
-      // force: Excel download overlay can linger and intercept pointer events
-      await clickFirst(
-        page,
-        [
-          "#sim_nav_sel_searchbar_1 .pulldownSB",
-          "#sim_nav_sel_searchbar_1_selected",
-          "#sim_nav_sel_searchbar_1_button",
-          "#sim_nav_sel_searchbar_1",
-        ],
-        { force: true },
-      )
-      await page.waitForTimeout(500)
-    }
+  try {
+    await searchbar.first().waitFor({ state: "attached", timeout: 25000 })
+  } catch {
+    console.warn("Class searchbar not in DOM; trying generic Class locators…")
+    await logPageState(page, "openClassDropdown fallback")
+    await clickFirst(page, [
+      'text=/^Class$/i',
+      '[aria-label*="Class" i]',
+      'a:has-text("Class")',
+      'button:has-text("Class")',
+      '#class_selector',
+      '.class-selector',
+    ], { force: true })
     return
   }
 
-  await clickFirst(page, [
-    'text=/^Class$/i',
-    '[aria-label*="Class" i]',
-    'a:has-text("Class")',
-    'button:has-text("Class")',
-    '#class_selector',
-    '.class-selector',
-  ], { force: true })
+  const list = page.locator("#sim_nav_sel_searchbar_1 .scroll_divSB, #sim_nav_sel_searchbar_1 .tableSB")
+  if (!(await list.first().isVisible().catch(() => false))) {
+    // force: Excel download overlay can linger and intercept pointer events
+    await clickFirst(
+      page,
+      [
+        "#sim_nav_sel_searchbar_1 .pulldownSB",
+        "#sim_nav_sel_searchbar_1_selected",
+        "#sim_nav_sel_searchbar_1_button",
+        "#sim_nav_sel_searchbar_1",
+      ],
+      { force: true },
+    )
+    await page.waitForTimeout(500)
+  }
 }
 
 export async function expandArchivedInClassMenu(page) {
@@ -336,6 +390,10 @@ export function escapeRegExp(s) {
 }
 
 export async function discoverClasses(page, downloadDir, knownSections = [], periodKey = "") {
+  const ready = await ensureInstructorChrome(page, downloadDir, { timeout: 20000 })
+  if (!ready) {
+    throw new Error("No classes found: ALEKS Class menu never appeared")
+  }
   await openClassDropdown(page)
   await page.waitForTimeout(500)
   await expandArchivedInClassMenu(page)
