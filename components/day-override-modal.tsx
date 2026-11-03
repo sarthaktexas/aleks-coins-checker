@@ -33,6 +33,7 @@ type DayOverrideModalProps = {
     isLatestDay?: boolean
     isLastDay?: boolean
     isPeriodFinished?: boolean
+    isDayComplete?: boolean
   }
   studentInfo: {
     studentId: string
@@ -100,7 +101,7 @@ export function DayOverrideModal({
 
   const canSubmit =
     !isLoading &&
-    !(dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished) &&
+    !(dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished && !dayInfo.isDayComplete) &&
     overridesEnabled &&
     !isCheckingSettings &&
     (overrideKind === OVERRIDE_KIND_REVIEWED || reason.trim().length > 0)
@@ -108,7 +109,7 @@ export function DayOverrideModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished) {
+    if (dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished && !dayInfo.isDayComplete) {
       setError(
         "Override requests are disabled for the latest day. Wait until the day is complete — updated data is available the next day at 7am.",
       )
@@ -236,7 +237,7 @@ export function DayOverrideModal({
             )}
           </div>
 
-          {dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished && (
+          {dayInfo.isLatestDay && !dayInfo.isLastDay && !dayInfo.isPeriodFinished && !dayInfo.isDayComplete && (
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-800">

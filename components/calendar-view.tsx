@@ -344,9 +344,23 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
         ? day.overrideType === "qualified" || day.qualified
         : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
-    // After the period finishes, allow overrides on all days
+    
+    // Check if this specific day has passed (day's date < current date)
+    const isDayComplete = (() => {
+      if (!day.date) return false
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const [dayYear, dayMonth, dayDay] = day.date.split('-').map(Number)
+      const dayDate = new Date(dayYear, dayMonth - 1, dayDay)
+      dayDate.setHours(0, 0, 0, 0)
+      return today > dayDate
+    })()
+    
+    // Allow overrides on latest day if:
+    // - The period has finished, OR
+    // - The specific day has passed (is complete)
     // Otherwise, latest day overrides are intentionally disabled
-    if (isLatestDay && !isPeriodFinished) return false
+    if (isLatestDay && !isPeriodFinished && !isDayComplete) return false
     return !(isQualified && !hasOverride)
   }
 
@@ -359,6 +373,18 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
         : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
+    
+    // Check if this specific day has passed
+    const isDayComplete = (() => {
+      if (!day.date) return false
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const [dayYear, dayMonth, dayDay] = day.date.split('-').map(Number)
+      const dayDate = new Date(dayYear, dayMonth - 1, dayDay)
+      dayDate.setHours(0, 0, 0, 0)
+      return today > dayDate
+    })()
+    
     return {
       dayNumber: day.day,
       date: day.date,
@@ -367,6 +393,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
       isLatestDay,
       isLastDay,
       isPeriodFinished,
+      isDayComplete,
     }
   }
 
