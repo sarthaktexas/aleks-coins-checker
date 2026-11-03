@@ -26,17 +26,20 @@ function getWorkingDays(
   endDate: string,
   excludedDates: string[] = [],
   coinOnlyExemptDates: string[] = [],
+  doubleCoinsD ates: string[] = [],
 ) {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number)
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number)
 
   const excluded = new Set(excludedDates)
   const coinOnly = new Set(coinOnlyExemptDates)
+  const doubleCoins = new Set(doubleCoinsD ates)
   const workingDays: Array<{
     day: number
     date: string
     isExcluded: boolean
     isCoinOnlyExempt: boolean
+    isDoubleCoins: boolean
   }> = []
 
   let currentYear = startYear
@@ -78,11 +81,13 @@ function getWorkingDays(
     const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
     const isStandardExempt = excluded.has(dateString)
     const isCoinOnlyExempt = coinOnly.has(dateString) && !isStandardExempt
+    const isDoubleCoins = doubleCoins.has(dateString) && !isStandardExempt && !isCoinOnlyExempt
     workingDays.push({
       day: dayNumber,
       date: dateString,
       isExcluded: isStandardExempt || isCoinOnlyExempt,
       isCoinOnlyExempt,
+      isDoubleCoins,
     })
     dayNumber++
     incrementDate()
@@ -229,6 +234,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
+    doubleCoinsD ates: (row.double_coins_dates as string[]) || [],
   }
 
   let maxDayFromExcel = 0
@@ -247,6 +253,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     period.endDate,
     period.excludedDates,
     period.coinOnlyExemptDates,
+    period.doubleCoinsD ates,
   )
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalWorkingDays = workingDays.length
@@ -285,6 +292,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
         const date = dayInfo.date
         const isExcluded = dayInfo.isExcluded
         const isCoinOnlyExempt = dayInfo.isCoinOnlyExempt
+        const isDoubleCoins = dayInfo.isDoubleCoins
         const timeCol = `h:mm_${calendarDay}`
         const topicCol = `added to pie_${calendarDay}`
         const minutes = timeToMinutes(dataRow[timeCol])
@@ -323,8 +331,13 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
               : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
           qualified = !minMsg && !topicMsg
           if (qualified) {
-            coins++
-            reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
+            if (isDoubleCoins) {
+              coins += 2
+              reason = `🪙🪙 Double Coins! Met requirement: ${minutes} mins + ${topics} topics`
+            } else {
+              coins++
+              reason = `✅ Met requirement: ${minutes} mins + ${topics} topics`
+            }
           } else {
             const parts = []
             if (minMsg) parts.push(minMsg)
@@ -342,6 +355,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
           reason,
           isExcluded,
           isCoinOnlyExempt,
+          isDoubleCoins,
           wouldHaveQualified,
         })
       }
@@ -439,6 +453,7 @@ export type PeriodDateInfo = {
   endDate: string
   excludedDates: string[]
   coinOnlyExemptDates: string[]
+  doubleCoinsD ates: string[]
 }
 
 export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo | null> {
@@ -470,6 +485,7 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
+    doubleCoinsD ates: (row.double_coins_dates as string[]) || [],
   }
 }
 
