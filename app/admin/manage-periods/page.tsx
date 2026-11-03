@@ -54,7 +54,7 @@ type ExamPeriodData = {
   endDate: string
   excludedDates: readonly string[] | string[]
   coinOnlyExemptDates?: readonly string[] | string[]
-  doubleCoinsDate s?: readonly string[] | string[]
+  doubleCoinsDays?: readonly string[] | string[]
 }
 
 type PeriodFormState = {
@@ -67,7 +67,7 @@ type PeriodFormState = {
   endDate: string
   excludedDates: string[]
   coinOnlyExemptDates: string[]
-  doubleCoinsD ates: string[]
+  doubleCoinsDays: string[]
 }
 
 const emptyForm = (): PeriodFormState => ({
@@ -80,7 +80,7 @@ const emptyForm = (): PeriodFormState => ({
   endDate: "",
   excludedDates: [],
   coinOnlyExemptDates: [],
-  doubleCoinsD ates: [],
+  doubleCoinsDays: [],
 })
 
 function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormState {
@@ -99,7 +99,7 @@ function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormSt
     endDate: formatDateForInput(period.endDate),
     excludedDates: [...period.excludedDates],
     coinOnlyExemptDates: [...(period.coinOnlyExemptDates || [])],
-    doubleCoinsD ates: [...(period.doubleCoinsD ates || [])],
+    doubleCoinsDays: [...(period.doubleCoinsDays || [])],
   }
 }
 
@@ -182,10 +182,10 @@ export default function ManagePeriodsPage() {
     const days: SpecialDay[] = [
       ...form.excludedDates.map((date) => ({ date, kind: "exempt" as const })),
       ...form.coinOnlyExemptDates.map((date) => ({ date, kind: "coins_only" as const })),
-      ...form.doubleCoinsD ates.map((date) => ({ date, kind: "double_coins" as const })),
+      ...form.doubleCoinsDays.map((date) => ({ date, kind: "double_coins" as const })),
     ]
     return days.sort((a, b) => a.date.localeCompare(b.date))
-  }, [form.excludedDates, form.coinOnlyExemptDates, form.doubleCoinsD ates])
+  }, [form.excludedDates, form.coinOnlyExemptDates, form.doubleCoinsDays])
 
 
   const semesterGroups = useMemo(
@@ -309,7 +309,7 @@ export default function ManagePeriodsPage() {
           endDate: form.endDate,
           excludedDates: form.excludedDates,
           coinOnlyExemptDates: form.coinOnlyExemptDates,
-          doubleCoinsD ates: form.doubleCoinsD ates,
+          doubleCoinsDays: form.doubleCoinsDays,
         }),
       })
 
@@ -363,7 +363,7 @@ export default function ManagePeriodsPage() {
       if (kind === "double_coins") {
         return {
           ...prev,
-          doubleCoinsD ates: [...prev.doubleCoinsD ates, specialDayDate].sort(),
+          doubleCoinsDays: [...prev.doubleCoinsDays, specialDayDate].sort(),
         }
       }
       return {
@@ -386,7 +386,7 @@ export default function ManagePeriodsPage() {
       if (kind === "double_coins") {
         return {
           ...prev,
-          doubleCoinsD ates: prev.doubleCoinsD ates.filter((d) => d !== date),
+          doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
         }
       }
       return {
@@ -401,7 +401,7 @@ export default function ManagePeriodsPage() {
       const without = {
         excludedDates: prev.excludedDates.filter((d) => d !== date),
         coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
-        doubleCoinsD ates: prev.doubleCoinsD ates.filter((d) => d !== date),
+        doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
       }
       if (kind === "exempt") {
         return {
@@ -414,7 +414,7 @@ export default function ManagePeriodsPage() {
         return {
           ...prev,
           ...without,
-          doubleCoinsD ates: [...without.doubleCoinsD ates, date].sort(),
+          doubleCoinsDays: [...without.doubleCoinsDays, date].sort(),
         }
       }
       return {
