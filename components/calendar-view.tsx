@@ -20,7 +20,7 @@ type DailyLog = {
   wouldHaveQualified?: boolean
   /** Set by API when a day override was applied */
   isOverridden?: boolean
-  overrideType?: "qualified" | "not_qualified" | string
+  overrideType?: "qualified" | "not_qualified" | "double_coins" | string
 }
 
 type DayOverride = {
@@ -29,7 +29,7 @@ type DayOverride = {
   student_name?: string
   day_number: number
   date: string
-  override_type: "qualified" | "not_qualified"
+  override_type: "qualified" | "not_qualified" | "double_coins"
   reason: string | null
   created_at: string
   updated_at: string

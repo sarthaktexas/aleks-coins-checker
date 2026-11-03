@@ -14,7 +14,7 @@ type DailyLog = {
   isCoinOnlyExempt?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
-  overrideType?: "qualified" | "not_qualified" | string
+  overrideType?: "qualified" | "not_qualified" | "double_coins" | string
 }
 
 type DayOverride = {
@@ -22,7 +22,7 @@ type DayOverride = {
   student_id: string
   day_number: number
   date: string
-  override_type: "qualified" | "not_qualified"
+  override_type: "qualified" | "not_qualified" | "double_coins"
   reason: string | null
   created_at: string
   updated_at: string
@@ -129,6 +129,16 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
     const override = overrideMap.get(day.day)
     const hasOverride = !!(override || day.isOverridden)
     if (hasOverride) {
+      const overrideType = override ? override.override_type : day.overrideType
+      
+      if (overrideType === "double_coins") {
+        return {
+          emoji: "🪙🪙🔧",
+          className: "bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-300",
+          hasOverride: true,
+        }
+      }
+      
       const isQualified = override
         ? override.override_type === "qualified"
         : day.overrideType === "qualified" || day.qualified

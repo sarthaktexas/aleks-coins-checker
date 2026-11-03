@@ -333,6 +333,12 @@ function applyOverridesInMemory(
     const completedWorkingDays = workingDayLogs.length
     const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
     const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
+    
+    // Count double coins separately
+    const doubleCoinsCount = workingDayLogs.filter(
+      (d) => d.qualified && d.isOverridden && d.overrideType === "double_coins"
+    ).length
+    
     const percentComplete =
       completedWorkingDays > 0
         ? Math.round(
@@ -341,7 +347,7 @@ function applyOverridesInMemory(
         : 0
 
     student.percentComplete = percentComplete
-    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
+    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + doubleCoinsCount
     student.exemptDayCredits = exemptDayCredits
     student.coinOnlyExemptCredits = coinOnlyExemptCredits
   })

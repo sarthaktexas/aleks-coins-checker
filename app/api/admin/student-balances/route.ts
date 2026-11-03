@@ -56,11 +56,16 @@ async function applyOverridesToStudentData(studentData: StudentData, studentId?:
         const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
         const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
 
+        // Count double coins separately - these are days that are qualified AND have double_coins override
+        const doubleCoinsCount = workingDayLogs.filter(
+          (d: any) => d.qualified && d.isOverridden && d.overrideType === "double_coins"
+        ).length
+
         // Standard exempt credits count toward extra credit %; coins-only exempt do not
         const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
 
         student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
+        student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + doubleCoinsCount
         student.exemptDayCredits = exemptDayCredits
         student.coinOnlyExemptCredits = coinOnlyExemptCredits
       }

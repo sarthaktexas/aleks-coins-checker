@@ -33,7 +33,7 @@ type DayOverride = {
   student_name: string
   day_number: number
   date: string
-  override_type: "qualified" | "not_qualified"
+  override_type: "qualified" | "not_qualified" | "double_coins"
   reason: string | null
   created_by: string | null
   created_at: string
@@ -50,10 +50,11 @@ type StudentGroup = {
   overrides: DayOverride[]
   qualifiedCount: number
   notQualifiedCount: number
+  doubleCoinsCount: number
   sections: string[]
 }
 
-type TypeFilter = "all" | "qualified" | "not_qualified"
+type TypeFilter = "all" | "qualified" | "not_qualified" | "double_coins"
 
 const SESSION_EXPIRED = "Session expired — refresh and sign in again."
 const UNKNOWN_SECTION = "__unknown__"
@@ -209,13 +210,15 @@ export default function ViewOverridesPage() {
           overrides: [],
           qualifiedCount: 0,
           notQualifiedCount: 0,
+          doubleCoinsCount: 0,
           sections: [],
         }
         map.set(override.student_id, group)
       }
       group.overrides.push(override)
       if (override.override_type === "qualified") group.qualifiedCount += 1
-      else group.notQualifiedCount += 1
+      else if (override.override_type === "not_qualified") group.notQualifiedCount += 1
+      else if (override.override_type === "double_coins") group.doubleCoinsCount += 1
       if (override.section_number && !group.sections.includes(override.section_number)) {
         group.sections.push(override.section_number)
       }
@@ -388,6 +391,7 @@ export default function ViewOverridesPage() {
                 ["all", "All"],
                 ["qualified", "Qualified"],
                 ["not_qualified", "Not qualified"],
+                ["double_coins", "Double coins"],
               ] as const
             ).map(([value, label]) => (
               <Button
@@ -474,6 +478,11 @@ export default function ViewOverridesPage() {
                           {group.notQualifiedCount}NQ
                         </Badge>
                       )}
+                      {group.doubleCoinsCount > 0 && (
+                        <Badge className="h-5 bg-blue-500 px-1.5 text-[10px] text-white hover:bg-blue-500">
+                          {group.doubleCoinsCount}2x
+                        </Badge>
+                      )}
                       <span className="w-8 text-right text-xs text-utsa-muted">{group.overrides.length}</span>
                     </div>
                   </button>
@@ -510,6 +519,11 @@ export default function ViewOverridesPage() {
                                     <span className="inline-flex items-center gap-1 text-green-700">
                                       <CheckCircle className="h-3 w-3" />
                                       Qual
+                                    </span>
+                                  ) : override.override_type === "double_coins" ? (
+                                    <span className="inline-flex items-center gap-1 text-blue-700">
+                                      <CheckCircle className="h-3 w-3" />
+                                      2x
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center gap-1 text-red-700">
