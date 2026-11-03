@@ -385,9 +385,6 @@ async function fetchStudentOverrides(studentId: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Ensure badge schema exists
-    await ensureBadgesSchema()
-
     const body = await request.json()
     const { studentId } = body
 
@@ -397,10 +394,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 })
     }
 
-    // For demo student, always return demo data
+    // For demo student, always return demo data (no database required)
     const normalizedId = studentId.toLowerCase().trim()
     if (normalizedId === "abc123") {
       const demoStudent = generateDemoData()
+      const demoStreak = calculateStreaks(demoStudent.dailyLog)
       return NextResponse.json({
         success: true,
         student: {
@@ -408,8 +406,24 @@ export async function POST(request: NextRequest) {
           period: 'Fall 2024',
           sectionNumber: 'default'
         },
+        // Sample shelf: 10-day shield unlocked, 25-day still locked.
+        badges: [
+          {
+            badge_type: "streak_10_day",
+            streak_count: 10,
+            period: "Fall 2024",
+            section_number: "default",
+          },
+        ],
+        streakData: {
+          currentStreak: demoStreak.currentStreak,
+          maxStreak: demoStreak.maxStreak,
+        },
       })
     }
+
+    // Ensure badge schema exists before any real student lookup
+    await ensureBadgesSchema()
 
     // Load student data from database
     let studentData: StudentData

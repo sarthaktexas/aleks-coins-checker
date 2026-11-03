@@ -1,8 +1,7 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Trophy, Flame, Star, Lock } from "lucide-react"
+import { Flame, Star } from "lucide-react"
+import { BadgeShield } from "@/components/badge-shield"
 
 type BadgeType = "streak_10_day" | "streak_25_day"
 
@@ -19,206 +18,106 @@ type BadgeShelfProps = {
   maxStreak?: number
 }
 
-const BADGE_INFO = {
-  streak_10_day: {
+const SLOTS: Array<{
+  type: BadgeType
+  name: string
+  requirement: number
+  reward: string
+}> = [
+  {
+    type: "streak_10_day",
     name: "10-Day Streak",
-    description: "Complete ALEKS 10 days in a row",
-    icon: "🔥",
     requirement: 10,
-    reward: "+10 bonus coins",
-    color: "text-orange-500",
-    bgColor: "bg-orange-50",
-    borderColor: "border-orange-200",
+    reward: "+10 coins",
   },
-  streak_25_day: {
+  {
+    type: "streak_25_day",
     name: "25-Day Streak",
-    description: "Complete ALEKS 25 days in a row",
-    icon: "⭐",
     requirement: 25,
-    reward: "Permanent 2x multiplier",
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-50",
-    borderColor: "border-yellow-200",
+    reward: "2× coins forever",
   },
-}
+]
 
 export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeShelfProps) {
-  const earnedBadgeTypes = new Set(badges.map((b) => b.badge_type))
-
-  const has10DayBadge = earnedBadgeTypes.has("streak_10_day")
-  const has25DayBadge = earnedBadgeTypes.has("streak_25_day")
-
-  const get10DayProgress = () => {
-    if (has10DayBadge) return 100
-    return Math.min((maxStreak / 10) * 100, 100)
-  }
-
-  const get25DayProgress = () => {
-    if (has25DayBadge) return 100
-    return Math.min((maxStreak / 25) * 100, 100)
-  }
+  const earned = new Set(badges.map((b) => b.badge_type))
 
   return (
-    <Card className="rounded-md bg-white overflow-hidden">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base text-utsa-midnight">
-          <Trophy className="h-4 w-4 text-utsa-orange" />
-          Badge Collection
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* Current Streak Display */}
-        {(currentStreak > 0 || maxStreak > 0) && (
-          <div className="bg-utsa-surface rounded-md px-3 py-2 mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Flame className="h-4 w-4 text-orange-500" />
-                <div>
-                  <p className="text-sm font-medium text-utsa-midnight">
-                    Current Streak: {currentStreak} {currentStreak === 1 ? "day" : "days"}
-                  </p>
-                  <p className="text-xs text-utsa-muted">
-                    Best Streak: {maxStreak} {maxStreak === 1 ? "day" : "days"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+    <section className="overflow-hidden rounded-md border border-utsa-border bg-white">
+      <div className="flex flex-col gap-2 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <h2 className="text-sm font-semibold text-utsa-midnight">Badge shelf</h2>
+          <p className="text-xs text-utsa-muted">Shields stay locked until you earn them</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-utsa-muted">
+          <span className="inline-flex items-center gap-1">
+            <Flame className="h-3.5 w-3.5 text-utsa-orange" />
+            {currentStreak} day streak
+          </span>
+          <span>Best {maxStreak}</span>
+        </div>
+      </div>
 
-        {/* Badge Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {/* 10-Day Streak Badge */}
-          <div
-            className={`relative rounded-md border-2 p-3 transition-all ${
-              has10DayBadge
-                ? `${BADGE_INFO.streak_10_day.bgColor} ${BADGE_INFO.streak_10_day.borderColor}`
-                : "bg-gray-50 border-gray-200 opacity-60"
-            }`}
-          >
-            {!has10DayBadge && (
-              <div className="absolute top-2 right-2">
-                <Lock className="h-3 w-3 text-gray-400" />
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <div
-                className={`text-3xl ${has10DayBadge ? "grayscale-0" : "grayscale opacity-50"}`}
-                aria-label={BADGE_INFO.streak_10_day.name}
-              >
-                {BADGE_INFO.streak_10_day.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-semibold ${
-                    has10DayBadge ? BADGE_INFO.streak_10_day.color : "text-gray-500"
-                  }`}
-                >
-                  {BADGE_INFO.streak_10_day.name}
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">{BADGE_INFO.streak_10_day.description}</p>
-                <div className="mt-2">
-                  {has10DayBadge ? (
-                    <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0 h-5">
-                      Earned
-                    </Badge>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-gray-600">
-                        <span>{maxStreak}/10 days</span>
-                        <span>{Math.round(get10DayProgress())}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${get10DayProgress()}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
+      <div className="px-3 pb-4 pt-2 sm:px-5">
+        <div className="rounded-md bg-[#f6f1e8] px-2 pt-3">
+          <div className="grid grid-cols-2">
+            {SLOTS.map((slot) => {
+              const unlocked = earned.has(slot.type)
+              return (
+                <div key={slot.type} className="flex justify-center">
+                  <BadgeShield
+                    kind={slot.type}
+                    unlocked={unlocked}
+                    className="relative z-10 -mb-3 h-28 w-24 drop-shadow-md sm:h-36 sm:w-28"
+                  />
                 </div>
-                <p className="text-[10px] text-gray-600 mt-2 font-medium">
-                  Reward: {BADGE_INFO.streak_10_day.reward}
-                </p>
-              </div>
-            </div>
+              )
+            })}
           </div>
+          <div className="relative z-20 h-3.5 rounded-sm bg-gradient-to-b from-[#d7b98a] via-[#b48955] to-[#8a6236] shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_2px_0_#6d4c28]" />
+          <div className="mx-8 mb-1 h-2 rounded-b bg-[#6b4c2a]" />
 
-          {/* 25-Day Streak Badge */}
-          <div
-            className={`relative rounded-md border-2 p-3 transition-all ${
-              has25DayBadge
-                ? `${BADGE_INFO.streak_25_day.bgColor} ${BADGE_INFO.streak_25_day.borderColor}`
-                : "bg-gray-50 border-gray-200 opacity-60"
-            }`}
-          >
-            {!has25DayBadge && (
-              <div className="absolute top-2 right-2">
-                <Lock className="h-3 w-3 text-gray-400" />
-              </div>
-            )}
-            <div className="flex items-start gap-3">
-              <div
-                className={`text-3xl ${has25DayBadge ? "grayscale-0" : "grayscale opacity-50"}`}
-                aria-label={BADGE_INFO.streak_25_day.name}
-              >
-                {BADGE_INFO.streak_25_day.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-semibold ${
-                    has25DayBadge ? BADGE_INFO.streak_25_day.color : "text-gray-500"
-                  }`}
-                >
-                  {BADGE_INFO.streak_25_day.name}
-                </p>
-                <p className="text-xs text-gray-600 mt-0.5">{BADGE_INFO.streak_25_day.description}</p>
-                <div className="mt-2">
-                  {has25DayBadge ? (
-                    <div className="flex flex-col gap-1">
-                      <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0 h-5 w-fit">
-                        Earned
-                      </Badge>
-                      <Badge className="bg-purple-500 text-white text-[10px] px-1.5 py-0 h-5 w-fit">
-                        Active Multiplier
-                      </Badge>
+          <div className="grid grid-cols-2 gap-2 pb-3 pt-2">
+            {SLOTS.map((slot) => {
+              const unlocked = earned.has(slot.type)
+              const progress = unlocked ? 100 : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
+              const days = unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)
+              return (
+                <div key={`${slot.type}-meta`} className="px-2 text-center">
+                  <p className={`text-sm font-semibold ${unlocked ? "text-utsa-midnight" : "text-utsa-muted"}`}>
+                    {slot.name}
+                  </p>
+                  <p className="text-[11px] text-utsa-muted">
+                    {unlocked ? "Unlocked" : "Locked"} · {slot.reward}
+                  </p>
+                  <div className="mx-auto mt-2 max-w-[9rem]">
+                    <div className="mb-1 flex justify-between text-[10px] text-utsa-muted">
+                      <span>
+                        {days}/{slot.requirement} days
+                      </span>
+                      <span>{progress}%</span>
                     </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-gray-600">
-                        <span>{maxStreak}/25 days</span>
-                        <span>{Math.round(get25DayProgress())}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="bg-yellow-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${get25DayProgress()}%` }}
-                        />
-                      </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
+                      <div
+                        className={`h-full rounded-full ${unlocked ? "bg-emerald-500" : slot.type === "streak_10_day" ? "bg-utsa-orange" : "bg-amber-500"}`}
+                        style={{ width: `${progress}%` }}
+                      />
                     </div>
-                  )}
+                  </div>
                 </div>
-                <p className="text-[10px] text-gray-600 mt-2 font-medium">
-                  Reward: {BADGE_INFO.streak_25_day.reward}
-                </p>
-              </div>
-            </div>
+              )
+            })}
           </div>
         </div>
 
-        {/* Active Multiplier Notice */}
-        {has25DayBadge && (
-          <div className="bg-purple-50 border border-purple-200 rounded-md p-3 mt-3">
-            <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-purple-600" />
-              <div>
-                <p className="text-sm font-semibold text-purple-800">2x Multiplier Active!</p>
-                <p className="text-xs text-purple-700">All your daily coins are doubled permanently</p>
-              </div>
-            </div>
+        {earned.has("streak_25_day") && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            <Star className="h-4 w-4 text-amber-600" />
+            <p className="text-xs text-amber-900">
+              <span className="font-semibold">2× multiplier is on.</span> Every future daily coin is doubled, even if the streak breaks.
+            </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }

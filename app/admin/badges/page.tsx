@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Trophy, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
+import { BadgeShield } from "@/components/badge-shield"
 
 export default function BadgesAdmin() {
   const [processing, setProcessing] = useState(false)
@@ -68,7 +69,7 @@ export default function BadgesAdmin() {
             {/* 10-Day Streak Badge */}
             <div className="border border-orange-200 bg-orange-50 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <div className="text-3xl">🔥</div>
+                <BadgeShield kind="streak_10_day" unlocked className="h-16 w-14 shrink-0" />
                 <div className="flex-1">
                   <h3 className="font-semibold text-orange-900">10-Day Streak Badge</h3>
                   <p className="text-sm text-orange-800 mt-1">
@@ -85,7 +86,7 @@ export default function BadgesAdmin() {
             {/* 25-Day Streak Badge */}
             <div className="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <div className="text-3xl">⭐</div>
+                <BadgeShield kind="streak_25_day" unlocked className="h-16 w-14 shrink-0" />
                 <div className="flex-1">
                   <h3 className="font-semibold text-yellow-900">25-Day Streak Badge</h3>
                   <p className="text-sm text-yellow-800 mt-1">
