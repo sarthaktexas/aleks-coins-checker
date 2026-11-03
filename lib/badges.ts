@@ -108,6 +108,14 @@ export function calculateStreaks(dailyLog: Array<{ qualified: boolean; isExclude
 }
 
 /**
+ * Coins are only for a streak that just landed on 10.
+ * A longer or already-broken streak is retroactive: badge only, no coins.
+ */
+export function shouldAwardTenDayCoins(dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>): boolean {
+  return calculateStreaks(dailyLog).currentStreak === 10
+}
+
+/**
  * Check if a student has earned a badge
  */
 export async function hasEarnedBadge(
@@ -246,7 +254,8 @@ export async function processBadgesForStudent(
   dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>,
   period: string,
   sectionNumber: string,
-  adminEmail: string = "system"
+  adminEmail: string = "system",
+  options: { awardCoins?: boolean } = {}
 ): Promise<{ badgesEarned: Badge[]; coinsAwarded: number }> {
   const badgesEarned: Badge[] = []
   let coinsAwarded = 0
@@ -254,6 +263,7 @@ export async function processBadgesForStudent(
   try {
     // Calculate streaks
     const { maxStreak } = calculateStreaks(dailyLog)
+    const awardCoins = options.awardCoins !== false && shouldAwardTenDayCoins(dailyLog)
 
     // Check for 10-day streak badge
     if (maxStreak >= 10) {
@@ -261,35 +271,38 @@ export async function processBadgesForStudent(
       if (!hasIt) {
         const badge = await awardBadge(studentId, "streak_10_day", maxStreak, period, sectionNumber, {
           maxStreak,
+          coinsAwarded: awardCoins,
         })
 
         if (badge) {
           badgesEarned.push(badge)
 
-          // Award 10 bonus coins via coin_adjustments table
-          await sql`
-            INSERT INTO coin_adjustments (
-              student_id,
-              student_name,
-              period,
-              section_number,
-              adjustment_amount,
-              reason,
-              created_by,
-              is_active
-            )
-            VALUES (
-              ${studentId.toLowerCase()},
-              ${studentName},
-              ${period},
-              ${sectionNumber},
-              10,
-              'Badge earned: 10-Day Streak',
-              ${adminEmail},
-              true
-            )
-          `
-          coinsAwarded += 10
+          // Live 10-day streaks pay 10 coins. Retroactive awards are badges only.
+          if (awardCoins) {
+            await sql`
+              INSERT INTO coin_adjustments (
+                student_id,
+                student_name,
+                period,
+                section_number,
+                adjustment_amount,
+                reason,
+                created_by,
+                is_active
+              )
+              VALUES (
+                ${studentId.toLowerCase()},
+                ${studentName},
+                ${period},
+                ${sectionNumber},
+                10,
+                'Badge earned: 10-Day Streak',
+                ${adminEmail},
+                true
+              )
+            `
+            coinsAwarded += 10
+          }
         }
       }
     }

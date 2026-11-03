@@ -148,7 +148,7 @@ The badge processor:
 1. Scans all student data across all periods
 2. Calculates streak data from daily logs
 3. Awards badges to qualifying students
-4. Creates coin adjustments for 10-day badges
+4. Does not add coins. The +10 bonus is only created by the daily pull when the current streak is exactly 10
 5. Enables multipliers for 25-day badges
 6. Handles duplicates gracefully (no double-awards)
 
@@ -171,7 +171,7 @@ Main processing function that:
 - Calculates streaks from daily log
 - Checks for badge eligibility
 - Awards badges if not already earned
-- Creates coin adjustments for 10-day badge
+- Creates a +10 coin adjustment only when `awardCoins` is allowed and the current streak is exactly 10
 - Returns list of badges earned and coins awarded
 
 #### `hasStreakMultiplier(studentId)`

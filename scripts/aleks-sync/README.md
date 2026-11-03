@@ -26,7 +26,7 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 3. Playwright logs into ALEKS and scrapes the **Class** dropdown (active + archived)
 4. For each class: Reports → Time and Topic → date range (period start → today, or period end if earlier) → download `.xlsx`
 5. Each file is `POST`ed to `/api/admin/aleks-sync/import`
-6. After import, the API processes streak badges for that section (10-day bonus coins / 25-day 2x multiplier) and logs awards in the workflow output
+6. After import, the API processes streak badges for that section. A 10-day badge pays +10 coins only when the current streak just hit 10; older streaks get the badge only. A 25-day badge turns on the 2x multiplier. Awards are logged in the workflow output
 
 Section numbers are derived from the ALEKS class name (e.g. “Section 003” → `003`), preferring values that already exist for that period in the DB.
 

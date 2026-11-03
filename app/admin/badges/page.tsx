@@ -125,8 +125,8 @@ export default function BadgesAdmin() {
                 <ul className="mt-2 space-y-1 list-disc list-inside">
                   <li>Scans all student data across all periods</li>
                   <li>Calculates streak data from daily logs</li>
-                  <li>Awards badges to students who qualify</li>
-                  <li>Awards 10 bonus coins for 10-day streak badge</li>
+                  <li>Awards badges to students who already qualify</li>
+                  <li>Does not add coins. The +10 coins only happen on the daily pull, the day a streak first hits 10</li>
                   <li>Enables 2x multiplier for 25-day streak badge</li>
                   <li>Safe to run multiple times (no duplicate awards)</li>
                 </ul>

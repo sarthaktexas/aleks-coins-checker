@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
           student.dailyLog,
           period,
           sectionNumber,
-          session.email
+          session.email,
+          { awardCoins: false }
         )
 
         processedCount = 1
@@ -108,7 +109,8 @@ export async function POST(request: NextRequest) {
                 (student as any).dailyLog,
                 row.period,
                 row.section_number,
-                session.email
+                session.email,
+                { awardCoins: false }
               )
 
               processedCount++

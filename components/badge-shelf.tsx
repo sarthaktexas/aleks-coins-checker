@@ -28,8 +28,6 @@ type ShelfSlot =
   | {
       kind: "mystery"
       id: string
-      name: string
-      hint: string
     }
 
 const SLOTS: ShelfSlot[] = [
@@ -48,20 +46,14 @@ const SLOTS: ShelfSlot[] = [
   {
     kind: "mystery",
     id: "mystery-1",
-    name: "???",
-    hint: "Coming soon",
   },
   {
     kind: "mystery",
     id: "mystery-2",
-    name: "???",
-    hint: "Coming soon",
   },
   {
     kind: "mystery",
     id: "mystery-3",
-    name: "???",
-    hint: "Coming soon",
   },
 ]
 
@@ -114,12 +106,7 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
           <div className="grid grid-cols-5 gap-0.5 pb-3 pt-2 sm:gap-1">
             {SLOTS.map((slot) => {
               if (slot.kind === "mystery") {
-                return (
-                  <div key={`${slot.id}-meta`} className="px-0.5 text-center sm:px-1">
-                    <p className="text-[11px] font-semibold text-utsa-muted sm:text-sm">{slot.name}</p>
-                    <p className="text-[10px] text-utsa-muted">{slot.hint}</p>
-                  </div>
-                )
+                return <div key={`${slot.id}-meta`} aria-hidden="true" />
               }
 
               const unlocked = earned.has(slot.kind)
