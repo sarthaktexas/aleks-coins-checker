@@ -54,6 +54,7 @@ type ExamPeriodData = {
   endDate: string
   excludedDates: readonly string[] | string[]
   coinOnlyExemptDates?: readonly string[] | string[]
+  doubleCoinsDays?: readonly string[] | string[]
 }
 
 type PeriodFormState = {
@@ -66,6 +67,7 @@ type PeriodFormState = {
   endDate: string
   excludedDates: string[]
   coinOnlyExemptDates: string[]
+  doubleCoinsDays: string[]
 }
 
 const emptyForm = (): PeriodFormState => ({
@@ -78,6 +80,7 @@ const emptyForm = (): PeriodFormState => ({
   endDate: "",
   excludedDates: [],
   coinOnlyExemptDates: [],
+  doubleCoinsDays: [],
 })
 
 function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormState {
@@ -96,6 +99,7 @@ function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormSt
     endDate: formatDateForInput(period.endDate),
     excludedDates: [...period.excludedDates],
     coinOnlyExemptDates: [...(period.coinOnlyExemptDates || [])],
+    doubleCoinsDays: [...(period.doubleCoinsDays || [])],
   }
 }
 
@@ -171,16 +175,17 @@ export default function ManagePeriodsPage() {
   const [specialDayDate, setSpecialDayDate] = useState("")
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
 
-  type SpecialDayKind = "exempt" | "coins_only"
+  type SpecialDayKind = "exempt" | "coins_only" | "double_coins"
   type SpecialDay = { date: string; kind: SpecialDayKind }
 
   const specialDays = useMemo<SpecialDay[]>(() => {
     const days: SpecialDay[] = [
       ...form.excludedDates.map((date) => ({ date, kind: "exempt" as const })),
       ...form.coinOnlyExemptDates.map((date) => ({ date, kind: "coins_only" as const })),
+      ...form.doubleCoinsDays.map((date) => ({ date, kind: "double_coins" as const })),
     ]
     return days.sort((a, b) => a.date.localeCompare(b.date))
-  }, [form.excludedDates, form.coinOnlyExemptDates])
+  }, [form.excludedDates, form.coinOnlyExemptDates, form.doubleCoinsDays])
 
 
   const semesterGroups = useMemo(
@@ -304,6 +309,7 @@ export default function ManagePeriodsPage() {
           endDate: form.endDate,
           excludedDates: form.excludedDates,
           coinOnlyExemptDates: form.coinOnlyExemptDates,
+          doubleCoinsDays: form.doubleCoinsDays,
         }),
       })
 
@@ -354,6 +360,12 @@ export default function ManagePeriodsPage() {
           excludedDates: [...prev.excludedDates, specialDayDate].sort(),
         }
       }
+      if (kind === "double_coins") {
+        return {
+          ...prev,
+          doubleCoinsDays: [...prev.doubleCoinsDays, specialDayDate].sort(),
+        }
+      }
       return {
         ...prev,
         coinOnlyExemptDates: [...prev.coinOnlyExemptDates, specialDayDate].sort(),
@@ -371,6 +383,12 @@ export default function ManagePeriodsPage() {
           excludedDates: prev.excludedDates.filter((d) => d !== date),
         }
       }
+      if (kind === "double_coins") {
+        return {
+          ...prev,
+          doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
+        }
+      }
       return {
         ...prev,
         coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
@@ -383,12 +401,20 @@ export default function ManagePeriodsPage() {
       const without = {
         excludedDates: prev.excludedDates.filter((d) => d !== date),
         coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
+        doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
       }
       if (kind === "exempt") {
         return {
           ...prev,
           ...without,
           excludedDates: [...without.excludedDates, date].sort(),
+        }
+      }
+      if (kind === "double_coins") {
+        return {
+          ...prev,
+          ...without,
+          doubleCoinsDays: [...without.doubleCoinsDays, date].sort(),
         }
       }
       return {
@@ -700,6 +726,10 @@ export default function ManagePeriodsPage() {
                   <span className="font-semibold text-utsa-midnight">Exempt (coins only):</span>{" "}
                   if a student qualifies, they earn a coin, but it never counts toward extra credit %.
                 </p>
+                <p>
+                  <span className="font-semibold text-blue-900">Double Coins 🪙🪙:</span>{" "}
+                  if a student qualifies, they earn 2 coins and it counts toward extra credit %.
+                </p>
               </div>
 
               {specialDays.length === 0 ? (
@@ -729,6 +759,7 @@ export default function ManagePeriodsPage() {
                           <SelectContent>
                             <SelectItem value="exempt">Exempt</SelectItem>
                             <SelectItem value="coins_only">Exempt (coins only)</SelectItem>
+                            <SelectItem value="double_coins">Double Coins 🪙🪙</SelectItem>
                           </SelectContent>
                         </Select>
                         <Button
@@ -761,7 +792,7 @@ export default function ManagePeriodsPage() {
                 {specialDayDate ? (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-utsa-midnight">
-                      If a student qualifies on this day, should it count toward extra credit?
+                      Choose the special day type:
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
@@ -769,7 +800,7 @@ export default function ManagePeriodsPage() {
                         onClick={() => addSpecialDay("exempt")}
                         className="text-left rounded-md border border-amber-200 bg-amber-50/70 p-3 hover:border-amber-400 hover:bg-amber-50 transition-colors"
                       >
-                        <p className="text-sm font-semibold text-amber-900">Yes — Exempt</p>
+                        <p className="text-sm font-semibold text-amber-900">Exempt</p>
                         <p className="text-[11px] text-amber-800/90 mt-1 leading-snug">
                           Coin + extra credit %
                         </p>
@@ -779,16 +810,26 @@ export default function ManagePeriodsPage() {
                         onClick={() => addSpecialDay("coins_only")}
                         className="text-left rounded-md border border-violet-200 bg-violet-50/70 p-3 hover:border-violet-400 hover:bg-violet-50 transition-colors"
                       >
-                        <p className="text-sm font-semibold text-violet-900">No — Exempt (coins only)</p>
+                        <p className="text-sm font-semibold text-violet-900">Exempt (coins only)</p>
                         <p className="text-[11px] text-violet-800/90 mt-1 leading-snug">
                           Coin only, no extra credit %
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addSpecialDay("double_coins")}
+                        className="text-left rounded-md border border-blue-200 bg-blue-50/70 p-3 hover:border-blue-400 hover:bg-blue-50 transition-colors sm:col-span-2"
+                      >
+                        <p className="text-sm font-semibold text-blue-900">Double Coins 🪙🪙</p>
+                        <p className="text-[11px] text-blue-800/90 mt-1 leading-snug">
+                          Worth 2 coins + counts toward extra credit %
                         </p>
                       </button>
                     </div>
                   </div>
                 ) : (
                   <p className="text-[11px] text-utsa-muted">
-                    Pick a date, then answer one question to choose the type.
+                    Pick a date, then choose the special day type.
                   </p>
                 )}
               </div>
