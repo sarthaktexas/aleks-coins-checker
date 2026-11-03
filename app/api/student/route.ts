@@ -503,24 +503,28 @@ export async function POST(request: NextRequest) {
       }
     })
     
-    // Fetch exam period names for display (period_key -> name) — cached
-    const periodNamesMap = new Map<string, string>()
+    // Fetch exam period metadata for display (period_key -> name, start_date, end_date) — cached
+    const periodMetadataMap = new Map<string, { name: string; startDate: string; endDate: string }>()
     try {
       const periodRows = await unstable_cache(
         async () => {
           const periodsResult = await sql`
-            SELECT period_key, name FROM exam_periods
+            SELECT period_key, name, start_date, end_date FROM exam_periods
           `
-          return periodsResult.rows as Array<{ period_key: string; name: string }>
+          return periodsResult.rows as Array<{ period_key: string; name: string; start_date: string; end_date: string }>
         },
-        ["exam-period-names"],
+        ["exam-period-metadata"],
         { revalidate: 3600, tags: [STUDENT_DATA_CACHE_TAG, "exam-periods"] }
       )()
       periodRows.forEach((row) => {
-        periodNamesMap.set(row.period_key, row.name)
+        periodMetadataMap.set(row.period_key, {
+          name: row.name,
+          startDate: row.start_date,
+          endDate: row.end_date,
+        })
       })
     } catch (e) {
-      console.error("Error fetching period names:", e)
+      console.error("Error fetching period metadata:", e)
     }
 
     // Format periods data with overrides applied once (no extra DB round-trips)
@@ -531,14 +535,17 @@ export async function POST(request: NextRequest) {
 
       const periodKey = `${periodData.period}_${periodData.section}`
       const adjustment = adjustmentsByPeriod.get(periodKey) || 0
+      const periodMetadata = periodMetadataMap.get(periodData.period)
       const periodName =
-        periodNamesMap.get(periodData.period) ??
+        periodMetadata?.name ??
         periodData.period.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
 
       return {
         period: periodData.period,
         section: periodData.section,
         periodName,
+        periodStartDate: periodMetadata?.startDate,
+        periodEndDate: periodMetadata?.endDate,
         name: studentWithOverrides.name,
         email: studentWithOverrides.email,
         coins: studentWithOverrides.coins,

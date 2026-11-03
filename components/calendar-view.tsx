@@ -39,6 +39,7 @@ type CalendarViewProps = {
   dailyLog: DailyLog[]
   totalDays: number
   periodDays: number
+  periodEndDate?: string  // End date of the period (YYYY-MM-DD format)
   studentInfo?: {
     studentId: string
     name: string
@@ -50,7 +51,7 @@ type CalendarViewProps = {
   onRequestSubmitted?: () => void
 }
 
-export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onRequestSubmitted }: CalendarViewProps) {
+export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, studentInfo, onRequestSubmitted }: CalendarViewProps) {
   const [overrides, setOverrides] = useState<DayOverride[]>([])
   const [isMobileView, setIsMobileView] = useState(false)
   const [overrideModal, setOverrideModal] = useState<{
@@ -212,6 +213,16 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
   // Find the last day of the period
   const lastDayOfPeriod = allDays.length > 0 ? allDays[allDays.length - 1].day : 0
 
+  // Check if the period has finished (current date is after the period end date)
+  const isPeriodFinished = periodEndDate ? (() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const [endYear, endMonth, endDay] = periodEndDate.split('-').map(Number)
+    const periodEnd = new Date(endYear, endMonth - 1, endDay)
+    periodEnd.setHours(0, 0, 0, 0)
+    return today > periodEnd
+  })() : false
+
   const getDayState = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
     const hasOverride = !!(override || day.isOverridden)
@@ -333,8 +344,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
         ? day.overrideType === "qualified" || day.qualified
         : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
-    // Latest day overrides are intentionally disabled.
-    if (isLatestDay) return false
+    // After the period finishes, allow overrides on all days
+    // Otherwise, latest day overrides are intentionally disabled
+    if (isLatestDay && !isPeriodFinished) return false
     return !(isQualified && !hasOverride)
   }
 
@@ -354,6 +366,7 @@ export function CalendarView({ dailyLog, totalDays, periodDays, studentInfo, onR
       currentReason: override ? override.reason || day.reason : day.reason,
       isLatestDay,
       isLastDay,
+      isPeriodFinished,
     }
   }
 

@@ -68,6 +68,8 @@ type PeriodInfo = {
   period: string
   section: string
   periodName?: string  // Display name from exam_periods; falls back to formatted period key
+  periodStartDate?: string  // Start date from exam_periods
+  periodEndDate?: string  // End date from exam_periods
   name: string
   email: string
   coins: number
@@ -871,6 +873,7 @@ export default function StudentLookup() {
                           dailyLog={periodData.dailyLog}
                           totalDays={periodData.totalDays}
                           periodDays={periodData.periodDays}
+                          periodEndDate={periodData.periodEndDate}
                           studentInfo={{
                             studentId: studentId,
                             name: hidePII ? getFakeDataForStudent(studentId).name : (periodData.name || studentInfo.name),
@@ -893,6 +896,7 @@ export default function StudentLookup() {
                 dailyLog={studentInfo.dailyLog}
                 totalDays={studentInfo.totalDays}
                 periodDays={studentInfo.periodDays}
+                periodEndDate={undefined}
                 studentInfo={{
                   studentId: studentId,
                   name: hidePII ? getFakeDataForStudent(studentId).name : studentInfo.name,
