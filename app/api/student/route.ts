@@ -14,6 +14,7 @@ type DailyLog = {
   reason: string
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
+  isDoubleCoins?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
   overrideType?: string
@@ -30,6 +31,7 @@ type StudentData = {
     dailyLog: DailyLog[]
     exemptDayCredits?: number
     coinOnlyExemptCredits?: number
+    doubleCoinsEarned?: number
   }
 }
 
@@ -334,10 +336,14 @@ function applyOverridesInMemory(
     const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
     const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
     
-    // Count double coins separately
-    const doubleCoinsCount = workingDayLogs.filter(
+    // Count double coins from both period config (isDoubleCoins) and overrides
+    const doubleCoinsFromPeriod = workingDayLogs.filter(
+      (d) => d.qualified && d.isDoubleCoins && !d.isOverridden
+    ).length
+    const doubleCoinsFromOverrides = workingDayLogs.filter(
       (d) => d.qualified && d.isOverridden && d.overrideType === "double_coins"
     ).length
+    const totalDoubleCoins = doubleCoinsFromPeriod + doubleCoinsFromOverrides
     
     const percentComplete =
       completedWorkingDays > 0
@@ -347,9 +353,10 @@ function applyOverridesInMemory(
         : 0
 
     student.percentComplete = percentComplete
-    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + doubleCoinsCount
+    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + totalDoubleCoins
     student.exemptDayCredits = exemptDayCredits
     student.coinOnlyExemptCredits = coinOnlyExemptCredits
+    student.doubleCoinsEarned = totalDoubleCoins
   })
 
   return updatedStudentData
@@ -563,6 +570,7 @@ export async function POST(request: NextRequest) {
         dailyLog: studentWithOverrides.dailyLog,
         exemptDayCredits: studentWithOverrides.exemptDayCredits,
         coinOnlyExemptCredits: studentWithOverrides.coinOnlyExemptCredits,
+        doubleCoinsEarned: studentWithOverrides.doubleCoinsEarned,
         uploadedAt: periodData.uploadedAt,
       }
     })
@@ -630,6 +638,7 @@ export async function POST(request: NextRequest) {
         sectionNumber: studentSectionNumber,
         exemptDayCredits: student.exemptDayCredits,
         coinOnlyExemptCredits: student.coinOnlyExemptCredits,
+        doubleCoinsEarned: student.doubleCoinsEarned,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
       },
       periods: periodsData,

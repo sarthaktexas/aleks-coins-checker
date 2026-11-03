@@ -81,6 +81,7 @@ type PeriodInfo = {
   dailyLog: DailyLog[]
   exemptDayCredits?: number
   coinOnlyExemptCredits?: number
+  doubleCoinsEarned?: number
 }
 
 type CoinAdjustment = {
@@ -592,7 +593,7 @@ export default function StudentLookup() {
                 </div>
 
                 {/* Inline metadata chips */}
-                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0) || (studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0)) && (
+                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0) || (studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0) || (studentInfo.doubleCoinsEarned !== undefined && studentInfo.doubleCoinsEarned > 0)) && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {coinAdjustments.length > 0 && (
                       <span className="inline-flex items-center text-xs bg-utsa-surface text-utsa-midnight rounded-full px-2.5 py-1 font-medium">
@@ -607,6 +608,11 @@ export default function StudentLookup() {
                     {studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0 && (
                       <span className="inline-flex items-center text-xs bg-slate-50 text-slate-700 border border-slate-200 rounded-full px-2.5 py-1 font-medium">
                         {studentInfo.coinOnlyExemptCredits} coins-only exempt credit{studentInfo.coinOnlyExemptCredits !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {studentInfo.doubleCoinsEarned !== undefined && studentInfo.doubleCoinsEarned > 0 && (
+                      <span className="inline-flex items-center text-xs bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2.5 py-1 font-medium">
+                        🪙🪙 {studentInfo.doubleCoinsEarned} double coin{studentInfo.doubleCoinsEarned !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
@@ -864,6 +870,12 @@ export default function StudentLookup() {
                             <>
                               <span>·</span>
                               <span>{periodData.coinOnlyExemptCredits} coins-only exempt coin{periodData.coinOnlyExemptCredits !== 1 ? 's' : ''}</span>
+                            </>
+                          )}
+                          {periodData.doubleCoinsEarned !== undefined && periodData.doubleCoinsEarned > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="text-blue-700 font-medium">🪙🪙 {periodData.doubleCoinsEarned} double coin{periodData.doubleCoinsEarned !== 1 ? 's' : ''}</span>
                             </>
                           )}
                         </div>
