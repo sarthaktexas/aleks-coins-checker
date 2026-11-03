@@ -10,6 +10,7 @@ type BadgeData = {
   badge_type: BadgeType
   earned_at?: string
   streak_count?: number
+  period?: string
 }
 
 type BadgeShelfProps = {
@@ -35,7 +36,7 @@ const SLOTS: ShelfSlot[] = [
     kind: "streak_10_day",
     name: "10-Day Streak",
     requirement: 10,
-    reward: "+10 coins",
+    reward: "+10 once per period",
   },
   {
     kind: "streak_25_day",
@@ -59,6 +60,9 @@ const SLOTS: ShelfSlot[] = [
 
 export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeShelfProps) {
   const earned = new Set(badges.map((b) => b.badge_type))
+  const tenDayPeriods = new Set(
+    badges.filter((b) => b.badge_type === "streak_10_day").map((b) => b.period || b.id || "earned"),
+  ).size
   const unlockedCount = SLOTS.filter(
     (slot) => slot.kind !== "mystery" && earned.has(slot.kind),
   ).length
@@ -125,7 +129,9 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                   <p className="text-[10px] text-utsa-muted">
                     {unlocked ? "Unlocked" : "Locked"}
                   </p>
-                  <p className="hidden text-[10px] text-utsa-muted sm:block">{slot.reward}</p>
+                  <p className="hidden text-[10px] text-utsa-muted sm:block">
+                    {slot.kind === "streak_10_day" ? `${slot.reward} · ${tenDayPeriods}/3` : slot.reward}
+                  </p>
                   <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
                     <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
                       <span>

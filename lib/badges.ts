@@ -69,6 +69,20 @@ export async function ensureBadgesSchema() {
     CREATE INDEX IF NOT EXISTS idx_student_badges_badge_type 
     ON student_badges(badge_type)
   `
+
+  // Once per exam period, even if the student changes section.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_ten_day_period
+    ON student_badges (student_id, period)
+    WHERE badge_type = 'streak_10_day'
+  `
+
+  // The 25-day multiplier unlocks once, ever.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_25_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'streak_25_day'
+  `
 }
 
 /**
@@ -113,6 +127,19 @@ export function calculateStreaks(dailyLog: Array<{ qualified: boolean; isExclude
  */
 export function shouldAwardTenDayCoins(dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>): boolean {
   return calculateStreaks(dailyLog).currentStreak === 10
+}
+
+/** A student can earn the 10-day reward once per exam period, at most this many periods. */
+export const TEN_DAY_REWARD_LIMIT = 3
+
+/**
+ * True when this exam period has not already unlocked the 10-day reward
+ * and the student is still under the 3-period cap.
+ */
+export function canGrantTenDayUnlock(existingPeriods: string[], period: string): boolean {
+  const periods = new Set(existingPeriods.filter(Boolean))
+  if (periods.has(period)) return false
+  return periods.size < TEN_DAY_REWARD_LIMIT
 }
 
 /**
@@ -263,22 +290,29 @@ export async function processBadgesForStudent(
   try {
     // Calculate streaks
     const { maxStreak } = calculateStreaks(dailyLog)
-    const awardCoins = options.awardCoins !== false && shouldAwardTenDayCoins(dailyLog)
+    const payTenDayCoins = options.awardCoins !== false && shouldAwardTenDayCoins(dailyLog)
 
-    // Check for 10-day streak badge
+    // Check for 10-day streak badge: once per exam period, up to 3 periods.
     if (maxStreak >= 10) {
-      const hasIt = await hasEarnedBadge(studentId, "streak_10_day", period, sectionNumber)
-      if (!hasIt) {
+      const existing = await sql`
+        SELECT DISTINCT period
+        FROM student_badges
+        WHERE student_id = ${studentId.toLowerCase()}
+          AND badge_type = 'streak_10_day'
+      `
+      const existingPeriods = existing.rows.map((row) => String(row.period))
+
+      if (canGrantTenDayUnlock(existingPeriods, period)) {
         const badge = await awardBadge(studentId, "streak_10_day", maxStreak, period, sectionNumber, {
           maxStreak,
-          coinsAwarded: awardCoins,
+          coinsAwarded: payTenDayCoins,
         })
 
         if (badge) {
           badgesEarned.push(badge)
 
-          // Live 10-day streaks pay 10 coins. Retroactive awards are badges only.
-          if (awardCoins) {
+          // Live 10-day streaks pay 10 coins once for this period. Retroactive awards are badges only.
+          if (payTenDayCoins) {
             await sql`
               INSERT INTO coin_adjustments (
                 student_id,
@@ -309,7 +343,7 @@ export async function processBadgesForStudent(
 
     // Check for 25-day streak badge
     if (maxStreak >= 25) {
-      const hasIt = await hasEarnedBadge(studentId, "streak_25_day", period, sectionNumber)
+      const hasIt = await hasStreakMultiplier(studentId)
       if (!hasIt) {
         const badge = await awardBadge(studentId, "streak_25_day", maxStreak, period, sectionNumber, {
           maxStreak,

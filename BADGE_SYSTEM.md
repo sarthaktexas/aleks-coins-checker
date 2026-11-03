@@ -148,7 +148,7 @@ The badge processor:
 1. Scans all student data across all periods
 2. Calculates streak data from daily logs
 3. Awards badges to qualifying students
-4. Does not add coins. The +10 bonus is only created by the daily pull when the current streak is exactly 10
+4. Does not add coins. The +10 bonus is paid once per exam period, up to 3 periods, and only by the daily pull when the current streak is exactly 10
 5. Enables multipliers for 25-day badges
 6. Handles duplicates gracefully (no double-awards)
 

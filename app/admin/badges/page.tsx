@@ -77,7 +77,7 @@ export default function BadgesAdmin() {
                   </p>
                   <div className="mt-2 pt-2 border-t border-orange-200">
                     <p className="text-sm font-medium text-orange-900">Reward:</p>
-                    <p className="text-sm text-orange-800">+10 bonus coins (one-time)</p>
+                    <p className="text-sm text-orange-800">+10 coins once per exam period, up to 3 periods</p>
                   </div>
                 </div>
               </div>
@@ -126,7 +126,7 @@ export default function BadgesAdmin() {
                   <li>Scans all student data across all periods</li>
                   <li>Calculates streak data from daily logs</li>
                   <li>Awards badges to students who already qualify</li>
-                  <li>Does not add coins. The +10 coins only happen on the daily pull, the day a streak first hits 10</li>
+                  <li>Does not add coins. The +10 is paid once per exam period, up to 3 periods, on the daily pull the day a streak first hits 10</li>
                   <li>Enables 2x multiplier for 25-day streak badge</li>
                   <li>Safe to run multiple times (no duplicate awards)</li>
                 </ul>
