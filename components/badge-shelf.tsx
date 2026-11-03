@@ -91,11 +91,14 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
             {SLOTS.map((slot) => {
               const unlocked = slot.kind !== "mystery" && earned.has(slot.kind)
               const shieldKind: ShieldKind = slot.kind
+              const repeatMark =
+                slot.kind === "streak_10_day" && tenDayPeriods >= 2 ? `${Math.min(tenDayPeriods, 3)}×` : undefined
               return (
                 <div key={slot.kind === "mystery" ? slot.id : slot.kind} className="flex justify-center">
                   <BadgeShield
                     kind={shieldKind}
                     unlocked={unlocked}
+                    mark={repeatMark}
                     mysteryId={slot.kind === "mystery" ? slot.id : undefined}
                     className="relative z-10 -mb-2.5 h-[4.75rem] w-14 drop-shadow-md sm:-mb-3 sm:h-28 sm:w-24"
                   />
@@ -114,10 +117,20 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
               }
 
               const unlocked = earned.has(slot.kind)
-              const progress = unlocked
-                ? 100
-                : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
-              const days = unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)
+              const repeated = slot.kind === "streak_10_day" && tenDayPeriods >= 2
+              const progress = repeated
+                ? Math.round((Math.min(tenDayPeriods, 3) / 3) * 100)
+                : unlocked
+                  ? 100
+                  : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
+              const progressLabel = repeated
+                ? `${Math.min(tenDayPeriods, 3)}/3`
+                : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
+              const unlockText = !unlocked
+                ? "Locked"
+                : repeated
+                  ? `Unlocked ${Math.min(tenDayPeriods, 3)}×`
+                  : "Unlocked"
 
               return (
                 <div key={`${slot.kind}-meta`} className="px-0.5 text-center sm:px-1">
@@ -126,17 +139,13 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                   >
                     {slot.name}
                   </p>
-                  <p className="text-[10px] text-utsa-muted">
-                    {unlocked ? "Unlocked" : "Locked"}
-                  </p>
+                  <p className="text-[10px] text-utsa-muted">{unlockText}</p>
                   <p className="hidden text-[10px] text-utsa-muted sm:block">
                     {slot.kind === "streak_10_day" ? `${slot.reward} · ${tenDayPeriods}/3` : slot.reward}
                   </p>
                   <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
                     <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
-                      <span>
-                        {days}/{slot.requirement}
-                      </span>
+                      <span>{progressLabel}</span>
                       <span>{progress}%</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-black/10">

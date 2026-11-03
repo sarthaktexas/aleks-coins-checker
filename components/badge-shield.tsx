@@ -7,6 +7,8 @@ type BadgeShieldProps = {
   unlocked?: boolean
   className?: string
   mysteryId?: string
+  /** Banner text. Repeat 10-day earns use "2×" or "3×". */
+  mark?: string
 }
 
 const SHIELD_PATH =
@@ -18,7 +20,13 @@ const INNER_PATH =
  * Heraldic shield icons for streak badges.
  * Mystery slots stay as dashed outlines with a question mark.
  */
-export function BadgeShield({ kind, unlocked = false, className, mysteryId = "mystery" }: BadgeShieldProps) {
+export function BadgeShield({
+  kind,
+  unlocked = false,
+  className,
+  mysteryId = "mystery",
+  mark,
+}: BadgeShieldProps) {
   if (kind === "mystery") {
     return <MysteryShield className={className} mysteryId={mysteryId} />
   }
@@ -87,7 +95,7 @@ export function BadgeShield({ kind, unlocked = false, className, mysteryId = "my
           fill={unlocked ? "#fff8ee" : "#f3f4f6"}
           fontFamily="Inter, ui-sans-serif, system-ui, sans-serif"
         >
-          {kind === "streak_10_day" ? "10" : "25"}
+          {mark ?? (kind === "streak_10_day" ? "10" : "25")}
         </text>
       </g>
 

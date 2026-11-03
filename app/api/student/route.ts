@@ -414,6 +414,12 @@ export async function POST(request: NextRequest) {
             period: "Fall 2024",
             section_number: "default",
           },
+          {
+            badge_type: "streak_10_day",
+            streak_count: 10,
+            period: "Spring 2025",
+            section_number: "default",
+          },
         ],
         streakData: {
           currentStreak: demoStreak.currentStreak,
