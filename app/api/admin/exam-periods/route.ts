@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         endDate: formatDate(row.end_date),
         excludedDates: row.excluded_dates || [],
         coinOnlyExemptDates: row.coin_only_exempt_dates || [],
-        doubleCoinsD ates: row.double_coins_dates || [],
+        doubleCoinsDays: row.double_coins_dates || [],
       }
     })
 
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (professorGate !== true) return professorGate
 
     const body = await request.json()
-    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates, doubleCoinsD ates } = body
+    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates, doubleCoinsDays } = body
 
     // Validate required fields
     if (!periodKey || !name || !startDate || !endDate) {
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     const standardExempt = Array.isArray(excludedDates) ? excludedDates : []
     const coinOnlyExempt = Array.isArray(coinOnlyExemptDates) ? coinOnlyExemptDates : []
-    const doubleCoins = Array.isArray(doubleCoinsD ates) ? doubleCoinsD ates : []
+    const doubleCoins = Array.isArray(doubleCoinsDays) ? doubleCoinsDays : []
     
     // Check for overlaps between special day types
     const overlap1 = standardExempt.filter((d: string) => coinOnlyExempt.includes(d))

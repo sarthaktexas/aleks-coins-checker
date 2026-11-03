@@ -26,14 +26,14 @@ function getWorkingDays(
   endDate: string,
   excludedDates: string[] = [],
   coinOnlyExemptDates: string[] = [],
-  doubleCoinsD ates: string[] = [],
+  doubleCoinsDays: string[] = [],
 ) {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number)
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number)
 
   const excluded = new Set(excludedDates)
   const coinOnly = new Set(coinOnlyExemptDates)
-  const doubleCoins = new Set(doubleCoinsD ates)
+  const doubleCoins = new Set(doubleCoinsDays)
   const workingDays: Array<{
     day: number
     date: string
@@ -234,7 +234,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
-    doubleCoinsD ates: (row.double_coins_dates as string[]) || [],
+    doubleCoinsDays: (row.double_coins_dates as string[]) || [],
   }
 
   let maxDayFromExcel = 0
@@ -253,7 +253,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     period.endDate,
     period.excludedDates,
     period.coinOnlyExemptDates,
-    period.doubleCoinsD ates,
+    period.doubleCoinsDays,
   )
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalWorkingDays = workingDays.length
@@ -453,7 +453,7 @@ export type PeriodDateInfo = {
   endDate: string
   excludedDates: string[]
   coinOnlyExemptDates: string[]
-  doubleCoinsD ates: string[]
+  doubleCoinsDays: string[]
 }
 
 export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo | null> {
@@ -485,7 +485,7 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
     endDate: formatDate(row.end_date),
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
-    doubleCoinsD ates: (row.double_coins_dates as string[]) || [],
+    doubleCoinsDays: (row.double_coins_dates as string[]) || [],
   }
 }
 
