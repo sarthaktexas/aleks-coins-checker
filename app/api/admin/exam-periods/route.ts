@@ -19,6 +19,10 @@ async function ensureExamPeriodsSchema() {
     ALTER TABLE exam_periods
     ADD COLUMN IF NOT EXISTS coin_only_exempt_dates JSONB DEFAULT '[]'::jsonb
   `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS double_coins_dates JSONB DEFAULT '[]'::jsonb
+  `
 }
 
 // GET - Fetch all exam periods
@@ -44,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all exam periods
     const result = await sql`
-      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
+      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates
       FROM exam_periods
       ORDER BY start_date ASC
     `
@@ -67,6 +71,7 @@ export async function GET(request: NextRequest) {
         endDate: formatDate(row.end_date),
         excludedDates: row.excluded_dates || [],
         coinOnlyExemptDates: row.coin_only_exempt_dates || [],
+        doubleCoinsD ates: row.double_coins_dates || [],
       }
     })
 
@@ -87,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (professorGate !== true) return professorGate
 
     const body = await request.json()
-    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates } = body
+    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates, doubleCoinsD ates } = body
 
     // Validate required fields
     if (!periodKey || !name || !startDate || !endDate) {
@@ -96,10 +101,16 @@ export async function POST(request: NextRequest) {
 
     const standardExempt = Array.isArray(excludedDates) ? excludedDates : []
     const coinOnlyExempt = Array.isArray(coinOnlyExemptDates) ? coinOnlyExemptDates : []
-    const overlap = standardExempt.filter((d: string) => coinOnlyExempt.includes(d))
-    if (overlap.length > 0) {
+    const doubleCoins = Array.isArray(doubleCoinsD ates) ? doubleCoinsD ates : []
+    
+    // Check for overlaps between special day types
+    const overlap1 = standardExempt.filter((d: string) => coinOnlyExempt.includes(d))
+    const overlap2 = standardExempt.filter((d: string) => doubleCoins.includes(d))
+    const overlap3 = coinOnlyExempt.filter((d: string) => doubleCoins.includes(d))
+    if (overlap1.length > 0 || overlap2.length > 0 || overlap3.length > 0) {
+      const allOverlaps = [...new Set([...overlap1, ...overlap2, ...overlap3])]
       return NextResponse.json(
-        { error: `A date cannot be both Exempt and Exempt (coins only): ${overlap.join(", ")}` },
+        { error: `A date cannot have multiple special day types: ${allOverlaps.join(", ")}` },
         { status: 400 },
       )
     }
@@ -119,8 +130,8 @@ export async function POST(request: NextRequest) {
 
     // Insert or update the exam period
     const result = await sql`
-      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, updated_at)
-      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(standardExempt)}, ${JSON.stringify(coinOnlyExempt)}, NOW())
+      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, updated_at)
+      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(standardExempt)}, ${JSON.stringify(coinOnlyExempt)}, ${JSON.stringify(doubleCoins)}, NOW())
       ON CONFLICT (period_key) 
       DO UPDATE SET 
         name = EXCLUDED.name,
@@ -128,8 +139,9 @@ export async function POST(request: NextRequest) {
         end_date = EXCLUDED.end_date,
         excluded_dates = EXCLUDED.excluded_dates,
         coin_only_exempt_dates = EXCLUDED.coin_only_exempt_dates,
+        double_coins_dates = EXCLUDED.double_coins_dates,
         updated_at = NOW()
-      RETURNING period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
+      RETURNING period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates
     `
 
     console.log(`Exam period ${periodKey} saved successfully`)
