@@ -30,6 +30,7 @@ import { CalendarView } from "@/components/calendar-view"
 import { RedemptionModal } from "@/components/redemption-modal"
 import { RequestHistory } from "@/components/request-history"
 import { BugReportModal } from "@/components/bug-report-modal"
+import { BadgeShelf } from "@/components/badge-shelf"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { formatLocalDateTime } from "@/lib/datetime"
@@ -144,6 +145,11 @@ export default function StudentLookup() {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
   const [redemptionRequestsEnabled, setRedemptionRequestsEnabled] = useState(true)
   const [hidePII, _setHidePII] = useHidePII() // Read-only: syncs from localStorage when admin toggles on admin pages
+  const [badges, setBadges] = useState<any[]>([])
+  const [streakData, setStreakData] = useState<{ currentStreak: number; maxStreak: number }>({
+    currentStreak: 0,
+    maxStreak: 0,
+  })
 
   const searchParams = useSearchParams()
   const hasAutoSearchedFromUrl = useRef(false)
@@ -192,6 +198,8 @@ export default function StudentLookup() {
         setApprovedRequests(data.approvedRequests || [])
         setRejectedRequests(data.rejectedRequests || [])
         setIsDemoStudent(id.toLowerCase() === "abc123")
+        setBadges(data.badges || [])
+        setStreakData(data.streakData || { currentStreak: 0, maxStreak: 0 })
         
         // Fetch leaderboard data for current period
         if (data.student.period && data.student.sectionNumber) {
@@ -247,6 +255,12 @@ export default function StudentLookup() {
         }
         if (data.periods) {
           setStudentPeriods(data.periods)
+        }
+        if (data.badges) {
+          setBadges(data.badges)
+        }
+        if (data.streakData) {
+          setStreakData(data.streakData)
         }
       }
     } catch (err) {
@@ -559,6 +573,9 @@ export default function StudentLookup() {
                       <div className="flex items-center gap-1.5 justify-center">
                         <Coins className="h-4 w-4 text-utsa-orange" />
                         <span className="text-2xl font-bold text-utsa-midnight">{totalCoinsAcrossPeriods}</span>
+                        {studentInfo.hasMultiplier && (
+                          <span className="text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded-full font-bold">2x</span>
+                        )}
                       </div>
                       <p className="text-[11px] text-utsa-muted font-medium mt-0.5">
                         {studentPeriods.length > 1 ? 'total coins' : 'coins'}
@@ -661,6 +678,9 @@ export default function StudentLookup() {
                 </div>
               )
             })()}
+
+            {/* Badge Shelf */}
+            <BadgeShelf badges={badges} currentStreak={streakData.currentStreak} maxStreak={streakData.maxStreak} />
 
             {/* Extra Credit Status + Progress — mid-period only */}
             {(() => {

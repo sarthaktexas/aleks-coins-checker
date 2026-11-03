@@ -3,6 +3,7 @@ import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
 import { countExemptCredits } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { ensureBadgesSchema } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -102,6 +103,9 @@ function calculateAvgMinutesPerDay(dailyLog: DailyLog[]): number {
 
 export async function GET(request: NextRequest) {
   try {
+    // Ensure badge schema exists
+    await ensureBadgesSchema()
+
     const session = await requireAdmin(request)
     if (!isSession(session)) return session
     const professorGate = requireProfessor(session)
@@ -198,12 +202,47 @@ export async function GET(request: NextRequest) {
       adjustmentsByStudent.set(studentId, current + adj.adjustment_amount)
     })
 
+    // Get all students who have the 2x multiplier badge
+    let studentsWithMultiplier = new Set<string>()
+    let badgesByStudent = new Map<string, any[]>()
+    try {
+      const multiplierResult = await sql`
+        SELECT DISTINCT student_id
+        FROM student_badges
+        WHERE badge_type = 'streak_25_day'
+      `
+      studentsWithMultiplier = new Set(multiplierResult.rows.map(r => r.student_id.toLowerCase()))
+
+      // Get all badges for students in this period/section
+      const badgesResult = await sql`
+        SELECT student_id, badge_type, earned_at, streak_count
+        FROM student_badges
+        WHERE period = ${period}
+          AND section_number = ${sectionNumber}
+      `
+      badgesResult.rows.forEach((badge: any) => {
+        const studentId = badge.student_id.toLowerCase()
+        if (!badgesByStudent.has(studentId)) {
+          badgesByStudent.set(studentId, [])
+        }
+        badgesByStudent.get(studentId)!.push(badge)
+      })
+    } catch (error) {
+      console.error("Error fetching badges:", error)
+    }
+
     // Calculate total coins for each student (excluding redemptions)
     // and calculate average minutes per day for tie-breaking
     const studentsWithCoins = Object.keys(studentData).map(sId => {
       const student = studentData[sId]
       const adjustment = adjustmentsByStudent.get(sId.toLowerCase()) || 0
-      const totalCoins = student.coins + adjustment
+      const hasMultiplier = studentsWithMultiplier.has(sId.toLowerCase())
+      const badges = badgesByStudent.get(sId.toLowerCase()) || []
+      
+      // Apply 2x multiplier to base coins if student has the badge
+      const baseCoins = student.coins
+      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+      const totalCoins = multipliedCoins + adjustment
       const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog)
       
       return {
@@ -212,11 +251,14 @@ export async function GET(request: NextRequest) {
         email: student.email,
         totalCoins,
         avgMinutesPerDay,
-        baseCoins: student.coins,
+        baseCoins: baseCoins,
+        multipliedCoins: multipliedCoins,
         adjustments: adjustment,
         exemptDayCredits: student.exemptDayCredits || 0,
         coinOnlyExemptCredits: student.coinOnlyExemptCredits || 0,
-        percentComplete: student.percentComplete
+        percentComplete: student.percentComplete,
+        hasMultiplier,
+        badges
       }
     })
 
