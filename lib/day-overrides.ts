@@ -45,9 +45,12 @@ export function applyOverrideToDay<T extends Record<string, unknown>>(
   isOverridden: true
   overrideType: string
 } {
+  // For double_coins, the day is qualified AND marked with the special override type
+  const isQualified = override.override_type === "qualified" || override.override_type === "double_coins"
+  
   return {
     ...day,
-    qualified: override.override_type === "qualified",
+    qualified: isQualified,
     reason: override.reason || (day.reason as string) || "",
     isOverridden: true,
     overrideType: override.override_type,

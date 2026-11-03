@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    if (!["qualified", "not_qualified"].includes(overrideType)) {
+    if (!["qualified", "not_qualified", "double_coins"].includes(overrideType)) {
       return NextResponse.json({ error: "Invalid override type" }, { status: 400 })
     }
 
