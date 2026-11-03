@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { parseAleksWorkbook, processExcelData, saveStudentData } from "@/lib/aleks-excel"
 import { isAuthorized, requireImportToken } from "@/lib/import-token"
+import { ensureBadgesSchema, processBadgesForStudent } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -45,6 +46,35 @@ export async function POST(request: NextRequest) {
 
     await saveStudentData(studentData, examPeriod, sectionNumber)
 
+    // Process badges for all students after data import
+    let badgesAwarded = 0
+    let coinsAwarded = 0
+    try {
+      await ensureBadgesSchema()
+      
+      for (const [studentId, student] of Object.entries(studentData)) {
+        const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
+          studentId,
+          student.name,
+          student.dailyLog,
+          examPeriod,
+          sectionNumber,
+          "aleks-sync-import"
+        )
+        badgesAwarded += badgesEarned.length
+        coinsAwarded += coins
+      }
+
+      if (badgesAwarded > 0) {
+        console.log(
+          `🏆 Badge processing: awarded ${badgesAwarded} badge(s) and ${coinsAwarded} bonus coins`,
+        )
+      }
+    } catch (badgeError) {
+      // Don't fail the import if badge processing fails
+      console.error("Badge processing error (non-fatal):", badgeError)
+    }
+
     console.log(
       `✅ ALEKS sync imported period=${examPeriod} section=${sectionNumber} students=${studentCount}`,
     )
@@ -55,6 +85,8 @@ export async function POST(request: NextRequest) {
       studentCount,
       examPeriod,
       sectionNumber,
+      badgesAwarded,
+      coinsAwarded,
     })
   } catch (error) {
     console.error("ALEKS sync import error:", error)

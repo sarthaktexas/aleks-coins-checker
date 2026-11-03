@@ -4,6 +4,7 @@ import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 import { countExemptCredits } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { getStudentBadges, hasStreakMultiplier, ensureBadgesSchema, calculateStreaks } from "@/lib/badges"
 
 type DailyLog = {
   day: number
@@ -362,6 +363,19 @@ function applyOverridesInMemory(
   return updatedStudentData
 }
 
+/**
+ * Apply badge multiplier to coins (2x multiplier for 25-day streak badge)
+ */
+async function applyBadgeMultiplier(studentId: string, baseCoins: number): Promise<number> {
+  try {
+    const hasMultiplier = await hasStreakMultiplier(studentId)
+    return hasMultiplier ? baseCoins * 2 : baseCoins
+  } catch (error) {
+    console.error("Error applying badge multiplier:", error)
+    return baseCoins
+  }
+}
+
 async function fetchStudentOverrides(studentId: string) {
   try {
     const overridesResult = await sql`
@@ -393,10 +407,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 })
     }
 
-    // For demo student, always return demo data
+    // For demo student, always return demo data (no database required)
     const normalizedId = studentId.toLowerCase().trim()
     if (normalizedId === "abc123") {
       const demoStudent = generateDemoData()
+      const demoStreak = calculateStreaks(demoStudent.dailyLog)
       return NextResponse.json({
         success: true,
         student: {
@@ -404,8 +419,30 @@ export async function POST(request: NextRequest) {
           period: 'Fall 2024',
           sectionNumber: 'default'
         },
+        // Sample shelf: 10-day shield unlocked, 25-day still locked.
+        badges: [
+          {
+            badge_type: "streak_10_day",
+            streak_count: 10,
+            period: "Fall 2024",
+            section_number: "default",
+          },
+          {
+            badge_type: "streak_10_day",
+            streak_count: 10,
+            period: "Spring 2025",
+            section_number: "default",
+          },
+        ],
+        streakData: {
+          currentStreak: demoStreak.currentStreak,
+          maxStreak: demoStreak.maxStreak,
+        },
       })
     }
+
+    // Ensure badge schema exists before any real student lookup
+    await ensureBadgesSchema()
 
     // Load student data from database
     let studentData: StudentData
@@ -540,8 +577,11 @@ export async function POST(request: NextRequest) {
       console.error("Error fetching period metadata:", e)
     }
 
+    // Check if student has 2x multiplier badge (25-day streak)
+    const hasMultiplier = await hasStreakMultiplier(normalizedId)
+
     // Format periods data with overrides applied once (no extra DB round-trips)
-    const periodsData = allPeriods.map((periodData) => {
+    const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
       const tempStudentData = { [normalizedId]: periodData.data }
       const overriddenData = applyOverridesInMemory(tempStudentData, overrides)
       const studentWithOverrides = overriddenData[normalizedId]
@@ -553,6 +593,10 @@ export async function POST(request: NextRequest) {
         periodMetadata?.name ??
         periodData.period.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
 
+      // Apply 2x multiplier to base coins if student has the 25-day badge
+      const baseCoins = studentWithOverrides.coins
+      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+
       return {
         period: periodData.period,
         section: periodData.section,
@@ -561,9 +605,10 @@ export async function POST(request: NextRequest) {
         periodEndDate: periodMetadata?.endDate,
         name: studentWithOverrides.name,
         email: studentWithOverrides.email,
-        coins: studentWithOverrides.coins,
+        coins: multipliedCoins,
+        baseCoins,
         coinAdjustment: adjustment,
-        totalCoins: studentWithOverrides.coins + adjustment,
+        totalCoins: multipliedCoins + adjustment,
         totalDays: studentWithOverrides.totalDays,
         periodDays: studentWithOverrides.periodDays,
         percentComplete: studentWithOverrides.percentComplete,
@@ -572,8 +617,9 @@ export async function POST(request: NextRequest) {
         coinOnlyExemptCredits: studentWithOverrides.coinOnlyExemptCredits,
         doubleCoinsEarned: studentWithOverrides.doubleCoinsEarned,
         uploadedAt: periodData.uploadedAt,
+        hasMultiplier,
       }
-    })
+    }))
 
     // Calculate total coins across all periods with period-specific adjustments
     // Then add global adjustments (redemptions) which deduct from the total, not individual periods
@@ -620,16 +666,31 @@ export async function POST(request: NextRequest) {
     } catch (requestError) {
       console.error("Error fetching student requests:", requestError)
     }
+
+    // Get student badges
+    let badges: any[] = []
+    let streakData = { currentStreak: 0, maxStreak: 0 }
+    try {
+      badges = await getStudentBadges(normalizedId)
+      streakData = calculateStreaks(student.dailyLog)
+    } catch (badgeError) {
+      console.error("Error fetching student badges:", badgeError)
+    }
     
+    // Apply 2x multiplier to current period coins if student has the badge
+    const currentPeriodBaseCoins = student.coins
+    const currentPeriodCoins = hasMultiplier ? currentPeriodBaseCoins * 2 : currentPeriodBaseCoins
+
     // Return the student's data including all periods
     return NextResponse.json({
       success: true,
       student: {
         name: student.name,
         email: student.email,
-        coins: student.coins,
+        coins: currentPeriodCoins,
+        baseCoins: currentPeriodBaseCoins,
         coinAdjustment: currentPeriodAdjustment,
-        totalCoins: student.coins + currentPeriodAdjustment,
+        totalCoins: currentPeriodCoins + currentPeriodAdjustment,
         totalDays: student.totalDays,
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
@@ -640,13 +701,16 @@ export async function POST(request: NextRequest) {
         coinOnlyExemptCredits: student.coinOnlyExemptCredits,
         doubleCoinsEarned: student.doubleCoinsEarned,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
+        hasMultiplier,
       },
       periods: periodsData,
       coinAdjustments: coinAdjustments,
       totalCoinsAcrossPeriods: totalCoinsAcrossPeriods,
       pendingRequests: pendingRequests,
       approvedRequests: approvedRequests,
-      rejectedRequests: rejectedRequests
+      rejectedRequests: rejectedRequests,
+      badges: badges,
+      streakData: streakData,
     })
   } catch (error) {
     console.error("Error processing student lookup:", error)

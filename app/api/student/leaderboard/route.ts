@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { countExemptCredits } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { ensureBadgesSchema } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -109,6 +110,9 @@ function calculateAvgMinutesPerDay(dailyLog: DailyLog[]): number {
 
 export async function GET(request: NextRequest) {
   try {
+    // Ensure badge schema exists
+    await ensureBadgesSchema()
+
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const period = searchParams.get("period")
@@ -195,12 +199,30 @@ export async function GET(request: NextRequest) {
       adjustmentsByStudent.set(studentId, current + adj.adjustment_amount)
     })
 
+    // Get all students who have the 2x multiplier badge
+    let studentsWithMultiplier = new Set<string>()
+    try {
+      const multiplierResult = await sql`
+        SELECT DISTINCT student_id
+        FROM student_badges
+        WHERE badge_type = 'streak_25_day'
+      `
+      studentsWithMultiplier = new Set(multiplierResult.rows.map(r => r.student_id.toLowerCase()))
+    } catch (error) {
+      console.error("Error fetching multiplier badges:", error)
+    }
+
     // Calculate total coins for each student (excluding redemptions)
     // and calculate average minutes per day for tie-breaking
     const studentsWithCoins = Object.keys(studentData).map(sId => {
       const student = studentData[sId]
       const adjustment = adjustmentsByStudent.get(sId.toLowerCase()) || 0
-      const totalCoins = student.coins + adjustment
+      const hasMultiplier = studentsWithMultiplier.has(sId.toLowerCase())
+      
+      // Apply 2x multiplier to base coins if student has the badge
+      const baseCoins = student.coins
+      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+      const totalCoins = multipliedCoins + adjustment
       const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog)
       
       return {

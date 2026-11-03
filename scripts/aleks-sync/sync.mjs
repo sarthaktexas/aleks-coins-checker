@@ -457,11 +457,18 @@ async function main() {
             sectionNumber: cls.sectionNumber,
           })
           console.log(`Imported: ${imported.studentCount} students`)
+          if (imported.badgesAwarded > 0) {
+            console.log(
+              `Badges: awarded ${imported.badgesAwarded} badge(s), ${imported.coinsAwarded || 0} bonus coins`,
+            )
+          }
           results.push({
             aleksName: cls.aleksName,
             sectionNumber: cls.sectionNumber,
             ok: true,
             studentCount: imported.studentCount,
+            badgesAwarded: imported.badgesAwarded || 0,
+            coinsAwarded: imported.coinsAwarded || 0,
             fileBytes: bytes.length,
           })
         }
