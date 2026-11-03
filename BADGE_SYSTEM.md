@@ -1,0 +1,267 @@
+# Badge System Documentation
+
+## Overview
+
+The badge system rewards students for maintaining consistent streaks of completing their daily ALEKS requirements. It includes two badges with different rewards:
+
+1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time)
+2. **25-Day Streak Badge** - Grants a permanent 2x multiplier on ALL future daily coins
+
+## Features
+
+### Badge Types
+
+#### 10-Day Streak Badge 🔥
+- **Requirement**: Complete ALEKS 10 days in a row
+- **Reward**: 10 bonus coins added to the student's account
+- **Type**: One-time reward
+- **Display**: Shows on badge shelf and leaderboard
+
+#### 25-Day Streak Badge ⭐
+- **Requirement**: Complete ALEKS 25 days in a row
+- **Reward**: Permanent 2x multiplier on all daily coins
+- **Type**: Permanent benefit
+- **Important**: The multiplier remains active even if the streak breaks
+- **Display**: Shows on badge shelf, leaderboard, and coin display
+
+### Streak Calculation
+
+Streaks are calculated based on consecutive qualifying days in the daily log:
+- **Qualifying Day**: A day where the student met the ALEKS requirements (31+ minutes and 1+ topic)
+- **Excluded Days**: Don't count toward or against streaks (holidays, exempt days)
+- **Missed Days**: Break the streak and reset the counter
+
+The system tracks:
+- **Current Streak**: Consecutive qualifying days from the most recent day backward
+- **Max Streak**: The longest streak achieved in the current period
+
+### Coin Multiplier
+
+The 25-day badge grants a permanent 2x multiplier that:
+- Applies to ALL base daily coins (qualified days + exempt credits)
+- Is calculated BEFORE adjustments (coin adjustments are added after)
+- Persists across all future periods
+- Cannot be removed or lost
+- Is checked globally (once earned in any period, it applies everywhere)
+
+**Example Calculation**:
+```
+Base coins: 15 (qualified days)
+With 25-day badge: 15 × 2 = 30 coins
+Plus adjustments: 30 + 5 = 35 total coins
+```
+
+## Database Schema
+
+### `student_badges` Table
+
+```sql
+CREATE TABLE student_badges (
+  id SERIAL PRIMARY KEY,
+  student_id VARCHAR(255) NOT NULL,
+  badge_type VARCHAR(50) NOT NULL,
+  earned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  streak_count INTEGER NOT NULL,
+  period VARCHAR(100) NOT NULL,
+  section_number VARCHAR(50) NOT NULL,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  UNIQUE(student_id, badge_type, period, section_number)
+)
+```
+
+### Indexes
+
+```sql
+CREATE INDEX idx_student_badges_student_id ON student_badges(student_id);
+CREATE INDEX idx_student_badges_badge_type ON student_badges(badge_type);
+```
+
+## API Endpoints
+
+### Get Student Badges
+```
+GET /api/badges?studentId={studentId}
+```
+
+Returns all badges earned by a student across all periods.
+
+### Process Badges (Admin Only)
+```
+POST /api/badges/process
+Body: { studentId?, period?, sectionNumber? }
+```
+
+Processes badges for:
+- A specific student (if studentId, period, sectionNumber provided)
+- All students across all periods (if no parameters)
+
+Returns:
+```json
+{
+  "success": true,
+  "processedCount": 150,
+  "badgesAwarded": 25,
+  "coinsAwarded": 120
+}
+```
+
+## UI Components
+
+### Badge Shelf (`components/badge-shelf.tsx`)
+
+Displays all available badges with:
+- Lock icon for unearned badges (greyed out)
+- Progress bars showing streak progress
+- Current streak and max streak display
+- Active multiplier indicator for 25-day badge
+- Visual distinction between earned and unearned badges
+
+### Student Dashboard Integration
+
+The badge shelf appears on the main student page:
+- Shows right after the student header
+- Displays current and max streak
+- Shows progress toward each badge
+- Highlights active 2x multiplier
+
+### Leaderboard Integration
+
+Badges appear in the leaderboard:
+- 2x multiplier badge is shown next to coin counts
+- Badge data is included in leaderboard rankings
+- Coin calculations reflect multiplier bonuses
+
+## Admin Features
+
+### Badge Management Page (`/admin/badges`)
+
+Admin interface for badge processing:
+- View badge system information
+- Process badges retroactively for all students
+- See statistics on badge awards
+- One-click batch processing
+- Safe to run multiple times (prevents duplicates)
+
+### Retroactive Processing
+
+The badge processor:
+1. Scans all student data across all periods
+2. Calculates streak data from daily logs
+3. Awards badges to qualifying students
+4. Creates coin adjustments for 10-day badges
+5. Enables multipliers for 25-day badges
+6. Handles duplicates gracefully (no double-awards)
+
+## Implementation Details
+
+### Core Functions (`lib/badges.ts`)
+
+#### `calculateStreaks(dailyLog)`
+Analyzes a daily log and returns:
+```typescript
+{
+  currentStreak: number,
+  maxStreak: number,
+  maxStreakEndIndex: number
+}
+```
+
+#### `processBadgesForStudent(studentId, ...)`
+Main processing function that:
+- Calculates streaks from daily log
+- Checks for badge eligibility
+- Awards badges if not already earned
+- Creates coin adjustments for 10-day badge
+- Returns list of badges earned and coins awarded
+
+#### `hasStreakMultiplier(studentId)`
+Checks if a student has the 25-day badge across ALL periods.
+Used to apply the 2x multiplier globally.
+
+### Integration Points
+
+1. **Student API** (`/api/student/route.ts`)
+   - Loads badge data for each student
+   - Applies 2x multiplier to coins
+   - Returns streak data and badges
+
+2. **Leaderboard API** (`/api/student/leaderboard/route.ts`)
+   - Applies multipliers when calculating rankings
+   - Includes badge data for display
+
+3. **Admin Leaderboard** (`/api/admin/leaderboard/route.ts`)
+   - Shows badges in admin view
+   - Applies multipliers in calculations
+
+## Testing
+
+### Manual Testing Steps
+
+1. **Test Badge Schema Creation**
+   - Visit any page that loads badges
+   - Verify `student_badges` table is created
+
+2. **Test Badge Processing**
+   - Go to `/admin/badges`
+   - Click "Process All Badges"
+   - Verify badges are awarded based on streaks
+
+3. **Test 10-Day Badge**
+   - Find a student with 10+ day streak
+   - Process badges
+   - Verify 10 coins added via coin_adjustments
+   - Check badge appears on student page
+
+4. **Test 25-Day Badge**
+   - Find a student with 25+ day streak
+   - Process badges
+   - Verify coins are doubled (check baseCoins vs coins)
+   - Verify 2x indicator appears
+   - Check multiplier persists across periods
+
+5. **Test Badge Shelf UI**
+   - View student page with badges
+   - Verify progress bars show correctly
+   - Check locked badges are greyed out
+   - Verify earned badges show "Earned" status
+
+## Maintenance
+
+### Running Badge Processing
+
+Badges should be processed:
+- After each ALEKS data upload
+- When setting up the system for the first time (retroactive)
+- If streak calculations are updated
+- Safe to run anytime (idempotent)
+
+### Monitoring
+
+Key metrics to monitor:
+- Number of students with each badge type
+- Total bonus coins awarded
+- Students with active multipliers
+- Badge processing errors
+
+### Common Issues
+
+**Issue**: Badges not appearing
+- Solution: Run badge processing via `/admin/badges`
+
+**Issue**: Multiplier not applying
+- Solution: Verify student has 25-day badge in database
+- Check `hasStreakMultiplier()` query results
+
+**Issue**: Duplicate coins awarded
+- Solution: System prevents duplicates via UNIQUE constraint
+- Safe to rerun processing
+
+## Future Enhancements
+
+Potential additions:
+- More badge types (50-day, 100-day, etc.)
+- Special event badges
+- Team/class-wide achievements
+- Badge leaderboard
+- Badge notification system
+- Custom badge icons/designs
