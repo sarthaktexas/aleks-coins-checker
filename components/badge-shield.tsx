@@ -1,6 +1,14 @@
 "use client"
 
-export type ShieldKind = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master" | "mystery"
+import type { HolidayBadgeType } from "@/lib/holiday-breaks"
+
+export type ShieldKind =
+  | "streak_10_day"
+  | "streak_25_day"
+  | HolidayBadgeType
+  | "holiday"
+  | "grand_master"
+  | "mystery"
 
 type BadgeShieldProps = {
   kind: ShieldKind
@@ -18,17 +26,30 @@ const SHIELD_PATH =
 const INNER_PATH =
   "M60 16 L98 29 V66 C98 90 80 108 60 120 C40 108 22 90 22 66 V29 Z"
 
+function normalizeKind(kind: Exclude<ShieldKind, "mystery">): Exclude<ShieldKind, "mystery" | "holiday"> {
+  if (kind === "holiday") return "holiday_winter"
+  return kind
+}
+
 function shieldBaseId(kind: Exclude<ShieldKind, "mystery">) {
-  if (kind === "streak_10_day") return "ten"
-  if (kind === "streak_25_day") return "twentyfive"
-  if (kind === "holiday") return "holiday"
+  const normalized = normalizeKind(kind)
+  if (normalized === "streak_10_day") return "ten"
+  if (normalized === "streak_25_day") return "twentyfive"
+  if (normalized === "holiday_thanksgiving") return "turkey"
+  if (normalized === "holiday_winter") return "winter"
+  if (normalized === "holiday_july4") return "july4"
+  if (normalized === "holiday_spring") return "spring"
   return "grandmaster"
 }
 
 function defaultBanner(kind: Exclude<ShieldKind, "mystery">) {
-  if (kind === "streak_10_day") return "10"
-  if (kind === "streak_25_day") return "25"
-  if (kind === "holiday") return "H"
+  const normalized = normalizeKind(kind)
+  if (normalized === "streak_10_day") return "10"
+  if (normalized === "streak_25_day") return "25"
+  if (normalized === "holiday_thanksgiving") return "TK"
+  if (normalized === "holiday_winter") return "WB"
+  if (normalized === "holiday_july4") return "4th"
+  if (normalized === "holiday_spring") return "SB"
   return "GM"
 }
 
@@ -48,6 +69,7 @@ export function BadgeShield({
     return <MysteryShield className={className} mysteryId={mysteryId} />
   }
 
+  const normalized = normalizeKind(kind)
   const base = shieldBaseId(kind)
   const id = instanceKey ? `${base}-${instanceKey}` : base
   const banner = mark ?? defaultBanner(kind)
@@ -56,23 +78,41 @@ export function BadgeShield({
     <svg viewBox="0 0 120 140" className={className} role="img" aria-hidden="true">
       <defs>
         <linearGradient id={`${id}-body`} x1="0" y1="0" x2="0" y2="1">
-          {kind === "streak_10_day" ? (
+          {normalized === "streak_10_day" ? (
             <>
               <stop offset="0%" stopColor={unlocked ? "#ffb070" : "#c8cdd4"} />
               <stop offset="45%" stopColor={unlocked ? "#f15a22" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#9a2e0c" : "#6b7280"} />
             </>
-          ) : kind === "streak_25_day" ? (
+          ) : normalized === "streak_25_day" ? (
             <>
               <stop offset="0%" stopColor={unlocked ? "#fff4c2" : "#c8cdd4"} />
               <stop offset="40%" stopColor={unlocked ? "#f5c542" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#a16207" : "#6b7280"} />
             </>
-          ) : kind === "holiday" ? (
+          ) : normalized === "holiday_thanksgiving" ? (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#fdba74" : "#c8cdd4"} />
+              <stop offset="40%" stopColor={unlocked ? "#c2410c" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#7c2d12" : "#6b7280"} />
+            </>
+          ) : normalized === "holiday_winter" ? (
             <>
               <stop offset="0%" stopColor={unlocked ? "#bbf7d0" : "#c8cdd4"} />
               <stop offset="40%" stopColor={unlocked ? "#16a34a" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#14532d" : "#6b7280"} />
+            </>
+          ) : normalized === "holiday_july4" ? (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#93c5fd" : "#c8cdd4"} />
+              <stop offset="35%" stopColor={unlocked ? "#1d4ed8" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#7f1d1d" : "#6b7280"} />
+            </>
+          ) : normalized === "holiday_spring" ? (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#fce7f3" : "#c8cdd4"} />
+              <stop offset="40%" stopColor={unlocked ? "#db2777" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#9d174d" : "#6b7280"} />
             </>
           ) : (
             <>
@@ -88,13 +128,19 @@ export function BadgeShield({
             offset="50%"
             stopColor={
               unlocked
-                ? kind === "streak_10_day"
+                ? normalized === "streak_10_day"
                   ? "#ffd7a8"
-                  : kind === "streak_25_day"
+                  : normalized === "streak_25_day"
                     ? "#ffe08a"
-                    : kind === "holiday"
-                      ? "#a7f3d0"
-                      : "#c4b5fd"
+                    : normalized === "holiday_thanksgiving"
+                      ? "#fed7aa"
+                      : normalized === "holiday_winter"
+                        ? "#a7f3d0"
+                        : normalized === "holiday_july4"
+                          ? "#bfdbfe"
+                          : normalized === "holiday_spring"
+                            ? "#fbcfe8"
+                            : "#c4b5fd"
                 : "#d1d5db"
             }
           />
@@ -125,12 +171,18 @@ export function BadgeShield({
         />
         <path d="M28 28 C40 22 52 20 60 20 C52 36 40 48 28 56 Z" fill={`url(#${id}-shine)`} />
 
-        {kind === "streak_10_day" ? (
+        {normalized === "streak_10_day" ? (
           <FlameEmblem unlocked={unlocked} />
-        ) : kind === "streak_25_day" ? (
+        ) : normalized === "streak_25_day" ? (
           <StarEmblem unlocked={unlocked} />
-        ) : kind === "holiday" ? (
+        ) : normalized === "holiday_thanksgiving" ? (
+          <TurkeyEmblem unlocked={unlocked} />
+        ) : normalized === "holiday_winter" ? (
           <TreeEmblem unlocked={unlocked} />
+        ) : normalized === "holiday_july4" ? (
+          <FireworksEmblem unlocked={unlocked} />
+        ) : normalized === "holiday_spring" ? (
+          <FlowerEmblem unlocked={unlocked} />
         ) : (
           <WizardEmblem unlocked={unlocked} />
         )}
@@ -231,6 +283,63 @@ function TreeEmblem({ unlocked }: { unlocked: boolean }) {
       <path d="M60 48 L82 76 H38 Z" fill={fill} />
       <path d="M60 58 L86 90 H34 Z" fill={fill} />
       <rect x="56" y="88" width="8" height="10" rx="1" fill={trunk} />
+    </g>
+  )
+}
+
+function TurkeyEmblem({ unlocked }: { unlocked: boolean }) {
+  const body = unlocked ? "#fff7ed" : "#f3f4f6"
+  const fan = unlocked ? "#fdba74" : "#e5e7eb"
+  const tip = unlocked ? "#fecaca" : "#d1d5db"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      {/* feather fan */}
+      <path d="M60 78 C40 58 34 42 42 36 C50 48 54 58 60 70 Z" fill={fan} />
+      <path d="M60 78 C48 52 52 34 62 30 C62 48 62 60 60 70 Z" fill={tip} />
+      <path d="M60 78 C72 52 68 34 58 30 C58 48 58 60 60 70 Z" fill={tip} />
+      <path d="M60 78 C80 58 86 42 78 36 C70 48 66 58 60 70 Z" fill={fan} />
+      {/* body + head */}
+      <ellipse cx="60" cy="78" rx="14" ry="12" fill={body} />
+      <circle cx="60" cy="64" r="7" fill={body} />
+      <path d="M60 64 L68 66 L60 68 Z" fill={unlocked ? "#f97316" : "#9ca3af"} />
+    </g>
+  )
+}
+
+function FireworksEmblem({ unlocked }: { unlocked: boolean }) {
+  const burst = unlocked ? "#fee2e2" : "#f3f4f6"
+  const spark = unlocked ? "#fef08a" : "#e5e7eb"
+  const blue = unlocked ? "#bfdbfe" : "#d1d5db"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      <circle cx="60" cy="62" r="4" fill={spark} />
+      <path d="M60 42 V54" stroke={burst} strokeWidth="3" strokeLinecap="round" />
+      <path d="M60 70 V82" stroke={burst} strokeWidth="3" strokeLinecap="round" />
+      <path d="M42 62 H54" stroke={blue} strokeWidth="3" strokeLinecap="round" />
+      <path d="M66 62 H78" stroke={blue} strokeWidth="3" strokeLinecap="round" />
+      <path d="M46 48 L54 56" stroke={spark} strokeWidth="3" strokeLinecap="round" />
+      <path d="M74 48 L66 56" stroke={spark} strokeWidth="3" strokeLinecap="round" />
+      <path d="M46 76 L54 68" stroke={burst} strokeWidth="3" strokeLinecap="round" />
+      <path d="M74 76 L66 68" stroke={burst} strokeWidth="3" strokeLinecap="round" />
+      <circle cx="48" cy="44" r="2.5" fill={blue} />
+      <circle cx="72" cy="44" r="2.5" fill={burst} />
+      <circle cx="48" cy="80" r="2.5" fill={spark} />
+      <circle cx="72" cy="80" r="2.5" fill={blue} />
+    </g>
+  )
+}
+
+function FlowerEmblem({ unlocked }: { unlocked: boolean }) {
+  const petal = unlocked ? "#fce7f3" : "#f3f4f6"
+  const center = unlocked ? "#fde68a" : "#e5e7eb"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      <circle cx="60" cy="48" r="9" fill={petal} />
+      <circle cx="48" cy="58" r="9" fill={petal} />
+      <circle cx="72" cy="58" r="9" fill={petal} />
+      <circle cx="52" cy="72" r="9" fill={petal} />
+      <circle cx="68" cy="72" r="9" fill={petal} />
+      <circle cx="60" cy="62" r="8" fill={center} />
     </g>
   )
 }

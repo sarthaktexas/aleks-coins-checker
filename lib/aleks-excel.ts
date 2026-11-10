@@ -40,6 +40,7 @@ function getWorkingDays(
   coinOnlyExemptDates: string[] = [],
   doubleCoinsDays: string[] = [],
   holidayDays: string[] = [],
+  holidayLabels: Record<string, string> = {},
 ) {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number)
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number)
@@ -55,6 +56,7 @@ function getWorkingDays(
     isCoinOnlyExempt: boolean
     isDoubleCoins: boolean
     isHoliday: boolean
+    holidayBreak?: string
   }> = []
 
   let currentYear = startYear
@@ -106,6 +108,7 @@ function getWorkingDays(
       isCoinOnlyExempt,
       isDoubleCoins,
       isHoliday,
+      holidayBreak: isHoliday ? holidayLabels[dateString] || "winter_break" : undefined,
     })
     dayNumber++
     incrementDate()
@@ -229,7 +232,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
   await ensureExamPeriodsSchema()
 
   const result = await sql`
-    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates
+    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates, holiday_labels
     FROM exam_periods
     WHERE period_key = ${examPeriod}
   `
@@ -254,6 +257,10 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
     doubleCoinsDays: (row.double_coins_dates as string[]) || [],
     holidayDays: (row.holiday_dates as string[]) || [],
+    holidayLabels:
+      row.holiday_labels && typeof row.holiday_labels === "object" && !Array.isArray(row.holiday_labels)
+        ? (row.holiday_labels as Record<string, string>)
+        : {},
   }
 
   let maxDayFromExcel = 0
@@ -274,6 +281,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     period.coinOnlyExemptDates,
     period.doubleCoinsDays,
     period.holidayDays,
+    period.holidayLabels,
   )
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalWorkingDays = workingDays.length
@@ -316,6 +324,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
         const isCoinOnlyExempt = dayInfo.isCoinOnlyExempt
         const isDoubleCoins = dayInfo.isDoubleCoins
         const isHoliday = dayInfo.isHoliday
+        const holidayBreak = dayInfo.holidayBreak
         const timeCol = `h:mm_${calendarDay}`
         const topicCol = `added to pie_${calendarDay}`
         const minutes = timeToMinutes(dataRow[timeCol])
@@ -335,7 +344,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
           if (wouldHaveQualified) {
             if (isHoliday) {
               holidayDaysCompleted++
-              reason = `🎄 Holiday! Earned ${HOLIDAY_COINS} coins (${minutes} mins + ${topics} topics)`
+              reason = `🎄 Holiday (${holidayBreak || "winter_break"})! Earned ${HOLIDAY_COINS} coins (${minutes} mins + ${topics} topics)`
             } else if (isCoinOnlyExempt) {
               coinOnlyExemptCredits++
               reason = `🪙 Exempt (coins only): Would have qualified (${minutes} mins + ${topics} topics)`
@@ -344,7 +353,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
               reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
             }
           } else if (isHoliday) {
-            reason = `🎄 Holiday - skip freely, or earn ${HOLIDAY_COINS} coins if you qualify`
+            reason = `🎄 Holiday (${holidayBreak || "winter_break"}) - skip freely, or earn ${HOLIDAY_COINS} coins if you qualify`
           } else if (isCoinOnlyExempt) {
             reason = "📅 Exempt (coins only) - earns a coin if you qualify, does not count toward extra credit %"
           } else {
@@ -385,6 +394,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
           isCoinOnlyExempt,
           isDoubleCoins,
           isHoliday,
+          holidayBreak: isHoliday ? holidayBreak : undefined,
           wouldHaveQualified,
         })
       }
