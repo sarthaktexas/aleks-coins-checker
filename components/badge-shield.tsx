@@ -7,7 +7,9 @@ type BadgeShieldProps = {
   unlocked?: boolean
   className?: string
   mysteryId?: string
-  /** Banner text. Repeat 10-day earns use "2×" or "3×". */
+  /** Unique suffix so stacked duplicates don't clash on SVG gradient ids. */
+  instanceKey?: string
+  /** Banner text under the emblem (defaults by kind). */
   mark?: string
 }
 
@@ -16,8 +18,22 @@ const SHIELD_PATH =
 const INNER_PATH =
   "M60 16 L98 29 V66 C98 90 80 108 60 120 C40 108 22 90 22 66 V29 Z"
 
+function shieldBaseId(kind: Exclude<ShieldKind, "mystery">) {
+  if (kind === "streak_10_day") return "ten"
+  if (kind === "streak_25_day") return "twentyfive"
+  if (kind === "holiday") return "holiday"
+  return "grandmaster"
+}
+
+function defaultBanner(kind: Exclude<ShieldKind, "mystery">) {
+  if (kind === "streak_10_day") return "10"
+  if (kind === "streak_25_day") return "25"
+  if (kind === "holiday") return "H"
+  return "GM"
+}
+
 /**
- * Heraldic shield icons for streak / holiday badges.
+ * Heraldic shield icons for streak / holiday / grand master badges.
  * Mystery slots stay as dashed outlines with a question mark.
  */
 export function BadgeShield({
@@ -25,29 +41,16 @@ export function BadgeShield({
   unlocked = false,
   className,
   mysteryId = "mystery",
+  instanceKey,
   mark,
 }: BadgeShieldProps) {
   if (kind === "mystery") {
     return <MysteryShield className={className} mysteryId={mysteryId} />
   }
 
-  const id =
-    kind === "streak_10_day"
-      ? "ten"
-      : kind === "streak_25_day"
-        ? "twentyfive"
-        : kind === "holiday"
-          ? "holiday"
-          : "grandmaster"
-  const banner =
-    mark ??
-    (kind === "streak_10_day"
-      ? "10"
-      : kind === "streak_25_day"
-        ? "25"
-        : kind === "holiday"
-          ? "H"
-          : "GM")
+  const base = shieldBaseId(kind)
+  const id = instanceKey ? `${base}-${instanceKey}` : base
+  const banner = mark ?? defaultBanner(kind)
 
   return (
     <svg viewBox="0 0 120 140" className={className} role="img" aria-hidden="true">
@@ -238,13 +241,9 @@ function WizardEmblem({ unlocked }: { unlocked: boolean }) {
   const tip = unlocked ? "#fbbf24" : "#d1d5db"
   return (
     <g opacity={unlocked ? 0.98 : 0.75}>
-      {/* pointed hat */}
       <path d="M60 34 L74 58 H46 Z" fill={robe} />
-      {/* head */}
       <circle cx="60" cy="62" r="8" fill={robe} />
-      {/* robe */}
       <path d="M48 70 Q60 78 72 70 L76 92 H44 Z" fill={robe} />
-      {/* staff */}
       <rect x="78" y="42" width="3" height="50" rx="1" fill={staff} />
       <circle cx="79.5" cy="40" r="5" fill={tip} />
     </g>
