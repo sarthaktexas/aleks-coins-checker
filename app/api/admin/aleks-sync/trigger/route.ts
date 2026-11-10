@@ -4,6 +4,7 @@ import {
   dispatchWorkflow,
   findWorkflowRunSince,
   getWorkflowRunSnapshot,
+  parseBadgeResultsFromLogs,
   requireGitHubConfig,
 } from "@/lib/github-actions"
 
@@ -76,26 +77,12 @@ function summarizeImportFromLogs(logs: string | null): {
   const sectionsImported = importedMatches.length
   const studentsImported = importedMatches.reduce((sum, m) => sum + Number(m[1] || 0), 0)
 
-  let badgesAwarded = 0
-  let coinsAwarded = 0
-  let badgeError: string | null = null
-  for (const match of logs.matchAll(/##BADGE_RESULT##\s*(\{.*\})/g)) {
-    try {
-      const parsed = JSON.parse(match[1]) as {
-        ok?: boolean
-        badgesAwarded?: number
-        coinsAwarded?: number
-        error?: string
-      }
-      badgesAwarded += Number(parsed.badgesAwarded || 0)
-      coinsAwarded += Number(parsed.coinsAwarded || 0)
-      if (parsed.ok === false || parsed.error) {
-        badgeError = parsed.error || badgeError || "Badge processing failed"
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  const badgeResults = parseBadgeResultsFromLogs(logs)
+  const badgesAwarded = badgeResults.reduce((sum, r) => sum + Number(r.badgesAwarded || 0), 0)
+  const coinsAwarded = badgeResults.reduce((sum, r) => sum + Number(r.coinsAwarded || 0), 0)
+  const badgeError =
+    badgeResults.find((r) => !r.ok || r.error)?.error ||
+    (badgeResults.some((r) => !r.ok) ? "Badge processing failed" : null)
 
   if (sectionsImported > 0) {
     return {
