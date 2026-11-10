@@ -56,3 +56,20 @@ export function applyOverrideToDay<T extends Record<string, unknown>>(
     overrideType: override.override_type,
   }
 }
+
+/**
+ * Apply date-keyed overrides onto a daily log.
+ * Used by coin totals and streak/badge calculations so overridden days count the same way.
+ */
+export function applyOverridesToDailyLog<T extends { date?: string }>(
+  dailyLog: T[],
+  overridesByDate: Map<string, DayOverrideRow> | undefined,
+): T[] {
+  if (!dailyLog?.length || !overridesByDate?.size) return dailyLog
+
+  return dailyLog.map((day) => {
+    const override = overridesByDate.get(normalizeOverrideDate(day.date))
+    if (!override) return day
+    return applyOverrideToDay(day as T & Record<string, unknown>, override)
+  })
+}
