@@ -26,7 +26,7 @@ Without it, `/api/admin/aleks-sync/*` returns 401/503.
 3. Playwright logs into ALEKS and scrapes the **Class** dropdown (active + archived)
 4. For each class: Reports → Time and Topic → date range (period start → today, or period end if earlier) → download `.xlsx`
 5. Each file is `POST`ed to `/api/admin/aleks-sync/import`
-6. After import, the API processes streak / holiday / grand-master badges for that section. A 10-day badge pays +10 coins once per exam period (3 periods max), and only when the current streak just hit 10. Older streaks get the badge only. A 25-day badge turns on the 2x multiplier once. Each section emits a `##BADGE_RESULT##` JSON line in the workflow logs (visible under Admin → Sync History). Badge processing failures also email `SYNC_ERROR_EMAIL` / `BUG_REPORT_EMAIL` when Resend is configured
+6. After import, the API processes streak / holiday / grand-master badges for that section. A 10-day badge pays +10 coins once per exam period (3 periods max), and only when the current streak just hit 10. Older streaks get the badge only. A 25-day badge turns on the 2x multiplier once. The sync script re-emits each section’s `##BADGE_RESULT##` JSON into the **GitHub Actions** log (the import API’s own console line only lands in Vercel). Expand a Pull row under Admin → Sync History to see it. Badge processing failures also email `SYNC_ERROR_EMAIL` / `BUG_REPORT_EMAIL` when Resend is configured
 
 Section numbers are derived from the ALEKS class name (e.g. “Section 003” → `003`), preferring values that already exist for that period in the DB.
 

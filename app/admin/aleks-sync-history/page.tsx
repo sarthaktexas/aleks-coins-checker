@@ -25,13 +25,13 @@ export default function AleksSyncHistoryPage() {
         <h1 className="text-xl font-semibold text-utsa-midnight">Sync History</h1>
         <p className="text-sm text-utsa-muted">
           Combined timeline for ALEKS pulls and reviewed-topics verification runs.
-          Expand a pull run to see badge processing logs.
+          Badge processing runs inside each pull — expand a Pull row to see badge results.
         </p>
       </div>
 
       <AleksSyncHistory
         title="Workflow timeline"
-        description="Nightly and manual runs across both workflows, grouped by day. Expand a row for badge / import logs."
+        description="Nightly and manual runs across both workflows, grouped by day. Expand a Pull row for badge / import logs."
         endpoint="/api/admin/aleks-sync/history-timeline"
         emptyMessage="No workflow timeline entries found yet."
         showWorkflowTag

@@ -324,30 +324,82 @@ function extractBadgeLogLines(raw: string, maxLines = 40): string {
   return extractRelevantLogLines(raw, maxLines)
 }
 
-export function parseBadgeResultsFromLogs(raw: string | null): BadgeLogResult[] {
-  if (!raw) return []
+function parseBadgeResultMarker(line: string): BadgeLogResult | null {
+  const marker = line.match(/##BADGE_RESULT##\s*(\{.*\})\s*$/)
+  if (!marker) return null
+  try {
+    const parsed = JSON.parse(marker[1]) as BadgeLogResult
+    return {
+      ok: parsed.ok !== false && !parsed.error,
+      section: parsed.section,
+      period: parsed.period,
+      badgesAwarded: parsed.badgesAwarded,
+      coinsAwarded: parsed.coinsAwarded,
+      studentsProcessed: parsed.studentsProcessed,
+      error: parsed.error,
+      errors: parsed.errors,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fallback for older Actions runs that only printed human-readable badge lines
+ * (before sync.mjs started echoing ##BADGE_RESULT## into GH logs).
+ */
+function parseBadgeResultsFromPlainText(lines: string[]): BadgeLogResult[] {
   const results: BadgeLogResult[] = []
-  const lines = raw.split(/\r?\n/).map(stripGithubLogLine)
+  let pendingSection: string | undefined
+
   for (const line of lines) {
-    const marker = line.match(/##BADGE_RESULT##\s*(\{.*\})\s*$/)
-    if (!marker) continue
-    try {
-      const parsed = JSON.parse(marker[1]) as BadgeLogResult
+    const sectionHeader = line.match(/===\s*Class:.*?→\s*section\s+(\S+)/i)
+    if (sectionHeader) {
+      pendingSection = sectionHeader[1]
+      continue
+    }
+
+    const awarded = line.match(
+      /Badges:\s*awarded\s+(\d+)\s+badge\(s\),\s+(\d+)\s+bonus coins?(?:\s*\((\d+)\s+students?\s+processed\))?/i,
+    )
+    if (awarded) {
       results.push({
-        ok: parsed.ok !== false && !parsed.error,
-        section: parsed.section,
-        period: parsed.period,
-        badgesAwarded: parsed.badgesAwarded,
-        coinsAwarded: parsed.coinsAwarded,
-        studentsProcessed: parsed.studentsProcessed,
-        error: parsed.error,
-        errors: parsed.errors,
+        ok: true,
+        section: pendingSection,
+        badgesAwarded: Number(awarded[1]),
+        coinsAwarded: Number(awarded[2]),
+        studentsProcessed: awarded[3] != null ? Number(awarded[3]) : undefined,
       })
-    } catch {
-      /* ignore malformed markers */
+      continue
+    }
+
+    const err = line.match(/Badge processing error for section\s+(\S+):\s*(.+)$/i)
+    if (err) {
+      const section = err[1]
+      const error = err[2].trim()
+      const existing = [...results].reverse().find((r) => r.section === section)
+      if (existing) {
+        existing.ok = false
+        existing.error = error
+      } else {
+        results.push({ ok: false, section, error })
+      }
     }
   }
+
   return results
+}
+
+export function parseBadgeResultsFromLogs(raw: string | null): BadgeLogResult[] {
+  if (!raw) return []
+  const lines = raw.split(/\r?\n/).map(stripGithubLogLine)
+  const fromMarkers: BadgeLogResult[] = []
+  for (const line of lines) {
+    const parsed = parseBadgeResultMarker(line)
+    if (parsed) fromMarkers.push(parsed)
+  }
+  if (fromMarkers.length > 0) return fromMarkers
+  return parseBadgeResultsFromPlainText(lines)
 }
 
 function summarizeBadgeResults(results: BadgeLogResult[]): string | null {
