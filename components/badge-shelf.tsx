@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Flame, Star } from "lucide-react"
 import { BadgeShield, type ShieldKind } from "@/components/badge-shield"
 
@@ -58,6 +59,109 @@ const SLOTS: ShelfSlot[] = [
   },
 ]
 
+const SHIELD_CLASS =
+  "relative h-[4.75rem] w-14 drop-shadow-md sm:h-28 sm:w-24"
+
+/** Resting + hover fan transforms for 1–3 stacked shields (index 0 = back). */
+function stackPose(count: number, index: number): { rest: string; fan: string; z: number } {
+  // translateX(-50%) keeps each shield centered on the slot (left-1/2).
+  const center = "translateX(-50%)"
+
+  if (count <= 1) {
+    return {
+      rest: `${center} translate(0,0) rotate(0deg)`,
+      fan: `${center} translate(0,0) rotate(0deg)`,
+      z: 10,
+    }
+  }
+
+  if (count === 2) {
+    return index === 0
+      ? {
+          rest: `${center} translate(-10px,-4px) rotate(-8deg)`,
+          fan: `${center} translate(-42px,-14px) rotate(-18deg)`,
+          z: 10,
+        }
+      : {
+          rest: `${center} translate(10px,2px) rotate(8deg)`,
+          fan: `${center} translate(42px,-8px) rotate(18deg)`,
+          z: 20,
+        }
+  }
+
+  // count === 3 — tight deck at rest, clear hand-of-cards fan on hover
+  if (index === 0) {
+    return {
+      rest: `${center} translate(-12px,-6px) rotate(-11deg)`,
+      fan: `${center} translate(-52px,-18px) rotate(-22deg)`,
+      z: 10,
+    }
+  }
+  if (index === 1) {
+    return {
+      rest: `${center} translate(0,-3px) rotate(0deg)`,
+      fan: `${center} translate(0,-28px) rotate(0deg)`,
+      z: 20,
+    }
+  }
+  return {
+    rest: `${center} translate(12px,3px) rotate(11deg)`,
+    fan: `${center} translate(52px,-12px) rotate(22deg)`,
+    z: 30,
+  }
+}
+
+function StackedShields({
+  kind,
+  unlocked,
+  count,
+}: {
+  kind: Exclude<ShieldKind, "mystery">
+  unlocked: boolean
+  count: number
+}) {
+  const [fanned, setFanned] = useState(false)
+  const stackCount = unlocked ? Math.max(1, Math.min(count, 3)) : 1
+  const fannable = unlocked && stackCount > 1
+
+  return (
+    <div
+      className={`relative flex h-[4.75rem] w-14 items-end justify-center sm:h-28 sm:w-24 ${fannable ? "cursor-pointer" : ""}`}
+      tabIndex={fannable ? 0 : undefined}
+      onMouseEnter={() => fannable && setFanned(true)}
+      onMouseLeave={() => setFanned(false)}
+      onFocus={() => fannable && setFanned(true)}
+      onBlur={() => setFanned(false)}
+      aria-label={
+        fannable
+          ? `${stackCount} ${kind === "streak_10_day" ? "10-day" : "25-day"} streak badges`
+          : undefined
+      }
+    >
+      {Array.from({ length: stackCount }, (_, index) => {
+        const pose = stackPose(stackCount, index)
+        return (
+          <div
+            key={`${kind}-${index}`}
+            className="absolute bottom-0 left-1/2 origin-bottom transition-transform duration-300 ease-out will-change-transform"
+            style={{
+              zIndex: pose.z,
+              transform: fanned ? pose.fan : pose.rest,
+            }}
+          >
+            <BadgeShield
+              kind={kind}
+              unlocked={unlocked}
+              instanceKey={`${kind}-${index}`}
+              className={SHIELD_CLASS}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeShelfProps) {
   const earned = new Set(badges.map((b) => b.badge_type))
   const tenDayPeriods = new Set(
@@ -68,7 +172,7 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
   ).length
 
   return (
-    <section className="overflow-hidden rounded-md border border-utsa-border bg-white">
+    <section className="rounded-md border border-utsa-border bg-white">
       <div className="flex flex-col gap-2 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <h2 className="text-sm font-semibold text-utsa-midnight">Badge shelf</h2>
@@ -86,22 +190,33 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
       </div>
 
       <div className="px-3 pb-4 pt-2 sm:px-5">
-        <div className="rounded-md bg-[#f6f1e8] px-1 pt-3 sm:px-2">
-          <div className="grid grid-cols-5 items-end gap-0.5 sm:gap-1">
+        <div className="overflow-visible rounded-md bg-[#f6f1e8] px-1 pt-6 sm:px-2 sm:pt-8">
+          <div className="grid grid-cols-5 items-end gap-0.5 overflow-visible sm:gap-1">
             {SLOTS.map((slot) => {
               const unlocked = slot.kind !== "mystery" && earned.has(slot.kind)
               const shieldKind: ShieldKind = slot.kind
-              const repeatMark =
-                slot.kind === "streak_10_day" && tenDayPeriods >= 2 ? `${Math.min(tenDayPeriods, 3)}×` : undefined
+              const stackCount =
+                slot.kind === "streak_10_day" ? Math.min(Math.max(tenDayPeriods, unlocked ? 1 : 0), 3) : unlocked ? 1 : 0
+
               return (
-                <div key={slot.kind === "mystery" ? slot.id : slot.kind} className="flex justify-center">
-                  <BadgeShield
-                    kind={shieldKind}
-                    unlocked={unlocked}
-                    mark={repeatMark}
-                    mysteryId={slot.kind === "mystery" ? slot.id : undefined}
-                    className="relative z-10 -mb-2.5 h-[4.75rem] w-14 drop-shadow-md sm:-mb-3 sm:h-28 sm:w-24"
-                  />
+                <div
+                  key={slot.kind === "mystery" ? slot.id : slot.kind}
+                  className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3"
+                >
+                  {slot.kind === "mystery" ? (
+                    <BadgeShield
+                      kind={shieldKind}
+                      unlocked={false}
+                      mysteryId={slot.id}
+                      className={SHIELD_CLASS}
+                    />
+                  ) : (
+                    <StackedShields
+                      kind={slot.kind}
+                      unlocked={unlocked}
+                      count={stackCount}
+                    />
+                  )}
                 </div>
               )
             })}
