@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache } from "@/lib/student-cache"
+import { reprocessBadgesForStudent } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -253,6 +254,14 @@ export async function PUT(request: NextRequest) {
 
     bustStudentDataCache()
 
+    if (overrideId) {
+      try {
+        await reprocessBadgesForStudent(requestData.student_id, session.displayName)
+      } catch (badgeError) {
+        console.error("Badge reprocess after override approval (non-fatal):", badgeError)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: message,
@@ -422,6 +431,14 @@ export async function POST(request: NextRequest) {
     }
 
     bustStudentDataCache()
+
+    if (createdOverrides.length > 0) {
+      try {
+        await reprocessBadgesForStudent(studentId, session.displayName)
+      } catch (badgeError) {
+        console.error("Badge reprocess after fast-approve overrides (non-fatal):", badgeError)
+      }
+    }
 
     return NextResponse.json({
       success: true,
