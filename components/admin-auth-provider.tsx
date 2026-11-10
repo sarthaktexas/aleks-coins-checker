@@ -76,13 +76,22 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  // Re-check session when tab becomes visible so deactivate / role changes apply quickly
+  // Re-check session when tab becomes visible so deactivate / role changes apply quickly.
+  // Debounce to avoid hammering auth/bootstrap on rapid tab switches.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     const onVisible = () => {
-      if (document.visibilityState === "visible") void refresh()
+      if (document.visibilityState !== "visible") return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        void refresh()
+      }, 1500)
     }
     document.addEventListener("visibilitychange", onVisible)
-    return () => document.removeEventListener("visibilitychange", onVisible)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      if (timer) clearTimeout(timer)
+    }
   }, [refresh])
 
   const logout = useCallback(async () => {

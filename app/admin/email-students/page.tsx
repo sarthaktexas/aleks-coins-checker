@@ -220,18 +220,17 @@ export default function EmailStudentsPage() {
     setMessage(null)
 
     try {
-      // Build URL based on what's selected
-      let url = '/api/admin/student-data'
+      // Slim roster only (no dailyLog blobs) — balances come from a separate endpoint
       const params = new URLSearchParams()
-      if (selectedPeriod && selectedPeriod !== '__ALL__') {
-        params.append('period', selectedPeriod)
+      params.set("includeStudents", "1")
+      params.set("slim", "1")
+      if (selectedPeriod && selectedPeriod !== "__ALL__") {
+        params.append("period", selectedPeriod)
       }
       if (sectionNumber.trim()) {
-        params.append('sectionNumber', sectionNumber)
+        params.append("sectionNumber", sectionNumber)
       }
-      if (params.toString()) {
-        url += '?' + params.toString()
-      }
+      const url = `/api/admin/student-data?${params.toString()}`
       
       const response = await fetch(url, { credentials: "same-origin" })
       if (response.status === 401) {

@@ -1,13 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 
 export const dynamic = "force-dynamic"
-
-// Simple in-memory cache for analytics (in production, consider Redis)
-let analyticsCache: { data: MergedPeriodStats[], timestamp: number } | null = null
-const CACHE_DURATION = 30 * 60 * 1000 // 30 minutes - increased to reduce database queries
 
 type StudentData = {
   [studentId: string]: {
@@ -134,26 +132,23 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
   }
 }
 
+async function loadLatestUploadsForAnalytics() {
+  // Only the newest blob per period×section — historical uploads are wasted egress.
+  return sql`
+    SELECT DISTINCT ON (period, COALESCE(section_number, 'default'))
+      period,
+      COALESCE(section_number, 'default') AS section_number,
+      uploaded_at,
+      data
+    FROM student_data
+    ORDER BY period, COALESCE(section_number, 'default'), uploaded_at DESC
+  `
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get("period")
-
-    // Check cache first
-    if (analyticsCache && Date.now() - analyticsCache.timestamp < CACHE_DURATION) {
-      let cachedPeriods = analyticsCache.data
-      
-      // Filter by period if requested
-      if (period) {
-        cachedPeriods = cachedPeriods.filter(p => p.period === period)
-      }
-      
-      return NextResponse.json({
-        success: true,
-        periods: cachedPeriods,
-        cached: true
-      })
-    }
 
     // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -163,75 +158,34 @@ export async function GET(request: NextRequest) {
       }, { status: 503 })
     }
 
-    // Get all upload records
+    const computeAnalytics = async (): Promise<MergedPeriodStats[]> => {
     let uploadRecords
     try {
-      // Check if section_number column exists
-      const columnCheck = await sql`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'student_data' AND column_name = 'section_number'
-      `
-      
-      if (columnCheck.rows.length > 0) {
-        uploadRecords = await sql`
-          SELECT 
-            period,
-            COALESCE(section_number, 'default') as section_number,
-            uploaded_at,
-            data
-          FROM student_data 
-          ORDER BY uploaded_at DESC
-        `
-      } else {
-        uploadRecords = await sql`
-          SELECT 
-            period,
-            'default' as section_number,
-            uploaded_at,
-            data
-          FROM student_data 
-          ORDER BY uploaded_at DESC
-        `
-      }
+      uploadRecords = await loadLatestUploadsForAnalytics()
     } catch (error) {
       console.error("Error querying data:", error)
-      return NextResponse.json({ 
-        error: "Failed to query database",
-        sections: []
-      }, { status: 500 })
+      throw error
     }
 
     if (uploadRecords.rows.length === 0) {
-      return NextResponse.json({ 
-        success: true,
-        sections: []
-      })
+      return []
     }
 
-    // Group uploads by period and section, keeping only the latest upload for each combination
+    // Rows are already latest-per period×section from SQL
     const latestUploads = new Map<string, any>()
-    
-    uploadRecords.rows.forEach(row => {
+    uploadRecords.rows.forEach((row) => {
       const key = `${row.period}-${row.section_number}`
-      
-      if (!latestUploads.has(key) || new Date(row.uploaded_at) > new Date(latestUploads.get(key).uploaded_at)) {
-        latestUploads.set(key, {
-          period: row.period,
-          section_number: row.section_number,
-          uploaded_at: row.uploaded_at,
-          data: row.data
-        })
-      }
+      latestUploads.set(key, {
+        period: row.period,
+        section_number: row.section_number,
+        uploaded_at: row.uploaded_at,
+        data: row.data,
+      })
     })
 
     // Group uploads by period and track the latest upload date for each period
     const periodGroups = new Map<string, { uploads: any[], latestUploadDate: Date }>()
-    for (const [key, upload] of latestUploads) {
-      if (period && upload.period !== period) {
-        continue
-      }
-      
+    for (const [, upload] of latestUploads) {
       if (!periodGroups.has(upload.period)) {
         periodGroups.set(upload.period, { uploads: [], latestUploadDate: new Date(upload.uploaded_at) })
       }
@@ -450,22 +404,35 @@ export async function GET(request: NextRequest) {
       ...rest
     }))
 
-    // Update cache
-    analyticsCache = {
-      data: cleanedPeriods,
-      timestamp: Date.now()
+    return cleanedPeriods
     }
 
-    // Filter by period if requested
-    let filteredPeriods = cleanedPeriods
-    if (period) {
-      filteredPeriods = cleanedPeriods.filter(p => p.period === period)
+    let cleanedPeriods: MergedPeriodStats[]
+    try {
+      cleanedPeriods = await unstable_cache(
+        computeAnalytics,
+        ["analytics-periods"],
+        { revalidate: 1800, tags: [STUDENT_DATA_CACHE_TAG] },
+      )()
+    } catch (error) {
+      console.error("Error querying data:", error)
+      return NextResponse.json(
+        {
+          error: "Failed to query database",
+          sections: [],
+        },
+        { status: 500 },
+      )
     }
+
+    const filteredPeriods = period
+      ? cleanedPeriods.filter((p) => p.period === period)
+      : cleanedPeriods
 
     return NextResponse.json({
       success: true,
       periods: filteredPeriods,
-      cached: false
+      cached: true,
     })
 
   } catch (error) {
