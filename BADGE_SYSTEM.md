@@ -43,9 +43,10 @@ The badge system rewards students for maintaining consistent streaks of completi
 ### Streak Calculation
 
 Streaks are calculated based on consecutive qualifying days in the daily log:
-- **Qualifying Day**: A day where the student met the ALEKS requirements (31+ minutes and 1+ topic)
+- **Qualifying Day**: A day where the student met the ALEKS requirements (31+ minutes and 1+ topic), **or** a day overridden as `qualified` / `double_coins`
 - **Excluded Days**: Don't count toward or against streaks (holidays, exempt days)
-- **Missed Days**: Break the streak and reset the counter
+- **Missed Days**: Break the streak and reset the counter (including days overridden as `not_qualified`)
+- **Day Overrides**: Always included in 10-day and 25-day badge streak math (same as coins/calendar)
 
 The system tracks:
 - **Current Streak**: Consecutive qualifying days from the most recent day backward
@@ -184,11 +185,16 @@ Analyzes a daily log and returns:
 
 #### `processBadgesForStudent(studentId, ...)`
 Main processing function that:
-- Calculates streaks from daily log
+- Applies day overrides onto the daily log before streak math
+- Calculates streaks from the override-aware daily log
 - Checks for badge eligibility
 - Awards badges if not already earned
 - Creates a +10 coin adjustment only when `awardCoins` is allowed and the current streak is exactly 10
 - Returns list of badges earned and coins awarded
+
+#### `reprocessBadgesForStudent(studentId, ...)`
+Re-runs badge processing for every period/section a student appears in.
+Called automatically after day overrides are saved or override requests are approved so newly qualified days can unlock badges.
 
 #### `hasStreakMultiplier(studentId)`
 Checks if a student has the 25-day badge across ALL periods.

@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { ensureBadgesSchema, processBadgesForStudent } from "@/lib/badges"
+import { ensureBadgesSchema, fetchDayOverridesForStudent, processBadgesForStudent } from "@/lib/badges"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache } from "@/lib/student-cache"
+import type { DayOverrideRow } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
 
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "Student not found" }, { status: 404 })
         }
 
+        const dayOverrides = await fetchDayOverridesForStudent(studentId)
         const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
           studentId,
           student.name,
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
           period,
           sectionNumber,
           session.email,
-          { awardCoins: false }
+          { awardCoins: false, dayOverrides }
         )
 
         processedCount = 1
@@ -92,6 +94,26 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Load all day overrides once so streak badges include overridden days
+        let allOverrides: DayOverrideRow[] = []
+        try {
+          const overridesResult = await sql`
+            SELECT student_id, day_number, date, override_type, reason
+            FROM student_day_overrides
+          `
+          allOverrides = overridesResult.rows as DayOverrideRow[]
+        } catch (overrideError) {
+          console.error("Could not load day overrides for badge processing:", overrideError)
+        }
+
+        const overridesByStudent = new Map<string, DayOverrideRow[]>()
+        for (const override of allOverrides) {
+          const key = (override.student_id || "").toLowerCase().trim()
+          if (!key) continue
+          if (!overridesByStudent.has(key)) overridesByStudent.set(key, [])
+          overridesByStudent.get(key)!.push(override)
+        }
+
         for (const [key, row] of latestData.entries()) {
           let studentData: any
           if (typeof row.data === "string") {
@@ -103,6 +125,7 @@ export async function POST(request: NextRequest) {
           // Process each student in this period
           for (const [id, student] of Object.entries(studentData)) {
             try {
+              const dayOverrides = overridesByStudent.get(id.toLowerCase()) || []
               const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
                 id,
                 (student as any).name,
@@ -110,7 +133,7 @@ export async function POST(request: NextRequest) {
                 row.period,
                 row.section_number,
                 session.email,
-                { awardCoins: false }
+                { awardCoins: false, dayOverrides }
               )
 
               processedCount++

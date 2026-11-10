@@ -4,6 +4,7 @@ import crypto from "crypto"
 import { bustStudentDataCache } from "@/lib/student-cache"
 import { type AdminSession, isSession, requireAdmin } from "@/lib/admin-auth"
 import { normalizeOverrideDate } from "@/lib/day-overrides"
+import { reprocessBadgesForStudent } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -344,6 +345,13 @@ export async function POST(request: NextRequest) {
     }
 
     bustStudentDataCache()
+
+    // Overrides affect streak qualification — refresh 10/25-day badges for this student
+    try {
+      await reprocessBadgesForStudent(normalizedStudentId, createdBy)
+    } catch (badgeError) {
+      console.error("Badge reprocess after override save (non-fatal):", badgeError)
+    }
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,11 @@ import { sql } from "@vercel/postgres"
 import { parsePeriodKey } from "@/lib/exam-periods"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
+import {
+  applyOverridesToDailyLog,
+  buildOverridesMap,
+  type DayOverrideRow,
+} from "@/lib/day-overrides"
 
 export type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master"
 
@@ -274,8 +279,11 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
 
   const semesterKey = parsed.semesterKey
   const likePattern = `${semesterKey}%`
+  const normalizedId = studentId.toLowerCase()
 
   try {
+    const overrides = await fetchDayOverridesForStudent(normalizedId)
+
     const result = await sql`
       SELECT data, period, COALESCE(section_number, 'default') as section_number, uploaded_at
       FROM student_data
@@ -293,7 +301,6 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
 
     // One contribution per exam period (prefer the section that has this student)
     const coinsByPeriod = new Map<string, number>()
-    const normalizedId = studentId.toLowerCase()
 
     for (const row of latestByPeriodSection.values()) {
       let studentData: any = row.data
@@ -307,7 +314,8 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
       const student = studentData?.[normalizedId]
       if (!student?.dailyLog) continue
 
-      const { coins } = summarizeDailyCoins(student.dailyLog)
+      const effectiveLog = dailyLogWithOverrides(normalizedId, student.dailyLog, overrides)
+      const { coins } = summarizeDailyCoins(effectiveLog)
       const existing = coinsByPeriod.get(row.period) || 0
       // If the student appears in multiple sections for the same period, take the max
       if (coins > existing) coinsByPeriod.set(row.period, coins)
@@ -407,32 +415,78 @@ export async function getStudentBadgesForPeriod(
   }
 }
 
+type StreakDay = {
+  date?: string
+  qualified: boolean
+  isExcluded?: boolean
+  isHoliday?: boolean
+  wouldHaveQualified?: boolean
+}
+
+/**
+ * Load day overrides for a student (best-effort; empty on failure).
+ */
+export async function fetchDayOverridesForStudent(studentId: string): Promise<DayOverrideRow[]> {
+  try {
+    const result = await sql`
+      SELECT student_id, day_number, date, override_type, reason
+      FROM student_day_overrides
+      WHERE student_id = ${studentId.toLowerCase().trim()}
+    `
+    return result.rows as DayOverrideRow[]
+  } catch (error) {
+    console.error("Error fetching day overrides for badges:", error)
+    return []
+  }
+}
+
+/**
+ * Apply overrides onto a daily log so streak/badge math matches coin/calendar views.
+ */
+export function dailyLogWithOverrides(
+  studentId: string,
+  dailyLog: StreakDay[],
+  overrides: DayOverrideRow[],
+): StreakDay[] {
+  if (!dailyLog?.length || !overrides?.length) return dailyLog
+  const byStudent = buildOverridesMap(overrides)
+  const forStudent = byStudent.get(studentId.toLowerCase().trim())
+  return applyOverridesToDailyLog(dailyLog, forStudent)
+}
+
 /**
  * Process badges for a student based on their daily log
- * Awards badges and coin bonuses as needed
+ * Awards badges and coin bonuses as needed.
+ * Day overrides (qualified / double_coins / not_qualified) are included in streak math.
  */
 export async function processBadgesForStudent(
   studentId: string,
   studentName: string,
-  dailyLog: Array<{
-    qualified: boolean
-    isExcluded?: boolean
-    isHoliday?: boolean
-    wouldHaveQualified?: boolean
-  }>,
+  dailyLog: StreakDay[],
   period: string,
   sectionNumber: string,
   adminEmail: string = "system",
-  options: { awardCoins?: boolean; semesterCoinTotal?: number } = {}
+  options: {
+    awardCoins?: boolean
+    dayOverrides?: DayOverrideRow[]
+    semesterCoinTotal?: number
+  } = {}
 ): Promise<{ badgesEarned: Badge[]; coinsAwarded: number }> {
   const badgesEarned: Badge[] = []
   let coinsAwarded = 0
 
   try {
-    // Calculate streaks
-    const { maxStreak } = calculateStreaks(dailyLog)
-    const payTenDayCoins = options.awardCoins !== false && shouldAwardTenDayCoins(dailyLog)
-    const holidayDaysCompleted = countHolidayDaysCompleted(dailyLog)
+    // Include overridden days so 10/25-day badges match calendar/coin qualification
+    const overrides =
+      options.dayOverrides !== undefined
+        ? options.dayOverrides
+        : await fetchDayOverridesForStudent(studentId)
+    const effectiveLog = dailyLogWithOverrides(studentId, dailyLog, overrides)
+
+    // Calculate streaks from the override-aware log
+    const { maxStreak } = calculateStreaks(effectiveLog)
+    const payTenDayCoins = options.awardCoins !== false && shouldAwardTenDayCoins(effectiveLog)
+    const holidayDaysCompleted = countHolidayDaysCompleted(effectiveLog)
 
     // Check for 10-day streak badge: once per exam period, up to 3 periods.
     if (maxStreak >= 10) {
@@ -543,4 +597,71 @@ export async function processBadgesForStudent(
   }
 
   return { badgesEarned, coinsAwarded }
+}
+
+/**
+ * Re-run badge processing for one student across every period/section they appear in.
+ * Used after day overrides change so newly qualified days can unlock 10/25-day badges.
+ */
+export async function reprocessBadgesForStudent(
+  studentId: string,
+  adminEmail: string = "system",
+  options: { awardCoins?: boolean } = {}
+): Promise<{ badgesEarned: Badge[]; coinsAwarded: number; processedCount: number }> {
+  const normalizedId = studentId.toLowerCase().trim()
+  const badgesEarned: Badge[] = []
+  let coinsAwarded = 0
+  let processedCount = 0
+
+  try {
+    await ensureBadgesSchema()
+
+    const overrides = await fetchDayOverridesForStudent(normalizedId)
+
+    const result = await sql`
+      SELECT
+        data->${normalizedId} as student,
+        period,
+        COALESCE(section_number, 'default') as section_number,
+        uploaded_at
+      FROM student_data
+      WHERE data ? ${normalizedId}
+      ORDER BY uploaded_at DESC
+    `
+
+    const seen = new Set<string>()
+    for (const row of result.rows) {
+      const key = `${row.period}_${row.section_number}`
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      let student = row.student
+      if (typeof student === "string") {
+        try {
+          student = JSON.parse(student)
+        } catch {
+          continue
+        }
+      }
+      if (!student?.dailyLog) continue
+
+      const processed = await processBadgesForStudent(
+        normalizedId,
+        student.name || normalizedId,
+        student.dailyLog,
+        row.period,
+        row.section_number,
+        adminEmail,
+        { ...options, dayOverrides: overrides }
+      )
+
+      badgesEarned.push(...processed.badgesEarned)
+      coinsAwarded += processed.coinsAwarded
+      processedCount++
+    }
+  } catch (error) {
+    console.error("Error reprocessing badges for student:", error)
+  }
+
+  return { badgesEarned, coinsAwarded, processedCount }
 }
