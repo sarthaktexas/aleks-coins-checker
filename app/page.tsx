@@ -34,7 +34,8 @@ import { BadgeShelf } from "@/components/badge-shelf"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { formatLocalDateTime } from "@/lib/datetime"
-import { countExemptCredits } from "@/lib/day-credits"
+import { countExemptCredits, countExtraCreditDayCredits } from "@/lib/day-credits"
+import { parsePeriodKey } from "@/lib/exam-periods"
 
 type DailyLog = {
   day: number
@@ -45,6 +46,7 @@ type DailyLog = {
   reason: string
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
+  isHoliday?: boolean
   wouldHaveQualified?: boolean
 }
 
@@ -60,6 +62,9 @@ type StudentInfo = {
   dailyLog: DailyLog[]
   exemptDayCredits?: number
   coinOnlyExemptCredits?: number
+  doubleCoinsEarned?: number
+  holidayDaysCompleted?: number
+  holidayCoinsEarned?: number
   period?: string
   sectionNumber?: string
   uploadedAt?: string | null
@@ -83,6 +88,8 @@ type PeriodInfo = {
   exemptDayCredits?: number
   coinOnlyExemptCredits?: number
   doubleCoinsEarned?: number
+  holidayDaysCompleted?: number
+  holidayCoinsEarned?: number
 }
 
 type CoinAdjustment = {
@@ -367,25 +374,29 @@ export default function StudentLookup() {
     const workingDaysWithData = workingDays.filter((d) => d.day <= totalDays)
     const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
     
-    // Standard exempt credits count toward extra credit %; coins-only do not
-    const { exemptDayCredits } = countExemptCredits(
-      dailyLog.filter((d) => d.day <= totalDays),
-    )
+    // Standard exempt + holiday credits count toward extra credit %; coins-only do not
+    const logThroughToday = dailyLog.filter((d) => d.day <= totalDays)
+    const { exemptDayCredits, holidayDaysCompleted } = countExemptCredits(logThroughToday)
+    const extraCreditDayCredits = countExtraCreditDayCredits(logThroughToday)
     
     const daysMissed = workingDaysWithData.length - qualifiedDaysWithData
     const daysRemaining = periodDays - totalDays
     const { requiredQualifiedDays, maxMissableDays } = calculateMaxMissableDays(periodDays)
-    // Include standard exempt day credits in percentage to allow over 100% for extra credit
-    const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
+    // Include standard exempt + holiday day credits in percentage to allow over 100% for extra credit
+    const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + extraCreditDayCredits) / workingDaysWithData.length) * 100 : 0
 
     // Check if student has qualified for extra credit (>=90% days qualified)
     if (qualificationPercentage >= 90) {
-      const isProgressComplete = ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 >= 100
+      const isProgressComplete = ((qualifiedDaysWithData + extraCreditDayCredits) / workingDaysWithData.length) * 100 >= 100
       
       if (isProgressComplete) {
-        const totalQualified = qualifiedDaysWithData + exemptDayCredits
+        const totalQualified = qualifiedDaysWithData + extraCreditDayCredits
+        const bonusParts = [
+          exemptDayCredits > 0 ? `${exemptDayCredits} exempt` : null,
+          holidayDaysCompleted > 0 ? `${holidayDaysCompleted} holiday` : null,
+        ].filter(Boolean)
         const completionText = qualificationPercentage > 100 
-          ? `${qualificationPercentage.toFixed(1)}% completion (with ${exemptDayCredits} exempt day credit${exemptDayCredits !== 1 ? 's' : ''})`
+          ? `${qualificationPercentage.toFixed(1)}% completion (with ${bonusParts.join(" + ")} credit${extraCreditDayCredits !== 1 ? "s" : ""})`
           : "100% completion"
         return {
           status: "qualified",
@@ -402,7 +413,7 @@ export default function StudentLookup() {
           icon: CheckCircle,
           color: "text-emerald-600",
           bgColor: "bg-emerald-50 border-emerald-200",
-          detail: `You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% completion (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt = ${qualifiedDaysWithData + exemptDayCredits}/${workingDaysWithData.length} qualified days).`,
+          detail: `You've qualified for extra credit with ${qualificationPercentage.toFixed(1)}% completion (${qualifiedDaysWithData} regular + ${extraCreditDayCredits} bonus = ${qualifiedDaysWithData + extraCreditDayCredits}/${workingDaysWithData.length} qualified days).`,
         }
       }
     } else if (daysMissed <= maxMissableDays - 1) {
@@ -610,7 +621,7 @@ export default function StudentLookup() {
                 </div>
 
                 {/* Inline metadata chips */}
-                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0) || (studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0) || (studentInfo.doubleCoinsEarned !== undefined && studentInfo.doubleCoinsEarned > 0)) && (
+                {(coinAdjustments.length > 0 || (studentInfo.exemptDayCredits !== undefined && studentInfo.exemptDayCredits > 0) || (studentInfo.coinOnlyExemptCredits !== undefined && studentInfo.coinOnlyExemptCredits > 0) || (studentInfo.doubleCoinsEarned !== undefined && studentInfo.doubleCoinsEarned > 0) || (studentInfo.holidayCoinsEarned !== undefined && studentInfo.holidayCoinsEarned > 0)) && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {coinAdjustments.length > 0 && (
                       <span className="inline-flex items-center text-xs bg-utsa-surface text-utsa-midnight rounded-full px-2.5 py-1 font-medium">
@@ -632,6 +643,11 @@ export default function StudentLookup() {
                         🪙🪙 {studentInfo.doubleCoinsEarned} double coin{studentInfo.doubleCoinsEarned !== 1 ? 's' : ''}
                       </span>
                     )}
+                    {studentInfo.holidayCoinsEarned !== undefined && studentInfo.holidayCoinsEarned > 0 && (
+                      <span className="inline-flex items-center text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full px-2.5 py-1 font-medium">
+                        🎄 {studentInfo.holidayCoinsEarned} holiday coin{studentInfo.holidayCoinsEarned !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -650,10 +666,10 @@ export default function StudentLookup() {
               const workingDays = studentInfo.dailyLog.filter((d) => !d.isExcluded)
               const workingDaysWithData = workingDays.filter((d) => d.day <= studentInfo.totalDays)
               const qualifiedDaysWithData = workingDaysWithData.filter((d) => d.qualified).length
-              const { exemptDayCredits } = countExemptCredits(
-                studentInfo.dailyLog.filter((d) => d.day <= studentInfo.totalDays),
-              )
-              const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + exemptDayCredits) / workingDaysWithData.length) * 100 : 0
+              const logThroughToday = studentInfo.dailyLog.filter((d) => d.day <= studentInfo.totalDays)
+              const { exemptDayCredits, holidayDaysCompleted } = countExemptCredits(logThroughToday)
+              const extraCreditDayCredits = countExtraCreditDayCredits(logThroughToday)
+              const qualificationPercentage = workingDaysWithData.length > 0 ? ((qualifiedDaysWithData + extraCreditDayCredits) / workingDaysWithData.length) * 100 : 0
               const isProgressComplete = studentInfo.percentComplete >= 100
               const isExtraCreditQualified = qualificationPercentage >= 90
               const isPeriodComplete = studentInfo.totalDays >= studentInfo.periodDays
@@ -676,19 +692,37 @@ export default function StudentLookup() {
                   </div>
                 )
               }
+              const bonusParts = [
+                exemptDayCredits > 0 ? `${exemptDayCredits} exempt` : null,
+                holidayDaysCompleted > 0 ? `${holidayDaysCompleted} holiday` : null,
+              ].filter(Boolean)
               return (
                 <div className="bg-utsa-surface rounded-md p-4 text-center">
                   <h3 className="text-base font-semibold text-utsa-midnight">Period Complete</h3>
                   <p className="text-sm text-utsa-muted mt-1">
                     {qualificationPercentage.toFixed(1)}% completed
-                    {exemptDayCredits > 0 && ` (${qualifiedDaysWithData} regular + ${exemptDayCredits} exempt credit${exemptDayCredits !== 1 ? 's' : ''})`}.
+                    {bonusParts.length > 0 && ` (${qualifiedDaysWithData} regular + ${bonusParts.join(" + ")})`}.
                   </p>
                 </div>
               )
             })()}
 
             {/* Badge Shelf */}
-            <BadgeShelf badges={badges} currentStreak={streakData.currentStreak} maxStreak={streakData.maxStreak} />
+            <BadgeShelf
+              badges={badges}
+              currentStreak={streakData.currentStreak}
+              maxStreak={streakData.maxStreak}
+              holidayDaysCompleted={studentInfo.holidayDaysCompleted || 0}
+              semesterCoins={(() => {
+                const currentSemester = parsePeriodKey(studentInfo.period || "")?.semesterKey
+                if (!currentSemester) {
+                  return studentPeriods.reduce((sum, p) => sum + (p.coins || 0), 0)
+                }
+                return studentPeriods
+                  .filter((p) => parsePeriodKey(p.period)?.semesterKey === currentSemester)
+                  .reduce((sum, p) => sum + (p.coins || 0), 0)
+              })()}
+            />
 
             {/* Extra Credit Status + Progress — mid-period only */}
             {(() => {
@@ -896,6 +930,12 @@ export default function StudentLookup() {
                             <>
                               <span>·</span>
                               <span className="text-blue-700 font-medium">🪙🪙 {periodData.doubleCoinsEarned} double coin{periodData.doubleCoinsEarned !== 1 ? 's' : ''}</span>
+                            </>
+                          )}
+                          {periodData.holidayCoinsEarned !== undefined && periodData.holidayCoinsEarned > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="text-emerald-700 font-medium">🎄 {periodData.holidayCoinsEarned} holiday coin{periodData.holidayCoinsEarned !== 1 ? 's' : ''}</span>
                             </>
                           )}
                         </div>

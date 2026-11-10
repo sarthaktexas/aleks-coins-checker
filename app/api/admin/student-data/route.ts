@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache } from "@/lib/student-cache"
-import { countExemptCredits } from "@/lib/day-credits"
+import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
@@ -18,6 +18,9 @@ type StudentData = {
     dailyLog: any[]
     exemptDayCredits?: number
     coinOnlyExemptCredits?: number
+    doubleCoinsEarned?: number
+    holidayDaysCompleted?: number
+    holidayCoinsEarned?: number
   }
 }
 
@@ -50,18 +53,15 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
         }
 
         // Always recalculate totals based on daily log (with or without overrides)
-        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
-        const completedWorkingDays = workingDayLogs.length
-        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-        const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
+        const summary = summarizeDailyCoins(student.dailyLog)
 
-        // Standard exempt credits count toward extra credit %; coins-only exempt do not
-        const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
-
-        student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
-        student.exemptDayCredits = exemptDayCredits
-        student.coinOnlyExemptCredits = coinOnlyExemptCredits
+        student.percentComplete = summary.percentComplete
+        student.coins = summary.coins
+        student.exemptDayCredits = summary.exemptDayCredits
+        student.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
+        student.holidayDaysCompleted = summary.holidayDaysCompleted
+        student.holidayCoinsEarned = summary.holidayCoinsEarned
+        student.doubleCoinsEarned = summary.doubleCoinsEarned
       }
     })
 

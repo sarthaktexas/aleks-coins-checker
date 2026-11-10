@@ -12,6 +12,7 @@ type DailyLog = {
   reason: string
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
+  isHoliday?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
   overrideType?: "qualified" | "not_qualified" | "double_coins" | string
@@ -150,6 +151,11 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
     }
 
     if (day.isExcluded) {
+      if (day.isHoliday) {
+        return day.wouldHaveQualified
+          ? { emoji: "🎄", className: "bg-emerald-50 border-emerald-300 text-emerald-900 ring-1 ring-emerald-200", hasOverride: false }
+          : { emoji: "🎄", className: "bg-emerald-50/60 border-emerald-200 text-emerald-800", hasOverride: false }
+      }
       if (day.isCoinOnlyExempt) {
         return day.wouldHaveQualified
           ? { emoji: "🪙", className: "bg-violet-50 border-violet-300 text-violet-800 ring-1 ring-violet-200", hasOverride: false }

@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
     try {
       await ensureBadgesSchema()
       
-      for (const [studentId, student] of Object.entries(studentData)) {
+      for (const [studentId, studentRaw] of Object.entries(studentData)) {
+        const student = studentRaw as { name: string; dailyLog: any[] }
         const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
           studentId,
           student.name,

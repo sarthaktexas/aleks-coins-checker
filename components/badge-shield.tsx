@@ -1,6 +1,6 @@
 "use client"
 
-export type ShieldKind = "streak_10_day" | "streak_25_day" | "mystery"
+export type ShieldKind = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master" | "mystery"
 
 type BadgeShieldProps = {
   kind: ShieldKind
@@ -9,7 +9,7 @@ type BadgeShieldProps = {
   mysteryId?: string
   /** Unique suffix so stacked duplicates don't clash on SVG gradient ids. */
   instanceKey?: string
-  /** Banner text under the emblem (defaults to "10" / "25"). */
+  /** Banner text under the emblem (defaults by kind). */
   mark?: string
 }
 
@@ -18,8 +18,22 @@ const SHIELD_PATH =
 const INNER_PATH =
   "M60 16 L98 29 V66 C98 90 80 108 60 120 C40 108 22 90 22 66 V29 Z"
 
+function shieldBaseId(kind: Exclude<ShieldKind, "mystery">) {
+  if (kind === "streak_10_day") return "ten"
+  if (kind === "streak_25_day") return "twentyfive"
+  if (kind === "holiday") return "holiday"
+  return "grandmaster"
+}
+
+function defaultBanner(kind: Exclude<ShieldKind, "mystery">) {
+  if (kind === "streak_10_day") return "10"
+  if (kind === "streak_25_day") return "25"
+  if (kind === "holiday") return "H"
+  return "GM"
+}
+
 /**
- * Heraldic shield icons for streak badges.
+ * Heraldic shield icons for streak / holiday / grand master badges.
  * Mystery slots stay as dashed outlines with a question mark.
  */
 export function BadgeShield({
@@ -34,8 +48,10 @@ export function BadgeShield({
     return <MysteryShield className={className} mysteryId={mysteryId} />
   }
 
-  const base = kind === "streak_10_day" ? "ten" : "twentyfive"
+  const base = shieldBaseId(kind)
   const id = instanceKey ? `${base}-${instanceKey}` : base
+  const banner = mark ?? defaultBanner(kind)
+
   return (
     <svg viewBox="0 0 120 140" className={className} role="img" aria-hidden="true">
       <defs>
@@ -46,11 +62,23 @@ export function BadgeShield({
               <stop offset="45%" stopColor={unlocked ? "#f15a22" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#9a2e0c" : "#6b7280"} />
             </>
-          ) : (
+          ) : kind === "streak_25_day" ? (
             <>
               <stop offset="0%" stopColor={unlocked ? "#fff4c2" : "#c8cdd4"} />
               <stop offset="40%" stopColor={unlocked ? "#f5c542" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#a16207" : "#6b7280"} />
+            </>
+          ) : kind === "holiday" ? (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#bbf7d0" : "#c8cdd4"} />
+              <stop offset="40%" stopColor={unlocked ? "#16a34a" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#14532d" : "#6b7280"} />
+            </>
+          ) : (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#ddd6fe" : "#c8cdd4"} />
+              <stop offset="40%" stopColor={unlocked ? "#7c3aed" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#4c1d95" : "#6b7280"} />
             </>
           )}
         </linearGradient>
@@ -58,7 +86,17 @@ export function BadgeShield({
           <stop offset="0%" stopColor={unlocked ? "#fff7e6" : "#e5e7eb"} />
           <stop
             offset="50%"
-            stopColor={unlocked ? (kind === "streak_10_day" ? "#ffd7a8" : "#ffe08a") : "#d1d5db"}
+            stopColor={
+              unlocked
+                ? kind === "streak_10_day"
+                  ? "#ffd7a8"
+                  : kind === "streak_25_day"
+                    ? "#ffe08a"
+                    : kind === "holiday"
+                      ? "#a7f3d0"
+                      : "#c4b5fd"
+                : "#d1d5db"
+            }
           />
           <stop offset="100%" stopColor={unlocked ? "#8a5a20" : "#9ca3af"} />
         </linearGradient>
@@ -87,7 +125,15 @@ export function BadgeShield({
         />
         <path d="M28 28 C40 22 52 20 60 20 C52 36 40 48 28 56 Z" fill={`url(#${id}-shine)`} />
 
-        {kind === "streak_10_day" ? <FlameEmblem unlocked={unlocked} /> : <StarEmblem unlocked={unlocked} />}
+        {kind === "streak_10_day" ? (
+          <FlameEmblem unlocked={unlocked} />
+        ) : kind === "streak_25_day" ? (
+          <StarEmblem unlocked={unlocked} />
+        ) : kind === "holiday" ? (
+          <TreeEmblem unlocked={unlocked} />
+        ) : (
+          <WizardEmblem unlocked={unlocked} />
+        )}
 
         <path d="M36 96 h48 l-4 10 h-40 z" fill={unlocked ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)"} />
         <text
@@ -99,7 +145,7 @@ export function BadgeShield({
           fill={unlocked ? "#fff8ee" : "#f3f4f6"}
           fontFamily="Inter, ui-sans-serif, system-ui, sans-serif"
         >
-          {mark ?? (kind === "streak_10_day" ? "10" : "25")}
+          {banner}
         </text>
       </g>
 
@@ -173,5 +219,33 @@ function StarEmblem({ unlocked }: { unlocked: boolean }) {
       fill={fill}
       opacity={unlocked ? 0.95 : 0.7}
     />
+  )
+}
+
+function TreeEmblem({ unlocked }: { unlocked: boolean }) {
+  const fill = unlocked ? "#ecfdf5" : "#f3f4f6"
+  const trunk = unlocked ? "#14532d" : "#9ca3af"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      <path d="M60 38 L78 62 H42 Z" fill={fill} />
+      <path d="M60 48 L82 76 H38 Z" fill={fill} />
+      <path d="M60 58 L86 90 H34 Z" fill={fill} />
+      <rect x="56" y="88" width="8" height="10" rx="1" fill={trunk} />
+    </g>
+  )
+}
+
+function WizardEmblem({ unlocked }: { unlocked: boolean }) {
+  const robe = unlocked ? "#ede9fe" : "#f3f4f6"
+  const staff = unlocked ? "#fef3c7" : "#e5e7eb"
+  const tip = unlocked ? "#fbbf24" : "#d1d5db"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      <path d="M60 34 L74 58 H46 Z" fill={robe} />
+      <circle cx="60" cy="62" r="8" fill={robe} />
+      <path d="M48 70 Q60 78 72 70 L76 92 H44 Z" fill={robe} />
+      <rect x="78" y="42" width="3" height="50" rx="1" fill={staff} />
+      <circle cx="79.5" cy="40" r="5" fill={tip} />
+    </g>
   )
 }

@@ -46,6 +46,11 @@ import {
   type SemesterSeason,
   type ExamType,
 } from "@/lib/exam-periods"
+import {
+  HOLIDAY_BREAK_OPTIONS,
+  holidayBreakLabel,
+  type HolidayBreakValue,
+} from "@/lib/holiday-breaks"
 import { useAdminAuth } from "@/components/admin-auth-provider"
 
 type ExamPeriodData = {
@@ -55,6 +60,8 @@ type ExamPeriodData = {
   excludedDates: readonly string[] | string[]
   coinOnlyExemptDates?: readonly string[] | string[]
   doubleCoinsDays?: readonly string[] | string[]
+  holidayDays?: readonly string[] | string[]
+  holidayLabels?: Record<string, string>
 }
 
 type PeriodFormState = {
@@ -68,6 +75,8 @@ type PeriodFormState = {
   excludedDates: string[]
   coinOnlyExemptDates: string[]
   doubleCoinsDays: string[]
+  holidayDays: string[]
+  holidayLabels: Record<string, string>
 }
 
 const emptyForm = (): PeriodFormState => ({
@@ -81,6 +90,8 @@ const emptyForm = (): PeriodFormState => ({
   excludedDates: [],
   coinOnlyExemptDates: [],
   doubleCoinsDays: [],
+  holidayDays: [],
+  holidayLabels: {},
 })
 
 function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormState {
@@ -100,6 +111,8 @@ function formFromPeriod(periodKey: string, period: ExamPeriodData): PeriodFormSt
     excludedDates: [...period.excludedDates],
     coinOnlyExemptDates: [...(period.coinOnlyExemptDates || [])],
     doubleCoinsDays: [...(period.doubleCoinsDays || [])],
+    holidayDays: [...(period.holidayDays || [])],
+    holidayLabels: { ...(period.holidayLabels || {}) },
   }
 }
 
@@ -173,9 +186,10 @@ export default function ManagePeriodsPage() {
   const [editingOriginalKey, setEditingOriginalKey] = useState<string | null>(null)
   const [form, setForm] = useState<PeriodFormState>(emptyForm)
   const [specialDayDate, setSpecialDayDate] = useState("")
+  const [holidayBreakType, setHolidayBreakType] = useState<HolidayBreakValue>("thanksgiving")
   const [collapsedSemesters, setCollapsedSemesters] = useState<Set<string>>(new Set())
 
-  type SpecialDayKind = "exempt" | "coins_only" | "double_coins"
+  type SpecialDayKind = "exempt" | "coins_only" | "double_coins" | "holiday"
   type SpecialDay = { date: string; kind: SpecialDayKind }
 
   const specialDays = useMemo<SpecialDay[]>(() => {
@@ -183,9 +197,10 @@ export default function ManagePeriodsPage() {
       ...form.excludedDates.map((date) => ({ date, kind: "exempt" as const })),
       ...form.coinOnlyExemptDates.map((date) => ({ date, kind: "coins_only" as const })),
       ...form.doubleCoinsDays.map((date) => ({ date, kind: "double_coins" as const })),
+      ...form.holidayDays.map((date) => ({ date, kind: "holiday" as const })),
     ]
     return days.sort((a, b) => a.date.localeCompare(b.date))
-  }, [form.excludedDates, form.coinOnlyExemptDates, form.doubleCoinsDays])
+  }, [form.excludedDates, form.coinOnlyExemptDates, form.doubleCoinsDays, form.holidayDays])
 
 
   const semesterGroups = useMemo(
@@ -310,6 +325,8 @@ export default function ManagePeriodsPage() {
           excludedDates: form.excludedDates,
           coinOnlyExemptDates: form.coinOnlyExemptDates,
           doubleCoinsDays: form.doubleCoinsDays,
+          holidayDays: form.holidayDays,
+          holidayLabels: form.holidayLabels,
         }),
       })
 
@@ -343,9 +360,12 @@ export default function ManagePeriodsPage() {
   const addSpecialDay = (kind: SpecialDayKind) => {
     if (!specialDayDate) return
 
-    const alreadyExempt = form.excludedDates.includes(specialDayDate)
-    const alreadyCoinsOnly = form.coinOnlyExemptDates.includes(specialDayDate)
-    if (alreadyExempt || alreadyCoinsOnly) {
+    const alreadyTaken =
+      form.excludedDates.includes(specialDayDate) ||
+      form.coinOnlyExemptDates.includes(specialDayDate) ||
+      form.doubleCoinsDays.includes(specialDayDate) ||
+      form.holidayDays.includes(specialDayDate)
+    if (alreadyTaken) {
       setMessage({
         type: "error",
         text: "That date is already a special day. Change its type in the list below, or remove it first.",
@@ -364,6 +384,16 @@ export default function ManagePeriodsPage() {
         return {
           ...prev,
           doubleCoinsDays: [...prev.doubleCoinsDays, specialDayDate].sort(),
+        }
+      }
+      if (kind === "holiday") {
+        return {
+          ...prev,
+          holidayDays: [...prev.holidayDays, specialDayDate].sort(),
+          holidayLabels: {
+            ...prev.holidayLabels,
+            [specialDayDate]: holidayBreakType,
+          },
         }
       }
       return {
@@ -389,6 +419,15 @@ export default function ManagePeriodsPage() {
           doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
         }
       }
+      if (kind === "holiday") {
+        const nextLabels = { ...prev.holidayLabels }
+        delete nextLabels[date]
+        return {
+          ...prev,
+          holidayDays: prev.holidayDays.filter((d) => d !== date),
+          holidayLabels: nextLabels,
+        }
+      }
       return {
         ...prev,
         coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
@@ -398,10 +437,14 @@ export default function ManagePeriodsPage() {
 
   const setSpecialDayKind = (date: string, kind: SpecialDayKind) => {
     setForm((prev) => {
+      const nextLabels = { ...prev.holidayLabels }
+      delete nextLabels[date]
       const without = {
         excludedDates: prev.excludedDates.filter((d) => d !== date),
         coinOnlyExemptDates: prev.coinOnlyExemptDates.filter((d) => d !== date),
         doubleCoinsDays: prev.doubleCoinsDays.filter((d) => d !== date),
+        holidayDays: prev.holidayDays.filter((d) => d !== date),
+        holidayLabels: nextLabels,
       }
       if (kind === "exempt") {
         return {
@@ -415,6 +458,17 @@ export default function ManagePeriodsPage() {
           ...prev,
           ...without,
           doubleCoinsDays: [...without.doubleCoinsDays, date].sort(),
+        }
+      }
+      if (kind === "holiday") {
+        return {
+          ...prev,
+          ...without,
+          holidayDays: [...without.holidayDays, date].sort(),
+          holidayLabels: {
+            ...without.holidayLabels,
+            [date]: holidayBreakType,
+          },
         }
       }
       return {
@@ -730,6 +784,11 @@ export default function ManagePeriodsPage() {
                   <span className="font-semibold text-blue-900">Double Coins 🪙🪙:</span>{" "}
                   if a student qualifies, they earn 2 coins and it counts toward extra credit %.
                 </p>
+                <p>
+                  <span className="font-semibold text-emerald-900">Holiday 🎄:</span>{" "}
+                  skipping is fine; if a student qualifies they earn 5 coins total (not 6) and it
+                  counts toward extra credit %. Unlocks the Holiday badge.
+                </p>
               </div>
 
               {specialDays.length === 0 ? (
@@ -741,27 +800,60 @@ export default function ManagePeriodsPage() {
                       key={`${kind}-${date}`}
                       className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border border-utsa-border bg-white px-2.5 py-2"
                     >
-                      <p className="flex-1 min-w-0 text-sm font-medium text-utsa-midnight">
-                        {formatDateForDisplay(date, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-utsa-midnight">
+                          {formatDateForDisplay(date, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                        {kind === "holiday" && (
+                          <p className="text-[11px] text-emerald-800 mt-0.5">
+                            {holidayBreakLabel(form.holidayLabels[date])}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
                         <Select
                           value={kind}
                           onValueChange={(value) => setSpecialDayKind(date, value as SpecialDayKind)}
                         >
-                          <SelectTrigger className="h-8 w-[11.5rem] border-utsa-border text-xs">
+                          <SelectTrigger className="h-8 w-[12.5rem] border-utsa-border text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="exempt">Exempt</SelectItem>
                             <SelectItem value="coins_only">Exempt (coins only)</SelectItem>
                             <SelectItem value="double_coins">Double Coins 🪙🪙</SelectItem>
+                            <SelectItem value="holiday">Holiday 🎄</SelectItem>
                           </SelectContent>
                         </Select>
+                        {kind === "holiday" && (
+                          <Select
+                            value={(form.holidayLabels[date] as HolidayBreakValue) || "other"}
+                            onValueChange={(value) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                holidayLabels: {
+                                  ...prev.holidayLabels,
+                                  [date]: value,
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-[11.5rem] border-emerald-200 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {HOLIDAY_BREAK_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -818,13 +910,45 @@ export default function ManagePeriodsPage() {
                       <button
                         type="button"
                         onClick={() => addSpecialDay("double_coins")}
-                        className="text-left rounded-md border border-blue-200 bg-blue-50/70 p-3 hover:border-blue-400 hover:bg-blue-50 transition-colors sm:col-span-2"
+                        className="text-left rounded-md border border-blue-200 bg-blue-50/70 p-3 hover:border-blue-400 hover:bg-blue-50 transition-colors"
                       >
                         <p className="text-sm font-semibold text-blue-900">Double Coins 🪙🪙</p>
                         <p className="text-[11px] text-blue-800/90 mt-1 leading-snug">
                           Worth 2 coins + counts toward extra credit %
                         </p>
                       </button>
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-3 sm:col-span-2 space-y-2">
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-900">Holiday 🎄</p>
+                          <p className="text-[11px] text-emerald-800/90 mt-1 leading-snug">
+                            5 coins total if they qualify · unlocks Holiday badge. Pick the break
+                            name for this semester (Thanksgiving, Spring Break, Winter Break, …).
+                          </p>
+                        </div>
+                        <Select
+                          value={holidayBreakType}
+                          onValueChange={(value) => setHolidayBreakType(value as HolidayBreakValue)}
+                        >
+                          <SelectTrigger className="h-8 border-emerald-200 bg-white text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {HOLIDAY_BREAK_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => addSpecialDay("holiday")}
+                          className="w-full bg-emerald-700 hover:bg-emerald-800"
+                        >
+                          Add {holidayBreakLabel(holidayBreakType)} day
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ) : (
