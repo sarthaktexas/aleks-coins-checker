@@ -3,6 +3,7 @@ import { sql } from "@vercel/postgres"
 import { ensureBadgesSchema, fetchDayOverridesForStudent, processBadgesForStudent } from "@/lib/badges"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache } from "@/lib/student-cache"
+import { sendBadgeErrorEmail } from "@/lib/email"
 import type { DayOverrideRow } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
         } catch (labelError) {
           console.error("Could not load holiday labels for student badge processing:", labelError)
         }
-        const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
+        const { badgesEarned, coinsAwarded: coins, error: badgeError } = await processBadgesForStudent(
           studentId,
           student.name,
           student.dailyLog || [],
@@ -90,12 +91,19 @@ export async function POST(request: NextRequest) {
         processedCount = 1
         badgesAwarded = badgesEarned.length
         coinsAwarded = coins
+        if (badgeError) {
+          errors.push(`Error processing student ${studentId}: ${badgeError}`)
+        }
 
         // Bust the cache so the student sees the update immediately
         bustStudentDataCache()
       } catch (error) {
         console.error("Error processing student:", error)
-        errors.push(`Error processing student ${studentId}: ${error}`)
+        errors.push(
+          `Error processing student ${studentId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
       }
     } else {
       // Process all students across all periods
@@ -169,23 +177,27 @@ export async function POST(request: NextRequest) {
           for (const [id, student] of Object.entries(studentData)) {
             try {
               const dayOverrides = overridesByStudent.get(id.toLowerCase()) || []
-              const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
-                id,
-                (student as any).name || id,
-                (student as any).dailyLog || [],
-                row.period,
-                row.section_number,
-                processedBy,
-                {
-                  awardCoins: false,
-                  dayOverrides,
-                  holidayLabels: periodLabels,
-                }
-              )
+              const { badgesEarned, coinsAwarded: coins, error: badgeError } =
+                await processBadgesForStudent(
+                  id,
+                  (student as any).name || id,
+                  (student as any).dailyLog || [],
+                  row.period,
+                  row.section_number,
+                  processedBy,
+                  {
+                    awardCoins: false,
+                    dayOverrides,
+                    holidayLabels: periodLabels,
+                  }
+                )
 
               processedCount++
               badgesAwarded += badgesEarned.length
               coinsAwarded += coins
+              if (badgeError) {
+                errors.push(`Error processing student ${id}: ${badgeError}`)
+              }
             } catch (error) {
               console.error(`Error processing student ${id}:`, error)
               errors.push(`Error processing student ${id}: ${(error as Error).message || error}`)
@@ -197,11 +209,26 @@ export async function POST(request: NextRequest) {
         bustStudentDataCache()
       } catch (error) {
         console.error("Error processing all students:", error)
+        const details = (error as Error).message
+        await sendBadgeErrorEmail({
+          source: "admin-process-all",
+          error: details || "Error processing students",
+        })
         return NextResponse.json(
-          { error: "Error processing students", details: (error as Error).message },
+          { error: "Error processing students", details },
           { status: 500 }
         )
       }
+    }
+
+    if (errors.length > 0) {
+      await sendBadgeErrorEmail({
+        source: studentId ? "admin-process-student" : "admin-process-all",
+        period,
+        sectionNumber,
+        error: `Badge processing finished with ${errors.length} error(s)`,
+        details: errors,
+      })
     }
 
     return NextResponse.json({
@@ -213,8 +240,13 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error processing badges:", error)
+    const details = (error as Error).message
+    await sendBadgeErrorEmail({
+      source: "admin-process",
+      error: details || "Internal server error",
+    })
     return NextResponse.json(
-      { error: "Internal server error", details: (error as Error).message },
+      { error: "Internal server error", details },
       { status: 500 }
     )
   }
