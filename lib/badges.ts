@@ -574,7 +574,7 @@ export async function processBadgesForStudent(
     semesterCoinTotal?: number
     holidayLabels?: HolidayLabelMap
   } = {}
-): Promise<{ badgesEarned: Badge[]; coinsAwarded: number }> {
+): Promise<{ badgesEarned: Badge[]; coinsAwarded: number; error?: string }> {
   const badgesEarned: Badge[] = []
   let coinsAwarded = 0
 
@@ -706,6 +706,11 @@ export async function processBadgesForStudent(
     }
   } catch (error) {
     console.error("Error processing badges:", error)
+    return {
+      badgesEarned,
+      coinsAwarded,
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 
   return { badgesEarned, coinsAwarded }

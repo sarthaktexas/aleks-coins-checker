@@ -57,28 +57,76 @@ function summarizeImportFromLogs(logs: string | null): {
   importStatus: PullImportStatus
   sectionsImported: number
   studentsImported: number
+  badgesAwarded: number
+  coinsAwarded: number
+  badgeError: string | null
 } {
   if (!logs) {
-    return { importStatus: "unknown", sectionsImported: 0, studentsImported: 0 }
+    return {
+      importStatus: "unknown",
+      sectionsImported: 0,
+      studentsImported: 0,
+      badgesAwarded: 0,
+      coinsAwarded: 0,
+      badgeError: null,
+    }
   }
 
   const importedMatches = [...logs.matchAll(/Imported:\s+(\d+)\s+students/gi)]
   const sectionsImported = importedMatches.length
   const studentsImported = importedMatches.reduce((sum, m) => sum + Number(m[1] || 0), 0)
 
+  let badgesAwarded = 0
+  let coinsAwarded = 0
+  let badgeError: string | null = null
+  for (const match of logs.matchAll(/##BADGE_RESULT##\s*(\{.*\})/g)) {
+    try {
+      const parsed = JSON.parse(match[1]) as {
+        ok?: boolean
+        badgesAwarded?: number
+        coinsAwarded?: number
+        error?: string
+      }
+      badgesAwarded += Number(parsed.badgesAwarded || 0)
+      coinsAwarded += Number(parsed.coinsAwarded || 0)
+      if (parsed.ok === false || parsed.error) {
+        badgeError = parsed.error || badgeError || "Badge processing failed"
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (sectionsImported > 0) {
     return {
       importStatus: "imported",
       sectionsImported,
       studentsImported,
+      badgesAwarded,
+      coinsAwarded,
+      badgeError,
     }
   }
 
   if (/Skipping sync:/i.test(logs)) {
-    return { importStatus: "no_data", sectionsImported: 0, studentsImported: 0 }
+    return {
+      importStatus: "no_data",
+      sectionsImported: 0,
+      studentsImported: 0,
+      badgesAwarded,
+      coinsAwarded,
+      badgeError,
+    }
   }
 
-  return { importStatus: "unknown", sectionsImported: 0, studentsImported: 0 }
+  return {
+    importStatus: "unknown",
+    sectionsImported: 0,
+    studentsImported: 0,
+    badgesAwarded,
+    coinsAwarded,
+    badgeError,
+  }
 }
 
 /**
@@ -195,15 +243,29 @@ export async function GET(request: NextRequest) {
     const importSummary =
       done && snapshot.conclusion === "success"
         ? summarizeImportFromLogs(await fetchRunLogs(cfg.pat, cfg.repo, snapshot.runId))
-        : { importStatus: "unknown" as PullImportStatus, sectionsImported: 0, studentsImported: 0 }
+        : {
+            importStatus: "unknown" as PullImportStatus,
+            sectionsImported: 0,
+            studentsImported: 0,
+            badgesAwarded: 0,
+            coinsAwarded: 0,
+            badgeError: null as string | null,
+          }
+
+    const badgeNote =
+      importSummary.badgeError
+        ? ` Badge error: ${importSummary.badgeError}`
+        : importSummary.badgesAwarded > 0
+          ? ` Badges: awarded ${importSummary.badgesAwarded} badge(s), ${importSummary.coinsAwarded} bonus coin(s).`
+          : ""
 
     const summary = done
       ? snapshot.conclusion === "success"
         ? importSummary.importStatus === "imported"
-          ? `ALEKS pull succeeded. Imported ${importSummary.sectionsImported} section${importSummary.sectionsImported === 1 ? "" : "s"} (${importSummary.studentsImported} student${importSummary.studentsImported === 1 ? "" : "s"}).`
+          ? `ALEKS pull succeeded. Imported ${importSummary.sectionsImported} section${importSummary.sectionsImported === 1 ? "" : "s"} (${importSummary.studentsImported} student${importSummary.studentsImported === 1 ? "" : "s"}).${badgeNote}`
           : importSummary.importStatus === "no_data"
             ? "ALEKS pull ran, but no new data was imported for this period."
-            : "ALEKS pull succeeded."
+            : `ALEKS pull succeeded.${badgeNote}`
         : "ALEKS pull did not succeed. Please contact the developer to fix it."
       : snapshot.status === "queued" || snapshot.status === "waiting" || snapshot.status === "requested" || snapshot.status === "pending"
         ? "Queued — waiting to start ALEKS pull…"
@@ -218,6 +280,9 @@ export async function GET(request: NextRequest) {
       importStatus: importSummary.importStatus,
       sectionsImported: importSummary.sectionsImported,
       studentsImported: importSummary.studentsImported,
+      badgesAwarded: importSummary.badgesAwarded,
+      coinsAwarded: importSummary.coinsAwarded,
+      badgeError: importSummary.badgeError,
       createdAt: snapshot.createdAt,
       updatedAt: snapshot.updatedAt,
     })

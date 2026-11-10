@@ -26,6 +26,29 @@ export type AleksSyncHistoryRun = {
   outcome: "success" | "failure" | "running" | "other"
 }
 
+export type BadgeLogResult = {
+  ok: boolean
+  section?: string
+  period?: string
+  badgesAwarded?: number
+  coinsAwarded?: number
+  studentsProcessed?: number
+  error?: string
+  errors?: string[]
+}
+
+export type AleksSyncRunLogs = {
+  runId: number
+  status: string
+  conclusion: string | null
+  outcome: AleksSyncHistoryRun["outcome"]
+  summary: string | null
+  logExcerpt: string | null
+  badgeSummary: string | null
+  badgeResults: BadgeLogResult[]
+  badgeHadError: boolean
+}
+
 export type AleksSyncHistoryDay = {
   dateKey: string
   dayLabel: string
@@ -259,16 +282,15 @@ function stripGithubLogLine(line: string): string {
   return s.trimEnd()
 }
 
-function extractRelevantLogLines(raw: string, maxLines = 40): string {
+const INTERESTING_LOG_RE =
+  /ALEKS login|Checking ALEKS|check credentials|login succeeded|login failed|"ok":\s*true|"ok":\s*false|Error:|##ALEKS_LOGIN_RESULT##|##BADGE_RESULT##|Badge processing|Badges:|Imported:|Skipping sync:|Fatal error|Failed for /i
+
+function extractRelevantLogLines(raw: string, maxLines = 60): string {
   const lines = raw.split(/\r?\n/).map(stripGithubLogLine)
   const interestingIdx: number[] = []
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (
-      /ALEKS login|Checking ALEKS|check credentials|login succeeded|login failed|"ok":\s*true|"ok":\s*false|Error:|##ALEKS_LOGIN_RESULT##/i.test(
-        line,
-      )
-    ) {
+    if (INTERESTING_LOG_RE.test(line)) {
       interestingIdx.push(i)
     }
   }
@@ -286,6 +308,65 @@ function extractRelevantLogLines(raw: string, maxLines = 40): string {
     .slice(-maxLines)
     .join("\n")
     .trim()
+}
+
+/** Prefer badge-focused lines for Sync History expand panels. */
+function extractBadgeLogLines(raw: string, maxLines = 40): string {
+  const lines = raw.split(/\r?\n/).map(stripGithubLogLine)
+  const badgeLines = lines.filter((line) =>
+    /##BADGE_RESULT##|Badge processing|Badges:|badge\(s\)|bonus coins|Failed for |Imported:|Skipping sync:|Fatal error|=== Summary ===/i.test(
+      line,
+    ),
+  )
+  if (badgeLines.length > 0) {
+    return badgeLines.slice(-maxLines).join("\n").trim()
+  }
+  return extractRelevantLogLines(raw, maxLines)
+}
+
+export function parseBadgeResultsFromLogs(raw: string | null): BadgeLogResult[] {
+  if (!raw) return []
+  const results: BadgeLogResult[] = []
+  const lines = raw.split(/\r?\n/).map(stripGithubLogLine)
+  for (const line of lines) {
+    const marker = line.match(/##BADGE_RESULT##\s*(\{.*\})\s*$/)
+    if (!marker) continue
+    try {
+      const parsed = JSON.parse(marker[1]) as BadgeLogResult
+      results.push({
+        ok: parsed.ok !== false && !parsed.error,
+        section: parsed.section,
+        period: parsed.period,
+        badgesAwarded: parsed.badgesAwarded,
+        coinsAwarded: parsed.coinsAwarded,
+        studentsProcessed: parsed.studentsProcessed,
+        error: parsed.error,
+        errors: parsed.errors,
+      })
+    } catch {
+      /* ignore malformed markers */
+    }
+  }
+  return results
+}
+
+function summarizeBadgeResults(results: BadgeLogResult[]): string | null {
+  if (results.length === 0) return null
+  const failed = results.filter((r) => !r.ok || r.error)
+  const badgesAwarded = results.reduce((sum, r) => sum + (r.badgesAwarded || 0), 0)
+  const coinsAwarded = results.reduce((sum, r) => sum + (r.coinsAwarded || 0), 0)
+  const studentsProcessed = results.reduce((sum, r) => sum + (r.studentsProcessed || 0), 0)
+
+  if (failed.length > 0) {
+    const firstError = failed[0].error || failed[0].errors?.[0] || "unknown error"
+    return `Badge processing had ${failed.length} error${failed.length === 1 ? "" : "s"}. First: ${firstError}`
+  }
+
+  if (badgesAwarded > 0 || coinsAwarded > 0) {
+    return `Badges: awarded ${badgesAwarded} badge(s), ${coinsAwarded} bonus coin(s) across ${results.length} section${results.length === 1 ? "" : "s"}${studentsProcessed ? ` (${studentsProcessed} students)` : ""}.`
+  }
+
+  return `Badge processing finished for ${results.length} section${results.length === 1 ? "" : "s"} — no new badges.`
 }
 
 async function fetchJobLogs(pat: string, repo: string, jobId: number): Promise<string | null> {
@@ -386,4 +467,87 @@ export async function getWorkflowRunSnapshot(
   }
 
   return snapshot
+}
+
+/**
+ * Fetch job logs for a workflow run and extract badge / import excerpts
+ * for the Sync History UI.
+ */
+export async function getAleksSyncRunLogs(runId: number): Promise<AleksSyncRunLogs> {
+  const cfg = requireGitHubConfig()
+  if (!cfg.ok) throw new Error(cfg.error)
+
+  const run = await getWorkflowRun(runId)
+  const outcome = runOutcome(run.status, run.conclusion)
+  const result: AleksSyncRunLogs = {
+    runId: run.id,
+    status: run.status,
+    conclusion: run.conclusion,
+    outcome,
+    summary: null,
+    logExcerpt: null,
+    badgeSummary: null,
+    badgeResults: [],
+    badgeHadError: false,
+  }
+
+  if (run.status !== "completed") {
+    result.summary =
+      run.status === "queued" || run.status === "waiting" || run.status === "requested" || run.status === "pending"
+        ? "Queued — waiting to start…"
+        : "Running…"
+    return result
+  }
+
+  try {
+    const jobsUrl = `https://api.github.com/repos/${cfg.repo}/actions/runs/${runId}/jobs`
+    const jobsRes = await fetch(jobsUrl, {
+      headers: githubHeaders(cfg.pat),
+      cache: "no-store",
+    })
+    if (!jobsRes.ok) {
+      result.summary = "Could not load job list for this run."
+      return result
+    }
+
+    const jobsData = (await jobsRes.json()) as {
+      jobs?: Array<{ id: number; name: string; conclusion: string | null }>
+    }
+    const jobs = jobsData.jobs || []
+    const job =
+      jobs.find((j) => j.conclusion === "failure") ||
+      jobs.find((j) => j.conclusion === "success") ||
+      jobs[0]
+
+    if (!job) {
+      result.summary = "No jobs found for this run."
+      return result
+    }
+
+    const raw = await fetchJobLogs(cfg.pat, cfg.repo, job.id)
+    if (!raw) {
+      result.summary = "Could not load logs for this run (they may have expired)."
+      return result
+    }
+
+    result.logExcerpt = extractBadgeLogLines(raw)
+    result.badgeResults = parseBadgeResultsFromLogs(raw)
+    result.badgeSummary = summarizeBadgeResults(result.badgeResults)
+    result.badgeHadError = result.badgeResults.some((r) => !r.ok || !!r.error)
+
+    if (result.badgeSummary) {
+      result.summary = result.badgeSummary
+    } else if (run.conclusion === "success") {
+      result.summary = "Run succeeded."
+    } else if (run.conclusion === "failure") {
+      result.summary = "Run failed — see log excerpt below."
+    } else {
+      result.summary = `Run finished with status: ${run.conclusion || "unknown"}.`
+    }
+  } catch (err) {
+    console.error("Failed to fetch sync run logs:", err)
+    result.summary = "Failed to load logs for this run."
+  }
+
+  return result
 }

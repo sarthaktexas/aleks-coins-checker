@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { parseAleksWorkbook, processExcelData, saveStudentData } from "@/lib/aleks-excel"
 import { isAuthorized, requireImportToken } from "@/lib/import-token"
 import { ensureBadgesSchema, processBadgesForStudent } from "@/lib/badges"
+import { sendBadgeErrorEmail } from "@/lib/email"
+import type { DayOverrideRow } from "@/lib/day-overrides"
+import { sql } from "@vercel/postgres"
 
 export const dynamic = "force-dynamic"
 
@@ -49,31 +52,123 @@ export async function POST(request: NextRequest) {
     // Process badges for all students after data import
     let badgesAwarded = 0
     let coinsAwarded = 0
+    let studentsProcessed = 0
+    const badgeErrors: string[] = []
+    let badgeError: string | undefined
+
     try {
       await ensureBadgesSchema()
-      
-      for (const [studentId, studentRaw] of Object.entries(studentData)) {
-        const student = studentRaw as { name: string; dailyLog: any[] }
-        const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
-          studentId,
-          student.name,
-          student.dailyLog,
-          examPeriod,
-          sectionNumber,
-          "aleks-sync-import"
-        )
-        badgesAwarded += badgesEarned.length
-        coinsAwarded += coins
+
+      // Load day overrides once so streak badges include overridden days
+      let allOverrides: DayOverrideRow[] = []
+      try {
+        const overridesResult = await sql`
+          SELECT student_id, day_number, date, override_type, reason
+          FROM student_day_overrides
+        `
+        allOverrides = overridesResult.rows as DayOverrideRow[]
+      } catch (overrideError) {
+        console.error("Could not load day overrides for badge processing:", overrideError)
       }
 
-      if (badgesAwarded > 0) {
-        console.log(
-          `🏆 Badge processing: awarded ${badgesAwarded} badge(s) and ${coinsAwarded} bonus coins`,
-        )
+      const overridesByStudent = new Map<string, DayOverrideRow[]>()
+      for (const override of allOverrides) {
+        const key = (override.student_id || "").toLowerCase().trim()
+        if (!key) continue
+        if (!overridesByStudent.has(key)) overridesByStudent.set(key, [])
+        overridesByStudent.get(key)!.push(override)
       }
-    } catch (badgeError) {
+
+      // Holiday break labels so holiday badge designs can be awarded
+      let holidayLabels: Record<string, string> = {}
+      try {
+        const labelsResult = await sql`
+          SELECT holiday_labels FROM exam_periods WHERE period_key = ${examPeriod} LIMIT 1
+        `
+        const raw = labelsResult.rows[0]?.holiday_labels
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+          holidayLabels = raw as Record<string, string>
+        }
+      } catch (labelError) {
+        console.error("Could not load holiday labels for badge processing:", labelError)
+      }
+
+      for (const [studentId, studentRaw] of Object.entries(studentData)) {
+        try {
+          const student = studentRaw as { name: string; dailyLog: any[] }
+          const dayOverrides = overridesByStudent.get(studentId.toLowerCase()) || []
+          const { badgesEarned, coinsAwarded: coins, error } = await processBadgesForStudent(
+            studentId,
+            student.name,
+            student.dailyLog,
+            examPeriod,
+            sectionNumber,
+            "aleks-sync-import",
+            { dayOverrides, holidayLabels },
+          )
+          badgesAwarded += badgesEarned.length
+          coinsAwarded += coins
+          studentsProcessed++
+          if (error) {
+            badgeErrors.push(`${studentId}: ${error}`)
+          }
+        } catch (studentError) {
+          const message =
+            studentError instanceof Error ? studentError.message : String(studentError)
+          console.error(`Badge processing error for ${studentId}:`, studentError)
+          badgeErrors.push(`${studentId}: ${message}`)
+        }
+      }
+
+      const badgePayload = {
+        ok: badgeErrors.length === 0,
+        section: sectionNumber,
+        period: examPeriod,
+        badgesAwarded,
+        coinsAwarded,
+        studentsProcessed,
+        ...(badgeErrors.length > 0
+          ? { error: badgeErrors[0], errors: badgeErrors.slice(0, 20) }
+          : {}),
+      }
+      console.log(`##BADGE_RESULT## ${JSON.stringify(badgePayload)}`)
+      console.log(
+        `Badge processing: awarded ${badgesAwarded} badge(s) and ${coinsAwarded} bonus coins ` +
+          `(${studentsProcessed} students, section ${sectionNumber})` +
+          (badgeErrors.length > 0 ? ` — ${badgeErrors.length} error(s)` : ""),
+      )
+
+      if (badgeErrors.length > 0) {
+        badgeError = `Badge processing completed with ${badgeErrors.length} error(s)`
+        await sendBadgeErrorEmail({
+          source: "aleks-sync-import",
+          period: examPeriod,
+          sectionNumber,
+          error: badgeError,
+          details: badgeErrors,
+        })
+      }
+    } catch (err) {
       // Don't fail the import if badge processing fails
-      console.error("Badge processing error (non-fatal):", badgeError)
+      badgeError = err instanceof Error ? err.message : String(err)
+      console.error("Badge processing error (non-fatal):", err)
+      console.log(
+        `##BADGE_RESULT## ${JSON.stringify({
+          ok: false,
+          section: sectionNumber,
+          period: examPeriod,
+          badgesAwarded,
+          coinsAwarded,
+          studentsProcessed,
+          error: badgeError,
+        })}`,
+      )
+      await sendBadgeErrorEmail({
+        source: "aleks-sync-import",
+        period: examPeriod,
+        sectionNumber,
+        error: badgeError,
+      })
     }
 
     console.log(
@@ -88,6 +183,9 @@ export async function POST(request: NextRequest) {
       sectionNumber,
       badgesAwarded,
       coinsAwarded,
+      studentsProcessed,
+      badgeError,
+      badgeErrors: badgeErrors.length > 0 ? badgeErrors : undefined,
     })
   } catch (error) {
     console.error("ALEKS sync import error:", error)
