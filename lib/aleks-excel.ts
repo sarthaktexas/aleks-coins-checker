@@ -19,6 +19,18 @@ export async function ensureExamPeriodsSchema() {
     ALTER TABLE exam_periods
     ADD COLUMN IF NOT EXISTS coin_only_exempt_dates JSONB DEFAULT '[]'::jsonb
   `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS double_coins_dates JSONB DEFAULT '[]'::jsonb
+  `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS holiday_dates JSONB DEFAULT '[]'::jsonb
+  `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS holiday_labels JSONB DEFAULT '{}'::jsonb
+  `
 }
 
 function getWorkingDays(
@@ -27,6 +39,7 @@ function getWorkingDays(
   excludedDates: string[] = [],
   coinOnlyExemptDates: string[] = [],
   doubleCoinsDays: string[] = [],
+  holidayDays: string[] = [],
 ) {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number)
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number)
@@ -34,12 +47,14 @@ function getWorkingDays(
   const excluded = new Set(excludedDates)
   const coinOnly = new Set(coinOnlyExemptDates)
   const doubleCoins = new Set(doubleCoinsDays)
+  const holidays = new Set(holidayDays)
   const workingDays: Array<{
     day: number
     date: string
     isExcluded: boolean
     isCoinOnlyExempt: boolean
     isDoubleCoins: boolean
+    isHoliday: boolean
   }> = []
 
   let currentYear = startYear
@@ -80,14 +95,17 @@ function getWorkingDays(
   while (isDateBeforeOrEqual(currentYear, currentMonth, currentDay, endYear, endMonth, endDay)) {
     const dateString = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`
     const isStandardExempt = excluded.has(dateString)
-    const isCoinOnlyExempt = coinOnly.has(dateString) && !isStandardExempt
-    const isDoubleCoins = doubleCoins.has(dateString) && !isStandardExempt && !isCoinOnlyExempt
+    const isHoliday = holidays.has(dateString) && !isStandardExempt
+    const isCoinOnlyExempt = coinOnly.has(dateString) && !isStandardExempt && !isHoliday
+    const isDoubleCoins =
+      doubleCoins.has(dateString) && !isStandardExempt && !isCoinOnlyExempt && !isHoliday
     workingDays.push({
       day: dayNumber,
       date: dateString,
-      isExcluded: isStandardExempt || isCoinOnlyExempt,
+      isExcluded: isStandardExempt || isCoinOnlyExempt || isHoliday,
       isCoinOnlyExempt,
       isDoubleCoins,
+      isHoliday,
     })
     dayNumber++
     incrementDate()
@@ -211,7 +229,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
   await ensureExamPeriodsSchema()
 
   const result = await sql`
-    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
+    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates
     FROM exam_periods
     WHERE period_key = ${examPeriod}
   `
@@ -235,6 +253,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
     doubleCoinsDays: (row.double_coins_dates as string[]) || [],
+    holidayDays: (row.holiday_dates as string[]) || [],
   }
 
   let maxDayFromExcel = 0
@@ -254,12 +273,14 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
     period.excludedDates,
     period.coinOnlyExemptDates,
     period.doubleCoinsDays,
+    period.holidayDays,
   )
   const workingDays = allDays.filter((day) => !day.isExcluded)
   const totalWorkingDays = workingDays.length
 
   const MIN_MINUTES = 31
   const MIN_TOPICS = 1
+  const HOLIDAY_COINS = 5
   const processedData: Record<string, unknown> = {}
 
   rawData.forEach((dataRow, index) => {
@@ -280,6 +301,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
       const dailyLog: Array<Record<string, unknown>> = []
       let exemptDayCredits = 0
       let coinOnlyExemptCredits = 0
+      let holidayDaysCompleted = 0
 
       for (let dayNum = 1; dayNum <= maxDayFromExcel; dayNum++) {
         const dayInfo = allDays.find((d) => d.day === dayNum)
@@ -293,6 +315,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
         const isExcluded = dayInfo.isExcluded
         const isCoinOnlyExempt = dayInfo.isCoinOnlyExempt
         const isDoubleCoins = dayInfo.isDoubleCoins
+        const isHoliday = dayInfo.isHoliday
         const timeCol = `h:mm_${calendarDay}`
         const topicCol = `added to pie_${calendarDay}`
         const minutes = timeToMinutes(dataRow[timeCol])
@@ -310,13 +333,18 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
               : `${topics} topics (needs ${MIN_TOPICS} topic${MIN_TOPICS > 1 ? "s" : ""})`
           wouldHaveQualified = !minMsg && !topicMsg
           if (wouldHaveQualified) {
-            if (isCoinOnlyExempt) {
+            if (isHoliday) {
+              holidayDaysCompleted++
+              reason = `🎄 Holiday! Earned ${HOLIDAY_COINS} coins (${minutes} mins + ${topics} topics)`
+            } else if (isCoinOnlyExempt) {
               coinOnlyExemptCredits++
               reason = `🪙 Exempt (coins only): Would have qualified (${minutes} mins + ${topics} topics)`
             } else {
               exemptDayCredits++
               reason = `🎁 Extra credit: Would have qualified (${minutes} mins + ${topics} topics)`
             }
+          } else if (isHoliday) {
+            reason = `🎄 Holiday - skip freely, or earn ${HOLIDAY_COINS} coins if you qualify`
           } else if (isCoinOnlyExempt) {
             reason = "📅 Exempt (coins only) - earns a coin if you qualify, does not count toward extra credit %"
           } else {
@@ -356,6 +384,7 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
           isExcluded,
           isCoinOnlyExempt,
           isDoubleCoins,
+          isHoliday,
           wouldHaveQualified,
         })
       }
@@ -363,21 +392,28 @@ export async function processExcelData(rawData: Record<string, unknown>[], examP
       const workingDayLogs = dailyLog.filter((d) => !d.isExcluded)
       const completedWorkingDays = workingDayLogs.length
       const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
+      const holidayCoinsEarned = holidayDaysCompleted * HOLIDAY_COINS
       const percentComplete =
         completedWorkingDays > 0
-          ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10
+          ? Math.round(
+              ((qualifiedWorkingDays + exemptDayCredits + holidayDaysCompleted) / completedWorkingDays) *
+                100 *
+                10,
+            ) / 10
           : 0
 
       processedData[studentId] = {
         name,
         email,
-        coins: coins + exemptDayCredits + coinOnlyExemptCredits,
+        coins: coins + exemptDayCredits + coinOnlyExemptCredits + holidayCoinsEarned,
         totalDays: maxDayFromExcel,
         periodDays: totalWorkingDays,
         percentComplete,
         dailyLog,
         exemptDayCredits,
         coinOnlyExemptCredits,
+        holidayDaysCompleted,
+        holidayCoinsEarned,
       }
     } catch (error) {
       console.error(`Error processing row ${index + 1}:`, error)
@@ -454,6 +490,7 @@ export type PeriodDateInfo = {
   excludedDates: string[]
   coinOnlyExemptDates: string[]
   doubleCoinsDays: string[]
+  holidayDays: string[]
 }
 
 export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo | null> {
@@ -464,7 +501,7 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
   await ensureExamPeriodsSchema()
 
   const result = await sql`
-    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates
+    SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates
     FROM exam_periods
     WHERE period_key = ${periodKey}
   `
@@ -486,6 +523,7 @@ export async function getPeriodDates(periodKey: string): Promise<PeriodDateInfo 
     excludedDates: (row.excluded_dates as string[]) || [],
     coinOnlyExemptDates: (row.coin_only_exempt_dates as string[]) || [],
     doubleCoinsDays: (row.double_coins_dates as string[]) || [],
+    holidayDays: (row.holiday_dates as string[]) || [],
   }
 }
 

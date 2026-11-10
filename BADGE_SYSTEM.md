@@ -2,10 +2,12 @@
 
 ## Overview
 
-The badge system rewards students for maintaining consistent streaks of completing their daily ALEKS requirements. It includes two badges with different rewards:
+The badge system rewards students for maintaining consistent streaks of completing their daily ALEKS requirements. It includes four badges with different rewards:
 
-1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time)
+1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time per exam period, up to 3)
 2. **25-Day Streak Badge** - Grants a permanent 2x multiplier on ALL future daily coins
+3. **Holiday Badge** - Unlocks when a student qualifies on a holiday special day; each holiday day pays 5 coins total (not 6)
+4. **Grand Master Badge** - Unlocks at 100+ coins across an entire semester (wizard with staff)
 
 ## Features
 
@@ -23,6 +25,20 @@ The badge system rewards students for maintaining consistent streaks of completi
 - **Type**: Permanent benefit
 - **Important**: The multiplier remains active even if the streak breaks
 - **Display**: Shows on badge shelf, leaderboard, and coin display
+
+#### Holiday Badge 🎄
+- **Requirement**: Qualify on at least one holiday special day (configured in Manage Periods)
+- **Reward**: 5 coins total for each holiday day completed (not 1 + 5 = 6)
+- **Type**: Permanent badge unlock; coins are paid per holiday day via daily coin math
+- **Important**: Holiday days are optional — skipping never hurts progress or streaks
+- **Break labels**: Admins can tag holiday dates as Thanksgiving Break, Spring Break, Winter Break, or Holiday
+- **Display**: Shows on badge shelf and as a holiday coin chip on the student page
+
+#### Grand Master Badge 🧙
+- **Requirement**: Earn 100+ coins across all exam periods in a single semester
+- **Reward**: Wizard-with-staff badge (no extra coins)
+- **Type**: Permanent unlock (once ever)
+- **Display**: Shows on badge shelf with semester coin progress
 
 ### Streak Calculation
 

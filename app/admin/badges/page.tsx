@@ -104,6 +104,48 @@ export default function BadgesAdmin() {
                 </div>
               </div>
             </div>
+
+            {/* Holiday Badge */}
+            <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <BadgeShield kind="holiday" unlocked className="h-16 w-14 shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-emerald-900">Holiday Badge</h3>
+                  <p className="text-sm text-emerald-800 mt-1">
+                    Qualify on a holiday special day (Thanksgiving, Spring Break, Winter Break, …)
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-emerald-200">
+                    <p className="text-sm font-medium text-emerald-900">Reward:</p>
+                    <p className="text-sm text-emerald-800">
+                      5 coins total per holiday day (not 6)
+                    </p>
+                    <p className="text-xs text-emerald-700 mt-1">
+                      Skipping is fine. Badge unlocks once; coins pay each holiday day.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Grand Master Badge */}
+            <div className="border border-violet-200 bg-violet-50 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <BadgeShield kind="grand_master" unlocked className="h-16 w-14 shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-violet-900">Grand Master Badge</h3>
+                  <p className="text-sm text-violet-800 mt-1">
+                    Earn 100+ coins across an entire semester (all exam periods)
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-violet-200">
+                    <p className="text-sm font-medium text-violet-900">Reward:</p>
+                    <p className="text-sm text-violet-800">Wizard badge with staff</p>
+                    <p className="text-xs text-violet-700 mt-1">
+                      Unlocks once when any semester total crosses 100 coins.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

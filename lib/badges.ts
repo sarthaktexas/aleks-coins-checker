@@ -1,6 +1,11 @@
 import { sql } from "@vercel/postgres"
+import { parsePeriodKey } from "@/lib/exam-periods"
+import { summarizeDailyCoins } from "@/lib/day-credits"
+import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
 
-export type BadgeType = "streak_10_day" | "streak_25_day"
+export type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master"
+
+export { GRAND_MASTER_COIN_THRESHOLD }
 
 export type Badge = {
   id: number
@@ -38,6 +43,22 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     icon: "⭐",
     requirement: 25,
     reward: "Permanent 2x coin multiplier",
+  },
+  {
+    type: "holiday",
+    name: "Holiday",
+    description: "Qualify on a holiday special day",
+    icon: "🎄",
+    requirement: 1,
+    reward: "5 coins per holiday day",
+  },
+  {
+    type: "grand_master",
+    name: "Grand Master",
+    description: `Earn ${GRAND_MASTER_COIN_THRESHOLD}+ coins across an entire semester`,
+    icon: "🧙",
+    requirement: GRAND_MASTER_COIN_THRESHOLD,
+    reward: "Wizard badge",
   },
 ]
 
@@ -82,6 +103,20 @@ export async function ensureBadgesSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_25_once
     ON student_badges (student_id)
     WHERE badge_type = 'streak_25_day'
+  `
+
+  // Holiday badge unlocks once, ever (coins come from each holiday day).
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'holiday'
+  `
+
+  // Grand Master unlocks once, ever (100+ coins in any single semester).
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_grand_master_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'grand_master'
   `
 }
 
@@ -187,6 +222,107 @@ export async function hasStreakMultiplier(studentId: string): Promise<boolean> {
 }
 
 /**
+ * Check if a student already has the holiday badge (once, ever)
+ */
+export async function hasHolidayBadge(studentId: string): Promise<boolean> {
+  try {
+    const result = await sql`
+      SELECT id FROM student_badges
+      WHERE student_id = ${studentId.toLowerCase()}
+        AND badge_type = 'holiday'
+      LIMIT 1
+    `
+    return result.rows.length > 0
+  } catch (error) {
+    console.error("Error checking holiday badge:", error)
+    return false
+  }
+}
+
+/** Count holiday days the student qualified on. */
+export function countHolidayDaysCompleted(
+  dailyLog: Array<{ isHoliday?: boolean; wouldHaveQualified?: boolean }>,
+): number {
+  return dailyLog.filter((day) => day.isHoliday && day.wouldHaveQualified).length
+}
+
+/**
+ * Check if a student already has the Grand Master badge (once, ever)
+ */
+export async function hasGrandMasterBadge(studentId: string): Promise<boolean> {
+  try {
+    const result = await sql`
+      SELECT id FROM student_badges
+      WHERE student_id = ${studentId.toLowerCase()}
+        AND badge_type = 'grand_master'
+      LIMIT 1
+    `
+    return result.rows.length > 0
+  } catch (error) {
+    console.error("Error checking grand master badge:", error)
+    return false
+  }
+}
+
+/**
+ * Sum a student's coins across every period in the same semester as `periodKey`.
+ * Uses the latest upload per period/section and recalculates from the daily log.
+ */
+export async function getStudentSemesterCoins(studentId: string, periodKey: string): Promise<number> {
+  const parsed = parsePeriodKey(periodKey)
+  if (!parsed) return 0
+
+  const semesterKey = parsed.semesterKey
+  const likePattern = `${semesterKey}%`
+
+  try {
+    const result = await sql`
+      SELECT data, period, COALESCE(section_number, 'default') as section_number, uploaded_at
+      FROM student_data
+      WHERE period LIKE ${likePattern}
+      ORDER BY uploaded_at DESC
+    `
+
+    const latestByPeriodSection = new Map<string, any>()
+    for (const row of result.rows) {
+      const key = `${row.period}_${row.section_number}`
+      if (!latestByPeriodSection.has(key)) {
+        latestByPeriodSection.set(key, row)
+      }
+    }
+
+    // One contribution per exam period (prefer the section that has this student)
+    const coinsByPeriod = new Map<string, number>()
+    const normalizedId = studentId.toLowerCase()
+
+    for (const row of latestByPeriodSection.values()) {
+      let studentData: any = row.data
+      if (typeof studentData === "string") {
+        try {
+          studentData = JSON.parse(studentData)
+        } catch {
+          continue
+        }
+      }
+      const student = studentData?.[normalizedId]
+      if (!student?.dailyLog) continue
+
+      const { coins } = summarizeDailyCoins(student.dailyLog)
+      const existing = coinsByPeriod.get(row.period) || 0
+      // If the student appears in multiple sections for the same period, take the max
+      if (coins > existing) coinsByPeriod.set(row.period, coins)
+    }
+
+    let total = 0
+    for (const coins of coinsByPeriod.values()) total += coins
+    return total
+  } catch (error) {
+    console.error("Error computing semester coins:", error)
+    return 0
+  }
+}
+
+/**
  * Award a badge to a student
  */
 export async function awardBadge(
@@ -278,11 +414,16 @@ export async function getStudentBadgesForPeriod(
 export async function processBadgesForStudent(
   studentId: string,
   studentName: string,
-  dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>,
+  dailyLog: Array<{
+    qualified: boolean
+    isExcluded?: boolean
+    isHoliday?: boolean
+    wouldHaveQualified?: boolean
+  }>,
   period: string,
   sectionNumber: string,
   adminEmail: string = "system",
-  options: { awardCoins?: boolean } = {}
+  options: { awardCoins?: boolean; semesterCoinTotal?: number } = {}
 ): Promise<{ badgesEarned: Badge[]; coinsAwarded: number }> {
   const badgesEarned: Badge[] = []
   let coinsAwarded = 0
@@ -291,6 +432,7 @@ export async function processBadgesForStudent(
     // Calculate streaks
     const { maxStreak } = calculateStreaks(dailyLog)
     const payTenDayCoins = options.awardCoins !== false && shouldAwardTenDayCoins(dailyLog)
+    const holidayDaysCompleted = countHolidayDaysCompleted(dailyLog)
 
     // Check for 10-day streak badge: once per exam period, up to 3 periods.
     if (maxStreak >= 10) {
@@ -353,6 +495,46 @@ export async function processBadgesForStudent(
         if (badge) {
           badgesEarned.push(badge)
           // No immediate coins awarded, but 2x multiplier is now active
+        }
+      }
+    }
+
+    // Holiday badge: unlock once for qualifying on any holiday day.
+    // The 5 coins per holiday day are paid via daily coin math, not a coin adjustment.
+    if (holidayDaysCompleted >= 1) {
+      const hasIt = await hasHolidayBadge(studentId)
+      if (!hasIt) {
+        const badge = await awardBadge(studentId, "holiday", holidayDaysCompleted, period, sectionNumber, {
+          holidayDaysCompleted,
+        })
+        if (badge) {
+          badgesEarned.push(badge)
+        }
+      }
+    }
+
+    // Grand Master: 100+ coins across the whole semester (multiple exam periods).
+    const alreadyGrandMaster = await hasGrandMasterBadge(studentId)
+    if (!alreadyGrandMaster) {
+      const semesterCoins =
+        typeof options.semesterCoinTotal === "number"
+          ? options.semesterCoinTotal
+          : await getStudentSemesterCoins(studentId, period)
+
+      if (semesterCoins >= GRAND_MASTER_COIN_THRESHOLD) {
+        const badge = await awardBadge(
+          studentId,
+          "grand_master",
+          semesterCoins,
+          period,
+          sectionNumber,
+          {
+            semesterCoins,
+            threshold: GRAND_MASTER_COIN_THRESHOLD,
+          },
+        )
+        if (badge) {
+          badgesEarned.push(badge)
         }
       }
     }

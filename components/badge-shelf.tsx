@@ -1,9 +1,10 @@
 "use client"
 
-import { Flame, Star } from "lucide-react"
+import { Flame, Star, TreePine, Wand2 } from "lucide-react"
 import { BadgeShield, type ShieldKind } from "@/components/badge-shield"
+import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
 
-type BadgeType = "streak_10_day" | "streak_25_day"
+type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master"
 
 type BadgeData = {
   id?: number
@@ -17,11 +18,14 @@ type BadgeShelfProps = {
   badges: BadgeData[]
   currentStreak?: number
   maxStreak?: number
+  holidayDaysCompleted?: number
+  /** Coins earned across the current semester (all periods). */
+  semesterCoins?: number
 }
 
 type ShelfSlot =
   | {
-      kind: "streak_10_day" | "streak_25_day"
+      kind: "streak_10_day" | "streak_25_day" | "holiday" | "grand_master"
       name: string
       requirement: number
       reward: string
@@ -45,20 +49,30 @@ const SLOTS: ShelfSlot[] = [
     reward: "2× coins forever",
   },
   {
+    kind: "holiday",
+    name: "Holiday",
+    requirement: 1,
+    reward: "5 coins per day",
+  },
+  {
+    kind: "grand_master",
+    name: "Grand Master",
+    requirement: GRAND_MASTER_COIN_THRESHOLD,
+    reward: `${GRAND_MASTER_COIN_THRESHOLD}+ semester coins`,
+  },
+  {
     kind: "mystery",
     id: "mystery-1",
   },
-  {
-    kind: "mystery",
-    id: "mystery-2",
-  },
-  {
-    kind: "mystery",
-    id: "mystery-3",
-  },
 ]
 
-export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeShelfProps) {
+export function BadgeShelf({
+  badges,
+  currentStreak = 0,
+  maxStreak = 0,
+  holidayDaysCompleted = 0,
+  semesterCoins = 0,
+}: BadgeShelfProps) {
   const earned = new Set(badges.map((b) => b.badge_type))
   const tenDayPeriods = new Set(
     badges.filter((b) => b.badge_type === "streak_10_day").map((b) => b.period || b.id || "earned"),
@@ -118,14 +132,24 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
 
               const unlocked = earned.has(slot.kind)
               const repeated = slot.kind === "streak_10_day" && tenDayPeriods >= 2
+              const holidayProgress = Math.min(holidayDaysCompleted, 1)
+              const grandProgress = Math.min(semesterCoins, slot.requirement)
               const progress = repeated
                 ? Math.round((Math.min(tenDayPeriods, 3) / 3) * 100)
                 : unlocked
                   ? 100
-                  : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
+                  : slot.kind === "holiday"
+                    ? Math.round(holidayProgress * 100)
+                    : slot.kind === "grand_master"
+                      ? Math.round((grandProgress / slot.requirement) * 100)
+                      : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
               const progressLabel = repeated
                 ? `${Math.min(tenDayPeriods, 3)}/3`
-                : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
+                : slot.kind === "holiday"
+                  ? `${unlocked || holidayDaysCompleted > 0 ? Math.max(holidayDaysCompleted, unlocked ? 1 : 0) : 0}/${slot.requirement}`
+                  : slot.kind === "grand_master"
+                    ? `${Math.min(semesterCoins, slot.requirement)}/${slot.requirement}`
+                    : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
               const unlockText = !unlocked
                 ? "Locked"
                 : repeated
@@ -141,7 +165,13 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                   </p>
                   <p className="text-[10px] text-utsa-muted">{unlockText}</p>
                   <p className="hidden text-[10px] text-utsa-muted sm:block">
-                    {slot.kind === "streak_10_day" ? `${slot.reward} · ${tenDayPeriods}/3` : slot.reward}
+                    {slot.kind === "streak_10_day"
+                      ? `${slot.reward} · ${tenDayPeriods}/3`
+                      : slot.kind === "holiday" && holidayDaysCompleted > 0
+                        ? `${slot.reward} · ${holidayDaysCompleted} day${holidayDaysCompleted === 1 ? "" : "s"}`
+                        : slot.kind === "grand_master"
+                          ? `${slot.reward} · ${semesterCoins} now`
+                          : slot.reward}
                   </p>
                   <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
                     <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
@@ -150,7 +180,17 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
                       <div
-                        className={`h-full rounded-full ${unlocked ? "bg-emerald-500" : slot.kind === "streak_10_day" ? "bg-utsa-orange" : "bg-amber-500"}`}
+                        className={`h-full rounded-full ${
+                          unlocked
+                            ? "bg-emerald-500"
+                            : slot.kind === "streak_10_day"
+                              ? "bg-utsa-orange"
+                              : slot.kind === "holiday"
+                                ? "bg-emerald-600"
+                                : slot.kind === "grand_master"
+                                  ? "bg-violet-600"
+                                  : "bg-amber-500"
+                        }`}
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -167,6 +207,26 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
             <p className="text-xs text-amber-900">
               <span className="font-semibold">2× multiplier is on.</span> Every future daily coin is
               doubled, even if the streak breaks.
+            </p>
+          </div>
+        )}
+
+        {earned.has("holiday") && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <TreePine className="h-4 w-4 text-emerald-700" />
+            <p className="text-xs text-emerald-900">
+              <span className="font-semibold">Holiday badge unlocked.</span> Each holiday day you
+              qualify on is worth 5 coins.
+            </p>
+          </div>
+        )}
+
+        {earned.has("grand_master") && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2">
+            <Wand2 className="h-4 w-4 text-violet-700" />
+            <p className="text-xs text-violet-900">
+              <span className="font-semibold">Grand Master unlocked.</span> You earned{" "}
+              {GRAND_MASTER_COIN_THRESHOLD}+ coins across a semester.
             </p>
           </div>
         )}

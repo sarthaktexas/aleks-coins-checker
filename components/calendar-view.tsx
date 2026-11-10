@@ -17,6 +17,7 @@ type DailyLog = {
   reason: string
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
+  isHoliday?: boolean
   wouldHaveQualified?: boolean
   /** Set by API when a day override was applied */
   isOverridden?: boolean
@@ -250,6 +251,20 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
     }
 
     if (day.isExcluded) {
+      if (day.isHoliday) {
+        if (day.wouldHaveQualified) {
+          return {
+            label: "Holiday (5 coins earned)",
+            symbol: "H+",
+            className: "bg-emerald-50 border-emerald-300 text-emerald-900 ring-1 ring-emerald-200",
+          }
+        }
+        return {
+          label: "Holiday",
+          symbol: "H",
+          className: "bg-emerald-50/60 border-emerald-200 text-emerald-800",
+        }
+      }
       if (day.isCoinOnlyExempt) {
         if (day.wouldHaveQualified) {
           return {
@@ -303,6 +318,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
         return "📅"
       case "E+":
         return "🎁"
+      case "H":
+        return "🎄"
+      case "H+":
+        return "🎄"
       case "C":
         return "🪙"
       case "C+":
@@ -524,13 +543,17 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
                   )}
                   {day.isExcluded && (
                     <div className="text-gray-300 text-xs mt-1">
-                      {day.isCoinOnlyExempt
+                      {day.isHoliday
                         ? day.wouldHaveQualified
-                          ? "🪙 Coin earned (does not count toward extra credit %)"
-                          : "Exempt (coins only) — not counted in progress"
-                        : day.wouldHaveQualified
-                          ? "🎁 Extra credit earned"
-                          : "Exempt - Not counted in progress"}
+                          ? "🎄 Holiday — 5 coins earned"
+                          : "🎄 Holiday — skip freely, or earn 5 coins if you qualify"
+                        : day.isCoinOnlyExempt
+                          ? day.wouldHaveQualified
+                            ? "🪙 Coin earned (does not count toward extra credit %)"
+                            : "Exempt (coins only) — not counted in progress"
+                          : day.wouldHaveQualified
+                            ? "🎁 Extra credit earned"
+                            : "Exempt - Not counted in progress"}
                     </div>
                   )}
                   {requestable && <div className="text-gray-300 text-xs mt-1">Click to override</div>}
@@ -559,6 +582,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-violet-50 border border-violet-300 rounded"></div>
             <span className="text-violet-800 font-medium">🪙 Exempt (coins only)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-emerald-50 border border-emerald-300 rounded"></div>
+            <span className="text-emerald-800 font-medium">🎄 Holiday (5 coins)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-gray-50 border border-gray-200 rounded"></div>

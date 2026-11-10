@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
-import { countExemptCredits } from "@/lib/day-credits"
+import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
 import { getStudentBadges, hasStreakMultiplier, ensureBadgesSchema, calculateStreaks } from "@/lib/badges"
 
@@ -16,6 +16,7 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   isDoubleCoins?: boolean
+  isHoliday?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
   overrideType?: string
@@ -33,6 +34,8 @@ type StudentData = {
     exemptDayCredits?: number
     coinOnlyExemptCredits?: number
     doubleCoinsEarned?: number
+    holidayDaysCompleted?: number
+    holidayCoinsEarned?: number
   }
 }
 
@@ -332,32 +335,14 @@ function applyOverridesInMemory(
       })
     }
 
-    const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
-    const completedWorkingDays = workingDayLogs.length
-    const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-    const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
-    
-    // Count double coins from both period config (isDoubleCoins) and overrides
-    const doubleCoinsFromPeriod = workingDayLogs.filter(
-      (d) => d.qualified && d.isDoubleCoins && !d.isOverridden
-    ).length
-    const doubleCoinsFromOverrides = workingDayLogs.filter(
-      (d) => d.qualified && d.isOverridden && d.overrideType === "double_coins"
-    ).length
-    const totalDoubleCoins = doubleCoinsFromPeriod + doubleCoinsFromOverrides
-    
-    const percentComplete =
-      completedWorkingDays > 0
-        ? Math.round(
-            ((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10
-          ) / 10
-        : 0
-
-    student.percentComplete = percentComplete
-    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + totalDoubleCoins
-    student.exemptDayCredits = exemptDayCredits
-    student.coinOnlyExemptCredits = coinOnlyExemptCredits
-    student.doubleCoinsEarned = totalDoubleCoins
+    const summary = summarizeDailyCoins(student.dailyLog)
+    student.percentComplete = summary.percentComplete
+    student.coins = summary.coins
+    student.exemptDayCredits = summary.exemptDayCredits
+    student.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
+    student.doubleCoinsEarned = summary.doubleCoinsEarned
+    student.holidayDaysCompleted = summary.holidayDaysCompleted
+    student.holidayCoinsEarned = summary.holidayCoinsEarned
   })
 
   return updatedStudentData
@@ -616,6 +601,8 @@ export async function POST(request: NextRequest) {
         exemptDayCredits: studentWithOverrides.exemptDayCredits,
         coinOnlyExemptCredits: studentWithOverrides.coinOnlyExemptCredits,
         doubleCoinsEarned: studentWithOverrides.doubleCoinsEarned,
+        holidayDaysCompleted: studentWithOverrides.holidayDaysCompleted,
+        holidayCoinsEarned: studentWithOverrides.holidayCoinsEarned,
         uploadedAt: periodData.uploadedAt,
         hasMultiplier,
       }
@@ -700,6 +687,8 @@ export async function POST(request: NextRequest) {
         exemptDayCredits: student.exemptDayCredits,
         coinOnlyExemptCredits: student.coinOnlyExemptCredits,
         doubleCoinsEarned: student.doubleCoinsEarned,
+        holidayDaysCompleted: student.holidayDaysCompleted,
+        holidayCoinsEarned: student.holidayCoinsEarned,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
         hasMultiplier,
       },

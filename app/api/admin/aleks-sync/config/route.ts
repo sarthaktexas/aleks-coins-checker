@@ -52,6 +52,8 @@ async function fetchPeriodFromDb(periodKey: string): Promise<PeriodDateInfo | nu
       endDate,
       excludedDates: (r.excluded_dates as string[]) || [],
       coinOnlyExemptDates: (r.coin_only_exempt_dates as string[]) || [],
+      doubleCoinsDays: [],
+      holidayDays: [],
     }
   } catch (err) {
     console.error("Failed to read exam_periods row:", err)
