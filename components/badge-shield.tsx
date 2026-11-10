@@ -7,7 +7,9 @@ type BadgeShieldProps = {
   unlocked?: boolean
   className?: string
   mysteryId?: string
-  /** Banner text. Repeat 10-day earns use "2×" or "3×". */
+  /** Unique suffix so stacked duplicates don't clash on SVG gradient ids. */
+  instanceKey?: string
+  /** Banner text under the emblem (defaults to "10" / "25"). */
   mark?: string
 }
 
@@ -25,13 +27,15 @@ export function BadgeShield({
   unlocked = false,
   className,
   mysteryId = "mystery",
+  instanceKey,
   mark,
 }: BadgeShieldProps) {
   if (kind === "mystery") {
     return <MysteryShield className={className} mysteryId={mysteryId} />
   }
 
-  const id = kind === "streak_10_day" ? "ten" : "twentyfive"
+  const base = kind === "streak_10_day" ? "ten" : "twentyfive"
+  const id = instanceKey ? `${base}-${instanceKey}` : base
   return (
     <svg viewBox="0 0 120 140" className={className} role="img" aria-hidden="true">
       <defs>
