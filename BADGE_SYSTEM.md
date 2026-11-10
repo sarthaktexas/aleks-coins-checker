@@ -6,7 +6,7 @@ The badge system rewards students for maintaining consistent streaks of completi
 
 1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time per exam period, up to 3)
 2. **25-Day Streak Badge** - Grants a permanent 2x multiplier on ALL future daily coins
-3. **Holiday Badge** - Unlocks when a student qualifies on a holiday special day; each holiday day pays 5 coins total (not 6)
+3. **Holiday Badges** - Separate designs per break (Thanksgiving turkey, Winter tree, July 4 fireworks, Spring flower); each holiday day pays 5 coins total (not 6)
 4. **Grand Master Badge** - Unlocks at 100+ coins across an entire semester (wizard with staff)
 
 ## Features
@@ -26,13 +26,14 @@ The badge system rewards students for maintaining consistent streaks of completi
 - **Important**: The multiplier remains active even if the streak breaks
 - **Display**: Shows on badge shelf, leaderboard, and coin display
 
-#### Holiday Badge 🎄
-- **Requirement**: Qualify on at least one holiday special day (configured in Manage Periods)
+#### Holiday Badges 🦃🎄🎆🌸
+- **Requirement**: Qualify on a holiday special day tagged with that break type
+- **Designs**: Thanksgiving (turkey), Winter Break (tree), July 4th (fireworks), Spring Break (flower)
 - **Reward**: 5 coins total for each holiday day completed (not 1 + 5 = 6)
-- **Type**: Permanent badge unlock; coins are paid per holiday day via daily coin math
+- **Type**: One permanent unlock per design; coins are paid per holiday day via daily coin math
 - **Important**: Holiday days are optional — skipping never hurts progress or streaks
-- **Break labels**: Admins can tag holiday dates as Thanksgiving Break, Spring Break, Winter Break, or Holiday
-- **Display**: Shows on badge shelf and as a holiday coin chip on the student page
+- **Visibility**: Admins see every design; students only see designs they have unlocked
+- **Display**: Earned holiday shields stack on the student shelf; holiday coin chip on the student page
 
 #### Grand Master Badge 🧙
 - **Requirement**: Earn 100+ coins across all exam periods in a single semester

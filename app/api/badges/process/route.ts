@@ -6,6 +6,8 @@ import { bustStudentDataCache } from "@/lib/student-cache"
 import type { DayOverrideRow } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
+/** Allow long-running bulk badge processing on Vercel. */
+export const maxDuration = 300
 
 /**
  * Process badges for all students or a specific student
@@ -16,8 +18,15 @@ export async function POST(request: NextRequest) {
     const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
-    const body = await request.json()
-    const { studentId, period, sectionNumber } = body
+    // Empty body / missing JSON should still mean "process everyone"
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch {
+      body = {}
+    }
+    const { studentId, period, sectionNumber } = body || {}
+    const processedBy = session.displayName || session.username || "system"
 
     // Ensure the badges schema exists
     await ensureBadgesSchema()
@@ -56,14 +65,26 @@ export async function POST(request: NextRequest) {
         }
 
         const dayOverrides = await fetchDayOverridesForStudent(studentId)
+        let holidayLabels: Record<string, string> = {}
+        try {
+          const labelsResult = await sql`
+            SELECT holiday_labels FROM exam_periods WHERE period_key = ${period} LIMIT 1
+          `
+          const raw = labelsResult.rows[0]?.holiday_labels
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+            holidayLabels = raw as Record<string, string>
+          }
+        } catch (labelError) {
+          console.error("Could not load holiday labels for student badge processing:", labelError)
+        }
         const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
           studentId,
           student.name,
-          student.dailyLog,
+          student.dailyLog || [],
           period,
           sectionNumber,
-          session.email,
-          { awardCoins: false, dayOverrides }
+          processedBy,
+          { awardCoins: false, dayOverrides, holidayLabels }
         )
 
         processedCount = 1
@@ -114,7 +135,25 @@ export async function POST(request: NextRequest) {
           overridesByStudent.get(key)!.push(override)
         }
 
-        for (const [key, row] of latestData.entries()) {
+        // Load holiday break labels per period so holiday badge designs can be awarded
+        const holidayLabelsByPeriod = new Map<string, Record<string, string>>()
+        try {
+          const labelsResult = await sql`
+            SELECT period_key, holiday_labels
+            FROM exam_periods
+          `
+          for (const row of labelsResult.rows) {
+            const labels =
+              row.holiday_labels && typeof row.holiday_labels === "object" && !Array.isArray(row.holiday_labels)
+                ? (row.holiday_labels as Record<string, string>)
+                : {}
+            holidayLabelsByPeriod.set(String(row.period_key), labels)
+          }
+        } catch (labelError) {
+          console.error("Could not load holiday labels for badge processing:", labelError)
+        }
+
+        for (const [, row] of latestData.entries()) {
           let studentData: any
           if (typeof row.data === "string") {
             studentData = JSON.parse(row.data)
@@ -122,18 +161,26 @@ export async function POST(request: NextRequest) {
             studentData = row.data
           }
 
+          if (!studentData || typeof studentData !== "object") continue
+
+          const periodLabels = holidayLabelsByPeriod.get(String(row.period)) || {}
+
           // Process each student in this period
           for (const [id, student] of Object.entries(studentData)) {
             try {
               const dayOverrides = overridesByStudent.get(id.toLowerCase()) || []
               const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
                 id,
-                (student as any).name,
-                (student as any).dailyLog,
+                (student as any).name || id,
+                (student as any).dailyLog || [],
                 row.period,
                 row.section_number,
-                session.email,
-                { awardCoins: false, dayOverrides }
+                processedBy,
+                {
+                  awardCoins: false,
+                  dayOverrides,
+                  holidayLabels: periodLabels,
+                }
               )
 
               processedCount++
@@ -141,7 +188,7 @@ export async function POST(request: NextRequest) {
               coinsAwarded += coins
             } catch (error) {
               console.error(`Error processing student ${id}:`, error)
-              errors.push(`Error processing student ${id}: ${error}`)
+              errors.push(`Error processing student ${id}: ${(error as Error).message || error}`)
             }
           }
         }

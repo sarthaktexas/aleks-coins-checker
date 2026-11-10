@@ -7,8 +7,23 @@ import {
   buildOverridesMap,
   type DayOverrideRow,
 } from "@/lib/day-overrides"
+import {
+  HOLIDAY_BADGE_TYPES,
+  HOLIDAY_BREAK_OPTIONS,
+  holidayBadgeTypeForBreak,
+  holidayBreakLabel,
+  resolveHolidayBreak,
+  type HolidayBadgeType,
+  type HolidayBreakValue,
+  type HolidayLabelMap,
+} from "@/lib/holiday-breaks"
 
-export type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | "grand_master"
+export type BadgeType =
+  | "streak_10_day"
+  | "streak_25_day"
+  | "holiday"
+  | HolidayBadgeType
+  | "grand_master"
 
 export { GRAND_MASTER_COIN_THRESHOLD }
 
@@ -50,10 +65,34 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     reward: "Permanent 2x coin multiplier",
   },
   {
-    type: "holiday",
-    name: "Holiday",
-    description: "Qualify on a holiday special day",
+    type: "holiday_thanksgiving",
+    name: "Thanksgiving",
+    description: "Qualify on a Thanksgiving Break holiday day",
+    icon: "🦃",
+    requirement: 1,
+    reward: "5 coins per holiday day",
+  },
+  {
+    type: "holiday_winter",
+    name: "Winter Break",
+    description: "Qualify on a Winter Break holiday day",
     icon: "🎄",
+    requirement: 1,
+    reward: "5 coins per holiday day",
+  },
+  {
+    type: "holiday_july4",
+    name: "July 4th",
+    description: "Qualify on a July 4th holiday day",
+    icon: "🎆",
+    requirement: 1,
+    reward: "5 coins per holiday day",
+  },
+  {
+    type: "holiday_spring",
+    name: "Spring Break",
+    description: "Qualify on a Spring Break holiday day",
+    icon: "🌸",
     requirement: 1,
     reward: "5 coins per holiday day",
   },
@@ -110,11 +149,33 @@ export async function ensureBadgesSchema() {
     WHERE badge_type = 'streak_25_day'
   `
 
-  // Holiday badge unlocks once, ever (coins come from each holiday day).
+  // Legacy generic holiday badge (kept for older rows).
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_once
     ON student_badges (student_id)
     WHERE badge_type = 'holiday'
+  `
+
+  // One unlock per holiday design, ever.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_thanksgiving_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'holiday_thanksgiving'
+  `
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_winter_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'holiday_winter'
+  `
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_july4_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'holiday_july4'
+  `
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_holiday_spring_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'holiday_spring'
   `
 
   // Grand Master unlocks once, ever (100+ coins in any single semester).
@@ -227,14 +288,28 @@ export async function hasStreakMultiplier(studentId: string): Promise<boolean> {
 }
 
 /**
- * Check if a student already has the holiday badge (once, ever)
+ * Check if a student already has a specific holiday design badge (once, ever).
+ * Also treats legacy generic `holiday` as unlocking winter.
  */
-export async function hasHolidayBadge(studentId: string): Promise<boolean> {
+export async function hasHolidayBadge(
+  studentId: string,
+  badgeType: HolidayBadgeType | "holiday" = "holiday",
+): Promise<boolean> {
   try {
+    if (badgeType === "holiday" || badgeType === "holiday_winter") {
+      const result = await sql`
+        SELECT id FROM student_badges
+        WHERE student_id = ${studentId.toLowerCase()}
+          AND badge_type IN ('holiday', 'holiday_winter')
+        LIMIT 1
+      `
+      return result.rows.length > 0
+    }
+
     const result = await sql`
       SELECT id FROM student_badges
       WHERE student_id = ${studentId.toLowerCase()}
-        AND badge_type = 'holiday'
+        AND badge_type = ${badgeType}
       LIMIT 1
     `
     return result.rows.length > 0
@@ -249,6 +324,32 @@ export function countHolidayDaysCompleted(
   dailyLog: Array<{ isHoliday?: boolean; wouldHaveQualified?: boolean }>,
 ): number {
   return dailyLog.filter((day) => day.isHoliday && day.wouldHaveQualified).length
+}
+
+type HolidayDay = {
+  date?: string
+  isHoliday?: boolean
+  wouldHaveQualified?: boolean
+  holidayBreak?: string
+}
+
+/** Which holiday designs were unlocked by qualifying days in this log. */
+export function holidayBadgeTypesEarnedFromLog(
+  dailyLog: HolidayDay[],
+  holidayLabels?: HolidayLabelMap,
+): Map<HolidayBadgeType, number> {
+  const counts = new Map<HolidayBadgeType, number>()
+
+  for (const day of dailyLog) {
+    if (!day.isHoliday || !day.wouldHaveQualified) continue
+    const breakValue =
+      (day.holidayBreak as HolidayBreakValue | undefined) ||
+      (day.date ? resolveHolidayBreak(day.date, holidayLabels) : "winter_break")
+    const badgeType = holidayBadgeTypeForBreak(breakValue)
+    counts.set(badgeType, (counts.get(badgeType) || 0) + 1)
+  }
+
+  return counts
 }
 
 /**
@@ -421,6 +522,7 @@ type StreakDay = {
   isExcluded?: boolean
   isHoliday?: boolean
   wouldHaveQualified?: boolean
+  holidayBreak?: string
 }
 
 /**
@@ -470,12 +572,17 @@ export async function processBadgesForStudent(
     awardCoins?: boolean
     dayOverrides?: DayOverrideRow[]
     semesterCoinTotal?: number
+    holidayLabels?: HolidayLabelMap
   } = {}
 ): Promise<{ badgesEarned: Badge[]; coinsAwarded: number }> {
   const badgesEarned: Badge[] = []
   let coinsAwarded = 0
 
   try {
+    if (!Array.isArray(dailyLog)) {
+      return { badgesEarned, coinsAwarded }
+    }
+
     // Include overridden days so 10/25-day badges match calendar/coin qualification
     const overrides =
       options.dayOverrides !== undefined
@@ -486,7 +593,7 @@ export async function processBadgesForStudent(
     // Calculate streaks from the override-aware log
     const { maxStreak } = calculateStreaks(effectiveLog)
     const payTenDayCoins = options.awardCoins !== false && shouldAwardTenDayCoins(effectiveLog)
-    const holidayDaysCompleted = countHolidayDaysCompleted(effectiveLog)
+    const holidayDesignCounts = holidayBadgeTypesEarnedFromLog(effectiveLog, options.holidayLabels)
 
     // Check for 10-day streak badge: once per exam period, up to 3 periods.
     if (maxStreak >= 10) {
@@ -553,17 +660,22 @@ export async function processBadgesForStudent(
       }
     }
 
-    // Holiday badge: unlock once for qualifying on any holiday day.
+    // Holiday design badges: one unlock per break type (turkey / tree / fireworks / flower).
     // The 5 coins per holiday day are paid via daily coin math, not a coin adjustment.
-    if (holidayDaysCompleted >= 1) {
-      const hasIt = await hasHolidayBadge(studentId)
-      if (!hasIt) {
-        const badge = await awardBadge(studentId, "holiday", holidayDaysCompleted, period, sectionNumber, {
-          holidayDaysCompleted,
-        })
-        if (badge) {
-          badgesEarned.push(badge)
-        }
+    for (const [badgeType, daysCompleted] of holidayDesignCounts.entries()) {
+      if (daysCompleted < 1) continue
+      const hasIt = await hasHolidayBadge(studentId, badgeType)
+      if (hasIt) continue
+
+      const badge = await awardBadge(studentId, badgeType, daysCompleted, period, sectionNumber, {
+        holidayDaysCompleted: daysCompleted,
+        holidayBreak: HOLIDAY_BREAK_OPTIONS.find((o) => o.badgeType === badgeType)?.value,
+        holidayLabel: holidayBreakLabel(
+          HOLIDAY_BREAK_OPTIONS.find((o) => o.badgeType === badgeType)?.value,
+        ),
+      })
+      if (badge) {
+        badgesEarned.push(badge)
       }
     }
 
