@@ -26,6 +26,7 @@ import {
 import { getFakeDataForStudent } from "@/lib/fake-data"
 import { useHidePII } from "@/hooks/use-hide-pii"
 import { CondensedCalendarView } from "@/components/condensed-calendar-view"
+import { CoinBreakdownPanel } from "@/components/coin-breakdown-panel"
 import { groupBySemester, getExamLabel } from "@/lib/exam-periods"
 import { formatLocalDateTime } from "@/lib/datetime"
 import { countExemptCredits } from "@/lib/day-credits"
@@ -38,6 +39,14 @@ type StudentData = {
   periodDays: number
   percentComplete: number
   dailyLog: any[]
+  doubleCoinsEarned?: number
+  multiplierFromDate?: string | null
+  periodAdjustment?: number
+  periodAdjustments?: Array<{
+    adjustment_amount: number
+    reason: string | null
+    created_at?: string
+  }>
 }
 
 type UploadRecord = {
@@ -826,12 +835,18 @@ Total: ${extraCreditStudents.length} students`
                           </div>
 
                           {data.dailyLog && data.dailyLog.length > 0 && (
-                            <div onClick={(e) => e.stopPropagation()}>
+                            <div onClick={(e) => e.stopPropagation()} className="space-y-3">
                               <CondensedCalendarView
                                 dailyLog={data.dailyLog}
                                 totalDays={data.totalDays}
                                 periodDays={data.periodDays}
                                 studentId={studentId}
+                              />
+                              <CoinBreakdownPanel
+                                dailyLog={data.dailyLog}
+                                multiplierFromDate={data.multiplierFromDate}
+                                periodAdjustment={data.periodAdjustment ?? 0}
+                                adjustments={data.periodAdjustments}
                               />
                             </div>
                           )}
