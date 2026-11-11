@@ -46,13 +46,13 @@ The badge system rewards students for maintaining consistent streaks of completi
 
 Streaks are calculated based on consecutive qualifying days in the daily log:
 - **Qualifying Day**: A day where the student met the ALEKS requirements (31+ minutes and 1+ topic), **or** a day overridden as `qualified` / `double_coins`
-- **Excluded Days**: Don't count toward or against streaks (holidays, exempt days)
+- **Excluded Days**: Don't count toward or against streaks (holidays, exempt days), unless a qualifying override was applied
 - **Missed Days**: Break the streak and reset the counter (including days overridden as `not_qualified`)
-- **Day Overrides**: Always included in 10-day and 25-day badge streak math (same as coins/calendar)
+- **Day Overrides**: Always included in 10-day and 25-day badge streak math **and** in the badge shelf streak text (same as coins/calendar)
 
 The system tracks:
-- **Current Streak**: Consecutive qualifying days from the most recent day backward
-- **Max Streak**: The longest streak achieved in the current period
+- **Current Streak**: Consecutive qualifying days from the most recent completed day backward (trailing empty/future days are ignored)
+- **Max Streak**: The longest streak achieved across the student's exam periods (override-aware)
 
 ### Coin Multiplier
 

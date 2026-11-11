@@ -8,6 +8,10 @@ import {
   type DayOverrideRow,
 } from "@/lib/day-overrides"
 import {
+  calculateStreaks,
+  type StreakDay,
+} from "@/lib/streaks"
+import {
   HOLIDAY_BADGE_TYPES,
   HOLIDAY_BREAK_OPTIONS,
   holidayBadgeTypeForBreak,
@@ -17,6 +21,9 @@ import {
   type HolidayBreakValue,
   type HolidayLabelMap,
 } from "@/lib/holiday-breaks"
+
+export { calculateStreaks, combinePeriodStreaks } from "@/lib/streaks"
+export type { StreakDay, StreakResult } from "@/lib/streaks"
 
 export type BadgeType =
   | "streak_10_day"
@@ -192,46 +199,10 @@ export async function ensureBadgesSchema() {
 }
 
 /**
- * Calculate the longest streak from a daily log
- * Returns an object with current streak and max streak
- */
-export function calculateStreaks(dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>): {
-  currentStreak: number
-  maxStreak: number
-  maxStreakEndIndex: number
-} {
-  let currentStreak = 0
-  let maxStreak = 0
-  let maxStreakEndIndex = -1
-
-  // Work through the daily log from start to end
-  for (let i = 0; i < dailyLog.length; i++) {
-    const day = dailyLog[i]
-
-    // Skip excluded days (they don't break or contribute to streaks)
-    if (day.isExcluded) {
-      continue
-    }
-
-    if (day.qualified) {
-      currentStreak++
-      if (currentStreak > maxStreak) {
-        maxStreak = currentStreak
-        maxStreakEndIndex = i
-      }
-    } else {
-      currentStreak = 0
-    }
-  }
-
-  return { currentStreak, maxStreak, maxStreakEndIndex }
-}
-
-/**
  * Coins are only for a streak that just landed on 10.
  * A longer or already-broken streak is retroactive: badge only, no coins.
  */
-export function shouldAwardTenDayCoins(dailyLog: Array<{ qualified: boolean; isExcluded?: boolean }>): boolean {
+export function shouldAwardTenDayCoins(dailyLog: StreakDay[]): boolean {
   return calculateStreaks(dailyLog).currentStreak === 10
 }
 
@@ -405,7 +376,9 @@ export async function getStreakMultiplierStartDates(): Promise<Map<string, strin
       WHERE badge_type = 'streak_25_day'
     `
     for (const row of result.rows) {
-      const id = String(row.student_id || "").toLowerCase()
+      const id = String(row.student_id || "")
+        .toLowerCase()
+        .trim()
       if (!id) continue
       let metadata: Record<string, any> = {}
       if (row.metadata) {
@@ -675,15 +648,6 @@ export async function getStudentBadgesForPeriod(
     console.error("Error fetching period badges:", error)
     return []
   }
-}
-
-type StreakDay = {
-  date?: string
-  qualified: boolean
-  isExcluded?: boolean
-  isHoliday?: boolean
-  wouldHaveQualified?: boolean
-  holidayBreak?: string
 }
 
 /**

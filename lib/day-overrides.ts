@@ -44,17 +44,46 @@ export function applyOverrideToDay<T extends Record<string, unknown>>(
   reason: string
   isOverridden: true
   overrideType: string
+  isExcluded?: boolean
+  wouldHaveQualified?: boolean
 } {
   // For double_coins, the day is qualified AND marked with the special override type
   const isQualified = override.override_type === "qualified" || override.override_type === "double_coins"
-  
-  return {
+  const isNotQualified = override.override_type === "not_qualified"
+  const wasExcluded = !!(day as { isExcluded?: boolean }).isExcluded
+  const isHoliday = !!(day as { isHoliday?: boolean }).isHoliday
+
+  const next: T & {
+    qualified: boolean
+    reason: string
+    isOverridden: true
+    overrideType: string
+    isExcluded?: boolean
+    wouldHaveQualified?: boolean
+  } = {
     ...day,
     qualified: isQualified,
     reason: override.reason || (day.reason as string) || "",
     isOverridden: true,
     overrideType: override.override_type,
   }
+
+  if (isQualified) {
+    // Holidays keep exempt semantics so the 5-coin holiday path still applies.
+    // Other exempt days become normal working qualifies for coins + streaks.
+    if (wasExcluded && !isHoliday) {
+      next.isExcluded = false
+      next.wouldHaveQualified = true
+    } else if (isHoliday) {
+      next.wouldHaveQualified = true
+    }
+  } else if (isNotQualified && wasExcluded) {
+    // Explicit miss on an exempt day should break streaks like a normal miss
+    next.isExcluded = false
+    next.wouldHaveQualified = false
+  }
+
+  return next
 }
 
 /**
