@@ -714,13 +714,16 @@ export default function StudentLookup() {
               maxStreak={streakData.maxStreak}
               holidayDaysCompleted={studentInfo.holidayDaysCompleted || 0}
               semesterCoins={(() => {
+                // Match the header total: multiplied coins + period adjustments
+                const coinOf = (p: PeriodInfo) =>
+                  p.totalCoins !== undefined ? p.totalCoins : p.coins || 0
                 const currentSemester = parsePeriodKey(studentInfo.period || "")?.semesterKey
                 if (!currentSemester) {
-                  return studentPeriods.reduce((sum, p) => sum + (p.coins || 0), 0)
+                  return studentPeriods.reduce((sum, p) => sum + coinOf(p), 0)
                 }
                 return studentPeriods
                   .filter((p) => parsePeriodKey(p.period)?.semesterKey === currentSemester)
-                  .reduce((sum, p) => sum + (p.coins || 0), 0)
+                  .reduce((sum, p) => sum + coinOf(p), 0)
               })()}
             />
 

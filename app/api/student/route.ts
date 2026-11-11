@@ -4,7 +4,15 @@ import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
-import { getStudentBadges, hasStreakMultiplier, ensureBadgesSchema, calculateStreaks } from "@/lib/badges"
+import {
+  getStudentBadges,
+  hasStreakMultiplier,
+  awardBadge,
+  ensureBadgesSchema,
+  calculateStreaks,
+  GRAND_MASTER_COIN_THRESHOLD,
+} from "@/lib/badges"
+import { parsePeriodKey } from "@/lib/exam-periods"
 
 type DailyLog = {
   day: number
@@ -666,6 +674,36 @@ export async function POST(request: NextRequest) {
     try {
       badges = await getStudentBadges(normalizedId)
       streakData = calculateStreaks(student.dailyLog)
+
+      // Self-heal Grand Master from already-loaded period totals (2x + adjustments).
+      // Avoids a second semester scan on every lookup; sync processing uses getStudentSemesterCoins.
+      const alreadyGrandMaster = badges.some((b) => b.badge_type === "grand_master")
+      if (!alreadyGrandMaster && periodInfo?.period) {
+        const currentSemester = parsePeriodKey(periodInfo.period)?.semesterKey
+        const semesterCoins = periodsData
+          .filter(
+            (p) =>
+              !currentSemester || parsePeriodKey(p.period)?.semesterKey === currentSemester,
+          )
+          .reduce((sum, p) => sum + (p.totalCoins || 0), 0)
+        if (semesterCoins >= GRAND_MASTER_COIN_THRESHOLD) {
+          const badge = await awardBadge(
+            normalizedId,
+            "grand_master",
+            semesterCoins,
+            periodInfo.period,
+            studentSectionNumber,
+            {
+              semesterCoins,
+              threshold: GRAND_MASTER_COIN_THRESHOLD,
+              awardedVia: "student-lookup",
+            },
+          )
+          if (badge) {
+            badges = [...badges, badge]
+          }
+        }
+      }
     } catch (badgeError) {
       console.error("Error fetching student badges:", badgeError)
     }

@@ -377,7 +377,8 @@ export async function hasGrandMasterBadge(studentId: string): Promise<boolean> {
 
 /**
  * Sum a student's coins across every period in the same semester as `periodKey`.
- * Uses the latest upload per period/section and recalculates from the daily log.
+ * Matches the student-facing total: override-aware daily coins, 2x multiplier when
+ * the 25-day badge is earned, plus period-specific adjustments (not redemptions).
  */
 export async function getStudentSemesterCoins(studentId: string, periodKey: string): Promise<number> {
   const parsed = parsePeriodKey(periodKey)
@@ -389,6 +390,7 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
 
   try {
     const overrides = await fetchDayOverridesForStudent(normalizedId)
+    const hasMultiplier = await hasStreakMultiplier(normalizedId)
 
     const result = await sql`
       SELECT data, period, COALESCE(section_number, 'default') as section_number, uploaded_at
@@ -405,7 +407,30 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
       }
     }
 
-    // One contribution per exam period (prefer the section that has this student)
+    // Period-specific adjustments keyed by period_section (exclude redemptions)
+    const adjustmentsByPeriodSection = new Map<string, number>()
+    try {
+      const adjustmentsResult = await sql`
+        SELECT period, COALESCE(section_number, 'default') as section_number, adjustment_amount
+        FROM coin_adjustments
+        WHERE student_id = ${normalizedId}
+          AND is_active = true
+          AND period IS NOT NULL
+          AND period != '__GLOBAL__'
+          AND period LIKE ${likePattern}
+      `
+      for (const adj of adjustmentsResult.rows) {
+        const key = `${adj.period}_${adj.section_number}`
+        adjustmentsByPeriodSection.set(
+          key,
+          (adjustmentsByPeriodSection.get(key) || 0) + Number(adj.adjustment_amount || 0),
+        )
+      }
+    } catch (adjError) {
+      console.error("Error fetching adjustments for semester coins:", adjError)
+    }
+
+    // One contribution per exam period: best section by (multiplied coins + adjustments)
     const coinsByPeriod = new Map<string, number>()
 
     for (const row of latestByPeriodSection.values()) {
@@ -422,9 +447,12 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
 
       const effectiveLog = dailyLogWithOverrides(normalizedId, student.dailyLog, overrides)
       const { coins } = summarizeDailyCoins(effectiveLog)
+      const multipliedCoins = hasMultiplier ? coins * 2 : coins
+      const adjustment =
+        adjustmentsByPeriodSection.get(`${row.period}_${row.section_number}`) || 0
+      const periodTotal = multipliedCoins + adjustment
       const existing = coinsByPeriod.get(row.period) || 0
-      // If the student appears in multiple sections for the same period, take the max
-      if (coins > existing) coinsByPeriod.set(row.period, coins)
+      if (periodTotal > existing) coinsByPeriod.set(row.period, periodTotal)
     }
 
     let total = 0
