@@ -36,6 +36,7 @@ import { getFakeDataForStudent } from "@/lib/fake-data"
 import { formatLocalDateTime } from "@/lib/datetime"
 import { countExemptCredits, countExtraCreditDayCredits } from "@/lib/day-credits"
 import { parsePeriodKey } from "@/lib/exam-periods"
+import { combinePeriodStreaks } from "@/lib/streaks"
 
 type DailyLog = {
   day: number
@@ -209,7 +210,13 @@ export default function StudentLookup() {
         setRejectedRequests(data.rejectedRequests || [])
         setIsDemoStudent(id.toLowerCase() === "abc123")
         setBadges(data.badges || [])
-        setStreakData(data.streakData || { currentStreak: 0, maxStreak: 0 })
+        // Prefer override-aware period logs for shelf streak text (same days as the calendar)
+        const periodLogs = (periods as PeriodInfo[]).map((p) => p.dailyLog || [])
+        setStreakData(
+          periodLogs.some((log) => log.length > 0)
+            ? combinePeriodStreaks(periodLogs, 0)
+            : data.streakData || { currentStreak: 0, maxStreak: 0 },
+        )
         
         // Fetch leaderboard data for current period
         if (data.student.period && data.student.sectionNumber) {
@@ -269,7 +276,9 @@ export default function StudentLookup() {
         if (data.badges) {
           setBadges(data.badges)
         }
-        if (data.streakData) {
+        if (data.periods?.length) {
+          setStreakData(combinePeriodStreaks(data.periods.map((p: PeriodInfo) => p.dailyLog || []), 0))
+        } else if (data.streakData) {
           setStreakData(data.streakData)
         }
       }
@@ -913,7 +922,19 @@ export default function StudentLookup() {
                               <span className="flex items-center gap-1">
                                 <Trophy className="h-3 w-3 text-utsa-orange" />
                                 Rank #{leaderboardData.rank} of {leaderboardData.totalStudents}
-                                {leaderboardData.topStudentCoins > 0 && ` (#1: ${leaderboardData.topStudentCoins} coins)`}
+                                {(() => {
+                                  // When you're #1, show the same period total the Coins card uses
+                                  // (2x + adjustments), not a stale/raw leaderboard figure.
+                                  const periodCoins =
+                                    periodData.totalCoins !== undefined
+                                      ? periodData.totalCoins
+                                      : periodData.coins || 0
+                                  const topCoins =
+                                    leaderboardData.rank === 1 && periodCoins > 0
+                                      ? periodCoins
+                                      : leaderboardData.topStudentCoins
+                                  return topCoins > 0 ? ` (#1: ${topCoins} coins)` : null
+                                })()}
                               </span>
                             </>
                           )}

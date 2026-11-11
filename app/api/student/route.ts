@@ -10,9 +10,11 @@ import {
   awardBadge,
   ensureBadgesSchema,
   calculateStreaks,
+  combinePeriodStreaks,
   GRAND_MASTER_COIN_THRESHOLD,
 } from "@/lib/badges"
 import { parsePeriodKey } from "@/lib/exam-periods"
+import { periodDisplayCoins } from "@/lib/period-coins"
 
 type DailyLog = {
   day: number
@@ -594,6 +596,7 @@ export async function POST(request: NextRequest) {
 
       // Apply 2x multiplier to base coins if student has the 25-day badge
       const baseCoins = studentWithOverrides.coins
+      const totalCoins = periodDisplayCoins(baseCoins, hasMultiplier, adjustment)
       const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
 
       return {
@@ -607,7 +610,7 @@ export async function POST(request: NextRequest) {
         coins: multipliedCoins,
         baseCoins,
         coinAdjustment: adjustment,
-        totalCoins: multipliedCoins + adjustment,
+        totalCoins,
         totalDays: studentWithOverrides.totalDays,
         periodDays: studentWithOverrides.periodDays,
         percentComplete: studentWithOverrides.percentComplete,
@@ -670,10 +673,14 @@ export async function POST(request: NextRequest) {
 
     // Get student badges
     let badges: any[] = []
-    let streakData = { currentStreak: 0, maxStreak: 0 }
+    // Shelf streak text must use override-aware period logs (same as calendar/coins).
+    // Best streak across all periods; current streak from the latest period.
+    let streakData = combinePeriodStreaks(
+      periodsData.map((p) => p.dailyLog || []),
+      0,
+    )
     try {
       badges = await getStudentBadges(normalizedId)
-      streakData = calculateStreaks(student.dailyLog)
 
       // Self-heal Grand Master from already-loaded period totals (2x + adjustments).
       // Avoids a second semester scan on every lookup; sync processing uses getStudentSemesterCoins.
@@ -711,6 +718,11 @@ export async function POST(request: NextRequest) {
     // Apply 2x multiplier to current period coins if student has the badge
     const currentPeriodBaseCoins = student.coins
     const currentPeriodCoins = hasMultiplier ? currentPeriodBaseCoins * 2 : currentPeriodBaseCoins
+    const currentPeriodTotal = periodDisplayCoins(
+      currentPeriodBaseCoins,
+      hasMultiplier,
+      currentPeriodAdjustment,
+    )
 
     // Return the student's data including all periods
     return NextResponse.json({
@@ -721,7 +733,7 @@ export async function POST(request: NextRequest) {
         coins: currentPeriodCoins,
         baseCoins: currentPeriodBaseCoins,
         coinAdjustment: currentPeriodAdjustment,
-        totalCoins: currentPeriodCoins + currentPeriodAdjustment,
+        totalCoins: currentPeriodTotal,
         totalDays: student.totalDays,
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
