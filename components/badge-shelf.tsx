@@ -237,6 +237,11 @@ export function BadgeShelf({
   semesterCoins = 0,
 }: BadgeShelfProps) {
   const earned = new Set(badges.map((b) => b.badge_type))
+  // Progress uses the same semester total as the header; treat threshold met as unlocked
+  // even if badge processing has not written the row yet.
+  const grandMasterUnlocked =
+    earned.has("grand_master") || semesterCoins >= GRAND_MASTER_COIN_THRESHOLD
+  if (grandMasterUnlocked) earned.add("grand_master")
   const holidayKinds = earnedHolidayKinds(badges)
   const hasAnyHoliday = holidayKinds.length > 0
   const tenDayPeriods = new Set(

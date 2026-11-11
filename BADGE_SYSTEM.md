@@ -37,9 +37,10 @@ The badge system rewards students for maintaining consistent streaks of completi
 
 #### Grand Master Badge 🧙
 - **Requirement**: Earn 100+ coins across all exam periods in a single semester
+- **Coin total**: Same as the student-facing semester total — daily coins after day overrides, with the 2x multiplier when the 25-day badge is earned, plus period-specific coin adjustments (not redemptions)
 - **Reward**: Wizard-with-staff badge (no extra coins)
 - **Type**: Permanent unlock (once ever)
-- **Display**: Shows on badge shelf with semester coin progress
+- **Display**: Shows on badge shelf with semester coin progress; unlocks when the threshold is met even if badge processing has not run yet
 
 ### Streak Calculation
 
