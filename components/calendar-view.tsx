@@ -18,10 +18,15 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   isHoliday?: boolean
+  isDoubleCoins?: boolean
   wouldHaveQualified?: boolean
   /** Set by API when a day override was applied */
   isOverridden?: boolean
   overrideType?: "qualified" | "not_qualified" | "double_coins" | string
+}
+
+function overrideCountsAsQualified(overrideType?: string | null) {
+  return overrideType === "qualified" || overrideType === "double_coins"
 }
 
 type DayOverride = {
@@ -227,10 +232,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
   const getDayState = (day: DailyLog, dayNumber: number) => {
     const override = overrideMap.get(dayNumber)
     const hasOverride = !!(override || day.isOverridden)
+    const overrideType = override?.override_type ?? day.overrideType
     const isQualified = override
-      ? override.override_type === "qualified"
+      ? overrideCountsAsQualified(override.override_type)
       : day.isOverridden
-        ? day.overrideType === "qualified" || day.qualified
+        ? overrideCountsAsQualified(day.overrideType) || day.qualified
         : day.qualified
 
     if (day.reason === "⏳ No data available") {
@@ -243,6 +249,13 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
 
     // Overrides win over exempt styling so force-qualify days stay visible
     if (hasOverride) {
+      if (overrideType === "double_coins") {
+        return {
+          label: "Override: Double coins",
+          symbol: "D2O",
+          className: "bg-sky-100 border-sky-400 text-sky-950 ring-2 ring-sky-300",
+        }
+      }
       return {
         label: isQualified ? "Override: Qualified" : "Override: Not qualified",
         symbol: isQualified ? "O+" : "O-",
@@ -293,6 +306,21 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
       }
     }
 
+    if (day.isDoubleCoins) {
+      if (isQualified) {
+        return {
+          label: "Double coins (earned)",
+          symbol: "D2+",
+          className: "bg-sky-100 border-sky-400 text-sky-950 ring-1 ring-sky-300",
+        }
+      }
+      return {
+        label: "Double coins day",
+        symbol: "D2",
+        className: "bg-sky-50 border-sky-300 text-sky-800",
+      }
+    }
+
     if (isQualified) {
       return {
         label: "Qualified",
@@ -326,6 +354,12 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
         return "🪙"
       case "C+":
         return "🪙"
+      case "D2+":
+        return "🪙🪙"
+      case "D2":
+        return "2️⃣"
+      case "D2O":
+        return "🪙🪙🔧"
       case "O+":
         return "✅🔧"
       case "O-":
@@ -358,9 +392,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
     const override = overrideMap.get(day.day)
     const hasOverride = !!(override || day.isOverridden)
     const isQualified = override
-      ? override.override_type === "qualified"
+      ? overrideCountsAsQualified(override.override_type)
       : day.isOverridden
-        ? day.overrideType === "qualified" || day.qualified
+        ? overrideCountsAsQualified(day.overrideType) || day.qualified
         : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     
@@ -386,9 +420,9 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
   const buildOverrideDayInfo = (day: DailyLog) => {
     const override = overrideMap.get(day.day)
     const isQualified = override
-      ? override.override_type === "qualified"
+      ? overrideCountsAsQualified(override.override_type)
       : day.isOverridden
-        ? day.overrideType === "qualified" || day.qualified
+        ? overrideCountsAsQualified(day.overrideType) || day.qualified
         : day.qualified
     const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
     const isLastDay = day.day === lastDayOfPeriod && lastDayOfPeriod > 0
@@ -445,12 +479,13 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
     (acc, day) => {
       const state = getDayState(day, day.day)
       if (state.symbol === "Q") acc.qualified += 1
+      if (state.symbol === "D2+" || state.symbol === "D2" || state.symbol === "D2O") acc.doubleCoins += 1
       if (state.symbol === "NQ") acc.notQualified += 1
       if (state.symbol === "E" || state.symbol === "E+" || state.symbol === "C" || state.symbol === "C+") acc.exempt += 1
       if (state.symbol === "—") acc.future += 1
       return acc
     },
-    { qualified: 0, notQualified: 0, exempt: 0, future: 0 },
+    { qualified: 0, notQualified: 0, exempt: 0, future: 0, doubleCoins: 0 },
   )
   const mobileNavigableDays = allDays.filter((day) => day.reason !== "⏳ No data available")
 
@@ -475,6 +510,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
               ✅ {dayStats.qualified}
             </span>
+            {dayStats.doubleCoins > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-sky-50 text-sky-900 border border-sky-200">
+                🪙🪙 {dayStats.doubleCoins}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200">
               ❌ {dayStats.notQualified}
             </span>
@@ -491,10 +531,11 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
           {allDays.map((day) => {
             const override = overrideMap.get(day.day)
             const hasOverride = !!(override || day.isOverridden)
+            const overrideType = override?.override_type ?? day.overrideType
             const isQualified = override
-              ? override.override_type === "qualified"
+              ? overrideCountsAsQualified(override.override_type)
               : day.isOverridden
-                ? day.overrideType === "qualified" || day.qualified
+                ? overrideCountsAsQualified(day.overrideType) || day.qualified
                 : day.qualified
             const currentReason = override ? override.reason || day.reason : day.reason
             const isLatestDay = day.day === latestDayWithData && latestDayWithData > 0
@@ -533,7 +574,17 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
                   <div className="mt-1">{currentReason}</div>
                   {hasOverride && (
                     <div className="text-blue-300 text-xs mt-1">
-                      Override: {isQualified ? "Qualified" : "Not Qualified"}
+                      Override:{" "}
+                      {overrideType === "double_coins"
+                        ? "Double coins"
+                        : isQualified
+                          ? "Qualified"
+                          : "Not Qualified"}
+                    </div>
+                  )}
+                  {!hasOverride && day.isDoubleCoins && !day.isExcluded && (
+                    <div className="text-sky-300 text-xs mt-1">
+                      {isQualified ? "🪙🪙 Double coins earned (2 coins)" : "Double coins day — qualify for 2 coins"}
                     </div>
                   )}
                   {!day.isExcluded && (
@@ -570,6 +621,10 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-emerald-50 border border-emerald-300 rounded"></div>
             <span className="text-emerald-800 font-medium">✅ Qualified</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-sky-100 border border-sky-400 rounded"></div>
+            <span className="text-sky-900 font-medium">🪙🪙 Double coins</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-rose-50 border border-rose-300 rounded"></div>
@@ -694,13 +749,25 @@ export function CalendarView({ dailyLog, totalDays, periodDays, periodEndDate, s
 
                 {day.isExcluded && (
                   <p className="text-xs text-utsa-muted">
-                    {day.isCoinOnlyExempt
+                    {day.isHoliday
                       ? day.wouldHaveQualified
-                        ? "This exempt (coins only) day earned a coin, but does not count toward extra credit %."
-                        : "This exempt (coins only) day does not count toward progress."
-                      : day.wouldHaveQualified
-                        ? "This exempt day still earned extra credit."
-                        : "This exempt day does not count toward progress."}
+                        ? "Holiday day — 5 coins earned and it counts toward extra credit %."
+                        : "Holiday day — skip freely, or qualify for 5 coins."
+                      : day.isCoinOnlyExempt
+                        ? day.wouldHaveQualified
+                          ? "This exempt (coins only) day earned a coin, but does not count toward extra credit %."
+                          : "This exempt (coins only) day does not count toward progress."
+                        : day.wouldHaveQualified
+                          ? "This exempt day still earned extra credit."
+                          : "This exempt day does not count toward progress."}
+                  </p>
+                )}
+
+                {!day.isExcluded && day.isDoubleCoins && (
+                  <p className="text-xs text-sky-800">
+                    {day.qualified || overrideCountsAsQualified(override?.override_type ?? day.overrideType)
+                      ? "Double coins day — 2 coins earned for qualifying."
+                      : "Double coins day — meet the requirement to earn 2 coins."}
                   </p>
                 )}
 

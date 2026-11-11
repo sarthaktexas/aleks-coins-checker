@@ -5,6 +5,7 @@ import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache, STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { getStreakMultiplierStartDates } from "@/lib/badges"
 import {
   listLatestUploadMeta,
   loadSlimStudentRoster,
@@ -26,7 +27,68 @@ type StudentData = {
     doubleCoinsEarned?: number
     holidayDaysCompleted?: number
     holidayCoinsEarned?: number
+    qualifiedWorkingDays?: number
+    multiplierFromDate?: string | null
+    periodAdjustment?: number
+    periodAdjustments?: Array<{
+      adjustment_amount: number
+      reason: string | null
+      created_at?: string
+    }>
   }
+}
+
+async function enrichCoinTotals(
+  studentData: StudentData,
+  period: string,
+  sectionNumber: string,
+): Promise<StudentData> {
+  const updated = { ...studentData }
+  let multiplierStartByStudent = new Map<string, string>()
+  try {
+    multiplierStartByStudent = await getStreakMultiplierStartDates()
+  } catch (error) {
+    console.error("Error fetching multiplier start dates:", error)
+  }
+
+  const adjustmentsByStudent = new Map<
+    string,
+    Array<{ adjustment_amount: number; reason: string | null; created_at?: string }>
+  >()
+  try {
+    const adjustmentsResult = await sql`
+      SELECT student_id, adjustment_amount, reason, created_at
+      FROM coin_adjustments
+      WHERE period = ${period}
+        AND COALESCE(section_number, 'default') = ${sectionNumber}
+        AND is_active = true
+        AND period IS NOT NULL
+        AND period != '__GLOBAL__'
+      ORDER BY created_at ASC
+    `
+    for (const row of adjustmentsResult.rows) {
+      const key = String(row.student_id || "").toLowerCase()
+      if (!adjustmentsByStudent.has(key)) adjustmentsByStudent.set(key, [])
+      adjustmentsByStudent.get(key)!.push({
+        adjustment_amount: Number(row.adjustment_amount) || 0,
+        reason: row.reason ?? null,
+        created_at: row.created_at,
+      })
+    }
+  } catch (error) {
+    console.error("Error fetching period adjustments for breakdown:", error)
+  }
+
+  for (const studentId of Object.keys(updated)) {
+    const student = updated[studentId]
+    const normalized = studentId.toLowerCase()
+    const rows = adjustmentsByStudent.get(normalized) || []
+    student.multiplierFromDate = multiplierStartByStudent.get(normalized) || null
+    student.periodAdjustments = rows
+    student.periodAdjustment = rows.reduce((sum, row) => sum + row.adjustment_amount, 0)
+  }
+
+  return updated
 }
 
 async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
@@ -60,6 +122,7 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
         student.holidayDaysCompleted = summary.holidayDaysCompleted
         student.holidayCoinsEarned = summary.holidayCoinsEarned
         student.doubleCoinsEarned = summary.doubleCoinsEarned
+        student.qualifiedWorkingDays = summary.qualifiedWorkingDays
       }
     })
 
@@ -138,6 +201,11 @@ export async function GET(request: NextRequest) {
           studentData =
             typeof row.data === "string" ? JSON.parse(row.data) : row.data
           studentData = await applyOverridesToStudentData(studentData as StudentData)
+          studentData = await enrichCoinTotals(
+            studentData as StudentData,
+            period,
+            sectionNumber,
+          )
         }
       } else {
         // All sections for a period — latest upload per section, then merge.

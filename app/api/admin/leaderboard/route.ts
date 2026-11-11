@@ -1,14 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
-import { summarizeDailyCoins } from "@/lib/day-credits"
+import { summarizeDailyCoins, totalCoinsFromDailyLog } from "@/lib/day-credits"
 import {
   applyOverrideToDay,
   buildOverridesMap,
   normalizeOverrideDate,
   type DayOverrideRow,
 } from "@/lib/day-overrides"
-import { ensureBadgesSchema } from "@/lib/badges"
+import { ensureBadgesSchema, getStreakMultiplierStartDates } from "@/lib/badges"
 import { periodDisplayCoins } from "@/lib/period-coins"
 
 export const dynamic = "force-dynamic"
@@ -212,18 +212,11 @@ export async function GET(request: NextRequest) {
       adjustmentsByStudent.set(id, current + (Number(adj.adjustment_amount) || 0))
     })
 
-    // Get all students who have the 2x multiplier badge
-    let studentsWithMultiplier = new Set<string>()
+    // 2x starts on the unlock day forward (not retroactive)
+    let multiplierStartByStudent = new Map<string, string>()
     let badgesByStudent = new Map<string, any[]>()
     try {
-      const multiplierResult = await sql`
-        SELECT DISTINCT LOWER(TRIM(student_id)) AS student_id
-        FROM student_badges
-        WHERE badge_type = 'streak_25_day'
-      `
-      studentsWithMultiplier = new Set(
-        multiplierResult.rows.map((r) => String(r.student_id || "").toLowerCase().trim()).filter(Boolean),
-      )
+      multiplierStartByStudent = await getStreakMultiplierStartDates()
 
       // Get all badges for students in this period/section
       const badgesResult = await sql`
@@ -246,16 +239,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate total coins for each student (excluding redemptions)
-    // Match student page: override-aware base × 2x badge + period adjustments
+    // Match student page: override-aware log + prospective 2x + period adjustments
     const studentsWithCoins = Object.keys(studentData).map((sId) => {
       const student = studentData[sId]
       const normalized = sId.toLowerCase().trim()
       const adjustment = adjustmentsByStudent.get(normalized) || 0
-      const hasMultiplier = studentsWithMultiplier.has(normalized)
       const badges = badgesByStudent.get(normalized) || []
+      const multiplierFromDate = multiplierStartByStudent.get(normalized) || null
+      const hasMultiplier = !!multiplierFromDate
+
       const baseCoins = Number(student.coins) || 0
-      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
-      const totalCoins = periodDisplayCoins(baseCoins, hasMultiplier, adjustment)
+      const multipliedCoins = totalCoinsFromDailyLog(student.dailyLog || [], multiplierFromDate)
+      const totalCoins = periodDisplayCoins(student.dailyLog || [], multiplierFromDate, adjustment)
       const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog || [])
 
       return {
@@ -271,6 +266,7 @@ export async function GET(request: NextRequest) {
         coinOnlyExemptCredits: student.coinOnlyExemptCredits || 0,
         percentComplete: student.percentComplete,
         hasMultiplier,
+        multiplierFromDate,
         badges,
       }
     })

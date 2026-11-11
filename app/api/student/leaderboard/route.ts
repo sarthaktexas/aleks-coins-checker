@@ -7,7 +7,7 @@ import {
   normalizeOverrideDate,
   type DayOverrideRow,
 } from "@/lib/day-overrides"
-import { ensureBadgesSchema } from "@/lib/badges"
+import { ensureBadgesSchema, getStreakMultiplierStartDates } from "@/lib/badges"
 import { periodDisplayCoins } from "@/lib/period-coins"
 
 export const dynamic = "force-dynamic"
@@ -211,30 +211,22 @@ export async function GET(request: NextRequest) {
       adjustmentsByStudent.set(id, current + (Number(adj.adjustment_amount) || 0))
     })
 
-    // Get all students who have the 2x multiplier badge (same source as student page)
-    let studentsWithMultiplier = new Set<string>()
+    // 2x starts on the unlock day forward (not retroactive)
+    let multiplierStartByStudent = new Map<string, string>()
     try {
-      const multiplierResult = await sql`
-        SELECT DISTINCT LOWER(TRIM(student_id)) AS student_id
-        FROM student_badges
-        WHERE badge_type = 'streak_25_day'
-      `
-      studentsWithMultiplier = new Set(
-        multiplierResult.rows.map((r) => String(r.student_id || "").toLowerCase().trim()).filter(Boolean),
-      )
+      multiplierStartByStudent = await getStreakMultiplierStartDates()
     } catch (error) {
       console.error("Error fetching multiplier badges:", error)
     }
 
     // Calculate total coins for each student (excluding redemptions)
-    // Match student page: override-aware base × 2x badge + period adjustments
+    // Match student page: override-aware log + prospective 2x + period adjustments
     const studentsWithCoins = Object.keys(studentData).map((sId) => {
       const student = studentData[sId]
       const normalized = sId.toLowerCase().trim()
       const adjustment = adjustmentsByStudent.get(normalized) || 0
-      const hasMultiplier = studentsWithMultiplier.has(normalized)
-      const baseCoins = Number(student.coins) || 0
-      const totalCoins = periodDisplayCoins(baseCoins, hasMultiplier, adjustment)
+      const multiplierFromDate = multiplierStartByStudent.get(normalized) || null
+      const totalCoins = periodDisplayCoins(student.dailyLog || [], multiplierFromDate, adjustment)
       const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog || [])
 
       return {

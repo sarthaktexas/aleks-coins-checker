@@ -112,10 +112,10 @@ export default function BadgesAdmin() {
                   <div className="mt-2 pt-2 border-t border-yellow-200">
                     <p className="text-sm font-medium text-yellow-900">Reward:</p>
                     <p className="text-sm text-yellow-800">
-                      Permanent 2x multiplier on ALL future daily coins
+                      Permanent 2x on daily coins from the unlock day forward
                     </p>
                     <p className="text-xs text-yellow-700 mt-1">
-                      (Even if the streak breaks, the multiplier stays forever)
+                      (Not retroactive. Even if the streak breaks, 2x stays forever.)
                     </p>
                   </div>
                 </div>

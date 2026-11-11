@@ -1,14 +1,16 @@
+import { totalCoinsFromDailyLog } from "@/lib/day-credits"
+
+type CoinDay = Parameters<typeof totalCoinsFromDailyLog>[0][number]
+
 /**
  * Shared period coin total used by student page + leaderboards.
- * baseCoins should already include day overrides (via summarizeDailyCoins).
+ * Applies the 25-day 2x only on/after `multiplierFromDate`, then adds period adjustments.
  */
 export function periodDisplayCoins(
-  baseCoins: number,
-  hasMultiplier: boolean,
+  dailyLog: CoinDay[],
+  multiplierFromDate: string | null | undefined,
   adjustment: number = 0,
 ): number {
-  const base = Number(baseCoins) || 0
-  const adj = Number(adjustment) || 0
-  const multiplied = hasMultiplier ? base * 2 : base
-  return multiplied + adj
+  const multiplied = totalCoinsFromDailyLog(dailyLog || [], multiplierFromDate)
+  return multiplied + (Number(adjustment) || 0)
 }

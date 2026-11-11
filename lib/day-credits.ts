@@ -54,15 +54,66 @@ export function isHolidayCredit(day: ExemptCreditDay) {
 }
 
 type CoinSummaryDay = ExemptCreditDay & {
+  date?: string
   qualified?: boolean
   isDoubleCoins?: boolean
   isOverridden?: boolean
   overrideType?: string
 }
 
+/** Normalize a daily-log / ISO timestamp to YYYY-MM-DD for comparisons. */
+export function toDateOnly(value: string | Date | null | undefined): string | null {
+  if (!value) return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return value.toISOString().slice(0, 10)
+  }
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10)
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString().slice(0, 10)
+}
+
+/** Base coins earned on a single day (before any 2x multiplier). */
+export function coinsForDay(day: CoinSummaryDay): number {
+  if (day.isExcluded) {
+    if (!day.wouldHaveQualified) return 0
+    if (day.isHoliday) return HOLIDAY_COINS_PER_DAY
+    return 1 // standard exempt or coins-only exempt
+  }
+  if (!day.qualified) return 0
+  let coins = 1
+  if (day.isDoubleCoins && !day.isOverridden) coins += 1
+  if (day.isOverridden && day.overrideType === "double_coins") coins += 1
+  return coins
+}
+
+/**
+ * Sum coins from a daily log, optionally doubling days on/after `multiplierFromDate`.
+ * The 25-day badge multiplier is prospective from the unlock day — not retroactive.
+ */
+export function totalCoinsFromDailyLog(
+  dailyLog: CoinSummaryDay[],
+  multiplierFromDate?: string | null,
+): number {
+  const start = toDateOnly(multiplierFromDate)
+  let total = 0
+  for (const day of dailyLog) {
+    const dayCoins = coinsForDay(day)
+    if (dayCoins <= 0) continue
+    const dayDate = toDateOnly(day.date)
+    const apply2x = !!(start && dayDate && dayDate >= start)
+    total += apply2x ? dayCoins * 2 : dayCoins
+  }
+  return total
+}
+
 /**
  * Recalculate coins / EC% from a daily log after overrides are applied.
  * Holiday days pay HOLIDAY_COINS_PER_DAY each (5 total, not 1+5).
+ * `coins` is always the base total (no 2x). Use totalCoinsFromDailyLog for multiplier.
  */
 export function summarizeDailyCoins(dailyLog: CoinSummaryDay[]) {
   const workingDayLogs = dailyLog.filter((d) => !d.isExcluded)
@@ -109,5 +160,62 @@ export function summarizeDailyCoins(dailyLog: CoinSummaryDay[]) {
     doubleCoinsEarned,
     percentComplete,
     coins,
+  }
+}
+
+export type CoinTotalExplanation = ReturnType<typeof summarizeDailyCoins> & {
+  /** Base coins earned on days before the 2x unlock date. */
+  baseBeforeMultiplier: number
+  /** Base coins earned on/after the 2x unlock date. */
+  baseOnOrAfterMultiplier: number
+  /** totalCoinsFromDailyLog result (prospective 2x). */
+  multipliedCoins: number
+  /** Extra coins from the 2x badge (= baseOnOrAfterMultiplier when unlocked). */
+  multiplierBonus: number
+  multiplierFromDate: string | null
+  periodAdjustment: number
+  periodTotal: number
+}
+
+/**
+ * Full arithmetic for a period coin total — for admin / debug UIs.
+ * `periodAdjustment` is period-scoped only (not global redemptions).
+ */
+export function explainCoinTotal(
+  dailyLog: CoinSummaryDay[],
+  options?: {
+    multiplierFromDate?: string | null
+    periodAdjustment?: number
+  },
+): CoinTotalExplanation {
+  const summary = summarizeDailyCoins(dailyLog)
+  const start = toDateOnly(options?.multiplierFromDate)
+  let baseBeforeMultiplier = 0
+  let baseOnOrAfterMultiplier = 0
+
+  for (const day of dailyLog) {
+    const dayCoins = coinsForDay(day)
+    if (dayCoins <= 0) continue
+    const dayDate = toDateOnly(day.date)
+    if (start && dayDate && dayDate >= start) {
+      baseOnOrAfterMultiplier += dayCoins
+    } else {
+      baseBeforeMultiplier += dayCoins
+    }
+  }
+
+  const multipliedCoins = totalCoinsFromDailyLog(dailyLog, start)
+  const multiplierBonus = multipliedCoins - summary.coins
+  const periodAdjustment = options?.periodAdjustment ?? 0
+
+  return {
+    ...summary,
+    baseBeforeMultiplier,
+    baseOnOrAfterMultiplier,
+    multipliedCoins,
+    multiplierBonus,
+    multiplierFromDate: start,
+    periodAdjustment,
+    periodTotal: multipliedCoins + periodAdjustment,
   }
 }

@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
-import { summarizeDailyCoins } from "@/lib/day-credits"
+import { summarizeDailyCoins, totalCoinsFromDailyLog } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
 import {
   getStudentBadges,
-  hasStreakMultiplier,
+  getStreakMultiplierStartDate,
   awardBadge,
   ensureBadgesSchema,
   calculateStreaks,
@@ -358,19 +358,6 @@ function applyOverridesInMemory(
   return updatedStudentData
 }
 
-/**
- * Apply badge multiplier to coins (2x multiplier for 25-day streak badge)
- */
-async function applyBadgeMultiplier(studentId: string, baseCoins: number): Promise<number> {
-  try {
-    const hasMultiplier = await hasStreakMultiplier(studentId)
-    return hasMultiplier ? baseCoins * 2 : baseCoins
-  } catch (error) {
-    console.error("Error applying badge multiplier:", error)
-    return baseCoins
-  }
-}
-
 async function fetchStudentOverrides(studentId: string) {
   try {
     const overridesResult = await sql`
@@ -578,8 +565,9 @@ export async function POST(request: NextRequest) {
       console.error("Error fetching period metadata:", e)
     }
 
-    // Check if student has 2x multiplier badge (25-day streak)
-    const hasMultiplier = await hasStreakMultiplier(normalizedId)
+    // 2x starts on the day the 25-day badge was earned (not retroactive to earlier days)
+    const multiplierFromDate = await getStreakMultiplierStartDate(normalizedId)
+    const hasMultiplier = !!multiplierFromDate
 
     // Format periods data with overrides applied once (no extra DB round-trips)
     const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
@@ -594,10 +582,16 @@ export async function POST(request: NextRequest) {
         periodMetadata?.name ??
         periodData.period.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
 
-      // Apply 2x multiplier to base coins if student has the 25-day badge
       const baseCoins = studentWithOverrides.coins
-      const totalCoins = periodDisplayCoins(baseCoins, hasMultiplier, adjustment)
-      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+      const multipliedCoins = totalCoinsFromDailyLog(
+        studentWithOverrides.dailyLog || [],
+        multiplierFromDate,
+      )
+      const totalCoins = periodDisplayCoins(
+        studentWithOverrides.dailyLog || [],
+        multiplierFromDate,
+        adjustment,
+      )
 
       return {
         period: periodData.period,
@@ -622,6 +616,7 @@ export async function POST(request: NextRequest) {
         holidayCoinsEarned: studentWithOverrides.holidayCoinsEarned,
         uploadedAt: periodData.uploadedAt,
         hasMultiplier,
+        multiplierFromDate,
       }
     }))
 
@@ -715,12 +710,12 @@ export async function POST(request: NextRequest) {
       console.error("Error fetching student badges:", badgeError)
     }
     
-    // Apply 2x multiplier to current period coins if student has the badge
+    // Apply 2x only to days on/after the unlock date in the current period
     const currentPeriodBaseCoins = student.coins
-    const currentPeriodCoins = hasMultiplier ? currentPeriodBaseCoins * 2 : currentPeriodBaseCoins
+    const currentPeriodCoins = totalCoinsFromDailyLog(student.dailyLog || [], multiplierFromDate)
     const currentPeriodTotal = periodDisplayCoins(
-      currentPeriodBaseCoins,
-      hasMultiplier,
+      student.dailyLog || [],
+      multiplierFromDate,
       currentPeriodAdjustment,
     )
 
@@ -747,6 +742,7 @@ export async function POST(request: NextRequest) {
         holidayCoinsEarned: student.holidayCoinsEarned,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
         hasMultiplier,
+        multiplierFromDate,
       },
       periods: periodsData,
       coinAdjustments: coinAdjustments,
