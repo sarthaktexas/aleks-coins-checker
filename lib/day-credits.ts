@@ -162,3 +162,60 @@ export function summarizeDailyCoins(dailyLog: CoinSummaryDay[]) {
     coins,
   }
 }
+
+export type CoinTotalExplanation = ReturnType<typeof summarizeDailyCoins> & {
+  /** Base coins earned on days before the 2x unlock date. */
+  baseBeforeMultiplier: number
+  /** Base coins earned on/after the 2x unlock date. */
+  baseOnOrAfterMultiplier: number
+  /** totalCoinsFromDailyLog result (prospective 2x). */
+  multipliedCoins: number
+  /** Extra coins from the 2x badge (= baseOnOrAfterMultiplier when unlocked). */
+  multiplierBonus: number
+  multiplierFromDate: string | null
+  periodAdjustment: number
+  periodTotal: number
+}
+
+/**
+ * Full arithmetic for a period coin total — for admin / debug UIs.
+ * `periodAdjustment` is period-scoped only (not global redemptions).
+ */
+export function explainCoinTotal(
+  dailyLog: CoinSummaryDay[],
+  options?: {
+    multiplierFromDate?: string | null
+    periodAdjustment?: number
+  },
+): CoinTotalExplanation {
+  const summary = summarizeDailyCoins(dailyLog)
+  const start = toDateOnly(options?.multiplierFromDate)
+  let baseBeforeMultiplier = 0
+  let baseOnOrAfterMultiplier = 0
+
+  for (const day of dailyLog) {
+    const dayCoins = coinsForDay(day)
+    if (dayCoins <= 0) continue
+    const dayDate = toDateOnly(day.date)
+    if (start && dayDate && dayDate >= start) {
+      baseOnOrAfterMultiplier += dayCoins
+    } else {
+      baseBeforeMultiplier += dayCoins
+    }
+  }
+
+  const multipliedCoins = totalCoinsFromDailyLog(dailyLog, start)
+  const multiplierBonus = multipliedCoins - summary.coins
+  const periodAdjustment = options?.periodAdjustment ?? 0
+
+  return {
+    ...summary,
+    baseBeforeMultiplier,
+    baseOnOrAfterMultiplier,
+    multipliedCoins,
+    multiplierBonus,
+    multiplierFromDate: start,
+    periodAdjustment,
+    periodTotal: multipliedCoins + periodAdjustment,
+  }
+}

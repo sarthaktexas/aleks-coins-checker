@@ -13,6 +13,7 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   isHoliday?: boolean
+  isDoubleCoins?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
   overrideType?: "qualified" | "not_qualified" | "double_coins" | string
@@ -122,7 +123,12 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
 
   const allDays = generateAllDays()
 
-  const getDayState = (day: DailyLog) => {
+  const getDayState = (day: DailyLog): {
+    emoji: string
+    className: string
+    hasOverride: boolean
+    isDoubleCoins?: boolean
+  } => {
     if (day.reason === "⏳ No data available") {
       return { emoji: "⏳", className: "bg-gray-50 border-gray-200 text-gray-400", hasOverride: false }
     }
@@ -135,14 +141,15 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
       if (overrideType === "double_coins") {
         return {
           emoji: "🪙🪙🔧",
-          className: "bg-blue-100 border-blue-400 text-blue-900 ring-2 ring-blue-300",
+          className: "bg-sky-100 border-sky-400 text-sky-950 ring-2 ring-sky-300",
           hasOverride: true,
+          isDoubleCoins: true,
         }
       }
       
       const isQualified = override
-        ? override.override_type === "qualified"
-        : day.overrideType === "qualified" || day.qualified
+        ? override.override_type === "qualified" || override.override_type === "double_coins"
+        : day.overrideType === "qualified" || day.overrideType === "double_coins" || day.qualified
       return {
         emoji: isQualified ? "✅🔧" : "❌🔧",
         className: "bg-blue-50 border-blue-300 text-blue-800 ring-1 ring-blue-200",
@@ -164,6 +171,22 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
       return day.wouldHaveQualified
         ? { emoji: "🎁", className: "bg-amber-50 border-amber-300 text-amber-800 ring-1 ring-amber-200", hasOverride: false }
         : { emoji: "📅", className: "bg-slate-100 border-slate-300 text-slate-600", hasOverride: false }
+    }
+
+    if (day.isDoubleCoins) {
+      return day.qualified
+        ? {
+            emoji: "🪙🪙",
+            className: "bg-sky-100 border-sky-400 text-sky-950 ring-1 ring-sky-300",
+            hasOverride: false,
+            isDoubleCoins: true,
+          }
+        : {
+            emoji: "2️⃣",
+            className: "bg-sky-50 border-sky-300 text-sky-800",
+            hasOverride: false,
+            isDoubleCoins: true,
+          }
     }
 
     return day.qualified
@@ -188,14 +211,15 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
   const stats = allDays.reduce(
     (acc, day) => {
       const state = getDayState(day)
-      if (state.hasOverride) acc.overrides += 1
+      if (state.hasOverride && !state.isDoubleCoins) acc.overrides += 1
+      else if (state.isDoubleCoins) acc.doubleCoins += 1
       else if (state.emoji === "✅") acc.qualified += 1
       else if (state.emoji === "❌") acc.notQualified += 1
       else if (state.emoji === "🎁" || state.emoji === "📅" || state.emoji === "🪙") acc.exempt += 1
       else acc.future += 1
       return acc
     },
-    { qualified: 0, notQualified: 0, exempt: 0, future: 0, overrides: 0 },
+    { qualified: 0, notQualified: 0, exempt: 0, future: 0, overrides: 0, doubleCoins: 0 },
   )
 
   const uploadedCount = allDays.filter((d) => d.reason !== "⏳ No data available").length
@@ -208,6 +232,9 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
           <span className="text-utsa-muted">{uploadedCount}/{allDays.length} uploaded</span>
           <span className="text-utsa-muted">·</span>
           <span className="inline-flex items-center gap-0.5 text-emerald-800">✅ {stats.qualified}</span>
+          {stats.doubleCoins > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-sky-900">🪙🪙 {stats.doubleCoins}</span>
+          )}
           <span className="inline-flex items-center gap-0.5 text-rose-800">❌ {stats.notQualified}</span>
           {stats.exempt > 0 && (
             <span className="inline-flex items-center gap-0.5 text-amber-800">🎁 {stats.exempt}</span>
@@ -222,7 +249,14 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
           {allDays.map((day) => {
             const state = getDayState(day)
             const override = overrideMap.get(day.day)
-            const title = `${formatDate(day.date)} - ${day.reason}${day.minutes > 0 ? ` (${day.minutes} min, ${day.topics} topics)` : ""}${override ? ` [Override: ${override.override_type === "qualified" ? "Qualified" : "Not Qualified"}]` : ""}`
+            const overrideLabel = override
+              ? override.override_type === "double_coins"
+                ? "Double coins"
+                : override.override_type === "qualified"
+                  ? "Qualified"
+                  : "Not Qualified"
+              : null
+            const title = `${formatDate(day.date)} - ${day.reason}${day.minutes > 0 ? ` (${day.minutes} min, ${day.topics} topics)` : ""}${!override && day.isDoubleCoins ? " [Double coins day]" : ""}${overrideLabel ? ` [Override: ${overrideLabel}]` : ""}`
 
             return (
               <div
@@ -242,6 +276,10 @@ export function CondensedCalendarView({ dailyLog, totalDays, periodDays, student
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 shrink-0 rounded border border-emerald-300 bg-emerald-50" />
           ✅ Qualified
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2.5 w-2.5 shrink-0 rounded border border-sky-400 bg-sky-100" />
+          🪙🪙 Double coins
         </span>
         <span className="flex items-center gap-1">
           <span className="h-2.5 w-2.5 shrink-0 rounded border border-rose-300 bg-rose-50" />
