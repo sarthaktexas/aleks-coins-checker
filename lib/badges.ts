@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres"
 import { parsePeriodKey } from "@/lib/exam-periods"
-import { summarizeDailyCoins } from "@/lib/day-credits"
+import { toDateOnly, totalCoinsFromDailyLog } from "@/lib/day-credits"
 import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
 import {
   applyOverridesToDailyLog,
@@ -62,7 +62,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     description: "Complete ALEKS 25 days in a row",
     icon: "⭐",
     requirement: 25,
-    reward: "Permanent 2x coin multiplier",
+    reward: "2x coins from unlock day forward",
   },
   {
     type: "holiday_thanksgiving",
@@ -274,6 +274,28 @@ export async function hasEarnedBadge(
 }
 
 /**
+ * Calendar date (YYYY-MM-DD) of the day a streak first hit `milestone`.
+ */
+export function findStreakMilestoneDate(
+  dailyLog: Array<{ qualified: boolean; isExcluded?: boolean; date?: string }>,
+  milestone: number,
+): string | null {
+  let streak = 0
+  for (const day of dailyLog) {
+    if (day.isExcluded) continue
+    if (day.qualified) {
+      streak++
+      if (streak === milestone) {
+        return toDateOnly(day.date)
+      }
+    } else {
+      streak = 0
+    }
+  }
+  return null
+}
+
+/**
  * Check if a student has the 25-day badge (for 2x multiplier)
  * Checks across ALL periods - once earned, it's permanent
  */
@@ -290,6 +312,113 @@ export async function hasStreakMultiplier(studentId: string): Promise<boolean> {
     console.error("Error checking multiplier badge:", error)
     return false
   }
+}
+
+/**
+ * Date (YYYY-MM-DD) when the 25-day 2x multiplier starts for this student.
+ * Prefer stored metadata, then the day streak hit 25 in the award period's log,
+ * then earned_at. Backfills metadata when resolved from the log.
+ */
+export async function getStreakMultiplierStartDate(studentId: string): Promise<string | null> {
+  const normalizedId = studentId.toLowerCase()
+  try {
+    const result = await sql`
+      SELECT id, earned_at, period, section_number, metadata
+      FROM student_badges
+      WHERE student_id = ${normalizedId}
+        AND badge_type = 'streak_25_day'
+      LIMIT 1
+    `
+    if (result.rows.length === 0) return null
+
+    const badge = result.rows[0]
+    let metadata: Record<string, any> = {}
+    if (badge.metadata) {
+      metadata =
+        typeof badge.metadata === "string" ? JSON.parse(badge.metadata) : badge.metadata
+    }
+    if (metadata.multiplierStartsOn) {
+      return toDateOnly(metadata.multiplierStartsOn)
+    }
+
+    // Resolve from the period/section where the badge was awarded
+    let startDate: string | null = null
+    try {
+      const dataResult = await sql`
+        SELECT data
+        FROM student_data
+        WHERE period = ${badge.period}
+          AND COALESCE(section_number, 'default') = ${badge.section_number || "default"}
+        ORDER BY uploaded_at DESC
+        LIMIT 1
+      `
+      if (dataResult.rows.length > 0) {
+        let studentData: any = dataResult.rows[0].data
+        if (typeof studentData === "string") {
+          studentData = JSON.parse(studentData)
+        }
+        const student = studentData?.[normalizedId]
+        if (student?.dailyLog) {
+          const overrides = await fetchDayOverridesForStudent(normalizedId)
+          const effectiveLog = dailyLogWithOverrides(normalizedId, student.dailyLog, overrides)
+          startDate = findStreakMilestoneDate(effectiveLog, 25)
+        }
+      }
+    } catch (resolveError) {
+      console.error("Error resolving multiplier start from daily log:", resolveError)
+    }
+
+    if (!startDate) {
+      startDate = toDateOnly(badge.earned_at)
+    }
+
+    if (startDate) {
+      try {
+        const nextMeta = { ...metadata, multiplierStartsOn: startDate }
+        await sql`
+          UPDATE student_badges
+          SET metadata = ${JSON.stringify(nextMeta)}::jsonb
+          WHERE id = ${badge.id}
+        `
+      } catch (backfillError) {
+        console.error("Error backfilling multiplierStartsOn:", backfillError)
+      }
+    }
+
+    return startDate
+  } catch (error) {
+    console.error("Error getting multiplier start date:", error)
+    return null
+  }
+}
+
+/**
+ * Map of student_id -> multiplier start date for all students with the 25-day badge.
+ * Uses metadata.multiplierStartsOn when present, otherwise earned_at (YYYY-MM-DD).
+ */
+export async function getStreakMultiplierStartDates(): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  try {
+    const result = await sql`
+      SELECT student_id, earned_at, metadata
+      FROM student_badges
+      WHERE badge_type = 'streak_25_day'
+    `
+    for (const row of result.rows) {
+      const id = String(row.student_id || "").toLowerCase()
+      if (!id) continue
+      let metadata: Record<string, any> = {}
+      if (row.metadata) {
+        metadata = typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata
+      }
+      const start =
+        toDateOnly(metadata.multiplierStartsOn) || toDateOnly(row.earned_at)
+      if (start) map.set(id, start)
+    }
+  } catch (error) {
+    console.error("Error fetching multiplier start dates:", error)
+  }
+  return map
 }
 
 /**
@@ -377,8 +506,8 @@ export async function hasGrandMasterBadge(studentId: string): Promise<boolean> {
 
 /**
  * Sum a student's coins across every period in the same semester as `periodKey`.
- * Matches the student-facing total: override-aware daily coins, 2x multiplier when
- * the 25-day badge is earned, plus period-specific adjustments (not redemptions).
+ * Matches the student-facing total: override-aware daily coins, 2x only on days
+ * on/after the 25-day unlock date, plus period-specific adjustments (not redemptions).
  */
 export async function getStudentSemesterCoins(studentId: string, periodKey: string): Promise<number> {
   const parsed = parsePeriodKey(periodKey)
@@ -390,7 +519,7 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
 
   try {
     const overrides = await fetchDayOverridesForStudent(normalizedId)
-    const hasMultiplier = await hasStreakMultiplier(normalizedId)
+    const multiplierFromDate = await getStreakMultiplierStartDate(normalizedId)
 
     const result = await sql`
       SELECT data, period, COALESCE(section_number, 'default') as section_number, uploaded_at
@@ -446,11 +575,10 @@ export async function getStudentSemesterCoins(studentId: string, periodKey: stri
       if (!student?.dailyLog) continue
 
       const effectiveLog = dailyLogWithOverrides(normalizedId, student.dailyLog, overrides)
-      const { coins } = summarizeDailyCoins(effectiveLog)
-      const multipliedCoins = hasMultiplier ? coins * 2 : coins
+      const periodCoins = totalCoinsFromDailyLog(effectiveLog, multiplierFromDate)
       const adjustment =
         adjustmentsByPeriodSection.get(`${row.period}_${row.section_number}`) || 0
-      const periodTotal = multipliedCoins + adjustment
+      const periodTotal = periodCoins + adjustment
       const existing = coinsByPeriod.get(row.period) || 0
       if (periodTotal > existing) coinsByPeriod.set(row.period, periodTotal)
     }
@@ -678,19 +806,22 @@ export async function processBadgesForStudent(
     }
 
     // Check for 25-day streak badge
-    if (maxStreak >= 25) {
-      const hasIt = await hasStreakMultiplier(studentId)
-      if (!hasIt) {
-        const badge = await awardBadge(studentId, "streak_25_day", maxStreak, period, sectionNumber, {
-          maxStreak,
-          multiplierActive: true,
-        })
+    const hasTwentyFive = await hasStreakMultiplier(studentId)
+    if (maxStreak >= 25 && !hasTwentyFive) {
+      const multiplierStartsOn = findStreakMilestoneDate(effectiveLog, 25)
+      const badge = await awardBadge(studentId, "streak_25_day", maxStreak, period, sectionNumber, {
+        maxStreak,
+        multiplierActive: true,
+        multiplierStartsOn,
+      })
 
-        if (badge) {
-          badgesEarned.push(badge)
-          // No immediate coins awarded, but 2x multiplier is now active
-        }
+      if (badge) {
+        badgesEarned.push(badge)
+        // No immediate coins awarded; 2x applies from multiplierStartsOn forward
       }
+    } else if (hasTwentyFive) {
+      // Backfill unlock date on existing badges so coin math is not retroactive
+      await getStreakMultiplierStartDate(studentId)
     }
 
     // Holiday design badges: one unlock per break type (turkey / tree / fireworks / flower).

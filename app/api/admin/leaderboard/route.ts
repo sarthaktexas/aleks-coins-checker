@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin, requireProfessor } from "@/lib/admin-auth"
-import { summarizeDailyCoins } from "@/lib/day-credits"
+import { summarizeDailyCoins, totalCoinsFromDailyLog } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
-import { ensureBadgesSchema } from "@/lib/badges"
+import { ensureBadgesSchema, getStreakMultiplierStartDates } from "@/lib/badges"
 
 export const dynamic = "force-dynamic"
 
@@ -202,16 +202,11 @@ export async function GET(request: NextRequest) {
       adjustmentsByStudent.set(studentId, current + adj.adjustment_amount)
     })
 
-    // Get all students who have the 2x multiplier badge
-    let studentsWithMultiplier = new Set<string>()
+    // 2x starts on the unlock day forward (not retroactive)
+    let multiplierStartByStudent = new Map<string, string>()
     let badgesByStudent = new Map<string, any[]>()
     try {
-      const multiplierResult = await sql`
-        SELECT DISTINCT student_id
-        FROM student_badges
-        WHERE badge_type = 'streak_25_day'
-      `
-      studentsWithMultiplier = new Set(multiplierResult.rows.map(r => r.student_id.toLowerCase()))
+      multiplierStartByStudent = await getStreakMultiplierStartDates()
 
       // Get all badges for students in this period/section
       const badgesResult = await sql`
@@ -236,17 +231,18 @@ export async function GET(request: NextRequest) {
     const studentsWithCoins = Object.keys(studentData).map(sId => {
       const student = studentData[sId]
       const adjustment = adjustmentsByStudent.get(sId.toLowerCase()) || 0
-      const hasMultiplier = studentsWithMultiplier.has(sId.toLowerCase())
-      const badges = badgesByStudent.get(sId.toLowerCase()) || []
-      
-      // Apply 2x multiplier to base coins if student has the badge
+      const normalized = sId.toLowerCase()
+      const badges = badgesByStudent.get(normalized) || []
+      const multiplierFromDate = multiplierStartByStudent.get(normalized) || null
+      const hasMultiplier = !!multiplierFromDate
+
       const baseCoins = student.coins
-      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+      const multipliedCoins = totalCoinsFromDailyLog(student.dailyLog || [], multiplierFromDate)
       const totalCoins = multipliedCoins + adjustment
       const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog)
       
       return {
-        studentId: sId.toLowerCase(),
+        studentId: normalized,
         name: student.name,
         email: student.email,
         totalCoins,
@@ -258,6 +254,7 @@ export async function GET(request: NextRequest) {
         coinOnlyExemptCredits: student.coinOnlyExemptCredits || 0,
         percentComplete: student.percentComplete,
         hasMultiplier,
+        multiplierFromDate,
         badges
       }
     })

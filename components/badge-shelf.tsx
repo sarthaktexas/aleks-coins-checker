@@ -58,7 +58,7 @@ const SLOTS: FixedShelfSlot[] = [
     kind: "streak_25_day",
     name: "25-Day Streak",
     requirement: 25,
-    reward: "2× coins forever",
+    reward: "2× from unlock day",
   },
   {
     kind: "holiday_slot",
@@ -434,8 +434,8 @@ export function BadgeShelf({
           <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
             <Star className="h-4 w-4 text-amber-600" />
             <p className="text-xs text-amber-900">
-              <span className="font-semibold">2× multiplier is on.</span> Every future daily coin is
-              doubled, even if the streak breaks.
+              <span className="font-semibold">2× multiplier is on.</span> Daily coins from the unlock
+              day forward are doubled, even if the streak breaks.
             </p>
           </div>
         )}
