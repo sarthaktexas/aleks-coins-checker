@@ -1,9 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
-import { bustStudentDataCache } from "@/lib/student-cache"
+import { bustStudentDataCache, STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import {
+  listLatestUploadMeta,
+  loadSlimStudentRoster,
+} from "@/lib/student-data-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -26,35 +31,28 @@ type StudentData = {
 
 async function applyOverridesToStudentData(studentData: StudentData): Promise<StudentData> {
   try {
-    // Get all overrides including date field to match by date instead of day_number
-    // This ensures overrides from one period don't apply to another period
     const overridesResult = await sql`
       SELECT student_id, day_number, date, override_type, reason
       FROM student_day_overrides
     `
 
     const overridesMap = buildOverridesMap(overridesResult.rows)
-
-    // Apply overrides to each student's daily log
     const updatedStudentData = { ...studentData }
-    
-    Object.keys(updatedStudentData).forEach(studentId => {
+
+    Object.keys(updatedStudentData).forEach((studentId) => {
       const student = updatedStudentData[studentId]
       const studentOverrides = overridesMap.get(studentId.toLowerCase())
-      
+
       if (student.dailyLog) {
-        // Apply overrides to daily log by matching date (not day_number) if they exist
         if (studentOverrides) {
-          student.dailyLog = student.dailyLog.map(day => {
+          student.dailyLog = student.dailyLog.map((day) => {
             const override = studentOverrides.get(normalizeOverrideDate(day.date))
             if (override) return applyOverrideToDay(day, override)
             return day
           })
         }
 
-        // Always recalculate totals based on daily log (with or without overrides)
         const summary = summarizeDailyCoins(student.dailyLog)
-
         student.percentComplete = summary.percentComplete
         student.coins = summary.coins
         student.exemptDayCredits = summary.exemptDayCredits
@@ -68,10 +66,21 @@ async function applyOverridesToStudentData(studentData: StudentData): Promise<St
     return updatedStudentData
   } catch (error) {
     console.error("Error applying overrides:", error)
-    return studentData // Return original data if override application fails
+    return studentData
   }
 }
 
+/**
+ * GET /api/admin/student-data
+ *
+ * Always returns upload metadata without shipping JSONB blobs.
+ *
+ * Full class blobs (with dailyLog) are only loaded when a period is specified
+ * and `slim` is not set — e.g. View Data for one section.
+ *
+ * `includeStudents=1` without a full detail view returns a slim roster
+ * (name/email/coins/progress scalars only) for email tooling.
+ */
 export async function GET(request: NextRequest) {
   try {
     const session = await requireAdmin(request)
@@ -80,295 +89,107 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get("period")
     const sectionNumber = searchParams.get("sectionNumber")
+    const includeStudents =
+      searchParams.get("includeStudents") === "1" ||
+      searchParams.get("includeStudents") === "true"
+    const slim =
+      searchParams.get("slim") === "1" ||
+      searchParams.get("slim") === "true" ||
+      // Email / list callers that ask for students without a concrete section
+      // almost never need dailyLog — keep egress small by default.
+      (includeStudents && !period)
 
-    // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
-      return NextResponse.json({ 
-        error: "Database not configured",
-        uploadRecords: [],
-        studentData: {}
-      }, { status: 503 })
+      return NextResponse.json(
+        {
+          error: "Database not configured",
+          uploadRecords: [],
+          studentData: {},
+          uniqueStudentCount: 0,
+        },
+        { status: 503 },
+      )
     }
 
-    // Get upload records - handle both old and new schema
-    let uploadRecords
-    try {
-      // First, check if the section_number column exists
-      const columnCheck = await sql`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'student_data' AND column_name = 'section_number'
-      `
-      
-      if (columnCheck.rows.length > 0) {
-        // Column exists, use it
-        uploadRecords = await sql`
-          SELECT 
-            id,
-            period,
-            COALESCE(section_number, 'default') as section_number,
-            uploaded_at,
-            data
-          FROM student_data 
-          ORDER BY uploaded_at DESC
-        `
-      } else {
-        // Column doesn't exist, use fallback
-        uploadRecords = await sql`
-          SELECT 
-            id,
-            period,
-            'default' as section_number,
-            uploaded_at,
-            data
-          FROM student_data 
-          ORDER BY uploaded_at DESC
-        `
-      }
-    } catch (error) {
-      console.error("Error checking column or querying data:", error)
-      // Final fallback - try the old schema query
-      uploadRecords = await sql`
-        SELECT 
-          id,
-          period,
-          'default' as section_number,
-          uploaded_at,
-          data
-        FROM student_data 
-        ORDER BY uploaded_at DESC
-      `
-    }
+    const { uploadRecords, uniqueStudentCount } = await unstable_cache(
+      () => listLatestUploadMeta(),
+      ["admin-upload-meta"],
+      { revalidate: 300, tags: [STUDENT_DATA_CACHE_TAG] },
+    )()
 
-    let studentData = {}
+    let studentData: StudentData | Record<string, any> = {}
 
-    // If a period is requested, get that data (section is optional)
-    // If no period is requested, get all students from all periods
-    if (period) {
-      let result
-      try {
-        // Check if section_number column exists first
-        const columnCheck = await sql`
-          SELECT column_name 
-          FROM information_schema.columns 
-          WHERE table_name = 'student_data' AND column_name = 'section_number'
-        `
-        
-        if (columnCheck.rows.length > 0) {
-          // Column exists
-          if (sectionNumber) {
-            // Specific section requested
-            result = await sql`
-              SELECT data, uploaded_at, section_number
-              FROM student_data 
-              WHERE period = ${period} AND COALESCE(section_number, 'default') = ${sectionNumber}
-              ORDER BY uploaded_at DESC 
-              LIMIT 1
-            `
-          } else {
-            // All sections requested - get latest upload for each section and merge
-            result = await sql`
-              SELECT data, uploaded_at, section_number
-              FROM student_data 
-              WHERE period = ${period}
-              ORDER BY uploaded_at DESC
-            `
-          }
-        } else {
-          // Column doesn't exist, use fallback
-          result = await sql`
-            SELECT data, uploaded_at, 'default' as section_number
-            FROM student_data 
-            WHERE period = ${period}
-            ORDER BY uploaded_at DESC 
-            LIMIT 1
-          `
-        }
-      } catch (error) {
-        console.error("Error querying student data:", error)
-        // Final fallback
-        result = await sql`
-          SELECT data, uploaded_at, 'default' as section_number
-          FROM student_data 
+    const wantsStudentPayload = Boolean(period) || includeStudents
+
+    if (wantsStudentPayload) {
+      if (slim || !period) {
+        studentData = await loadSlimStudentRoster({ period, sectionNumber })
+      } else if (sectionNumber) {
+        const result = await sql`
+          SELECT data, uploaded_at, section_number
+          FROM student_data
           WHERE period = ${period}
-          ORDER BY uploaded_at DESC 
+            AND COALESCE(section_number, 'default') = ${sectionNumber}
+          ORDER BY uploaded_at DESC
           LIMIT 1
         `
-      }
-
-      if (result.rows.length > 0) {
-        if (sectionNumber) {
-          // Single section - use first result
+        if (result.rows.length > 0) {
           const row = result.rows[0]
-          if (typeof row.data === "string") {
-            studentData = JSON.parse(row.data)
-          } else {
-            studentData = row.data
-          }
-        } else {
-          // Multiple sections - merge data, keeping most recent for each student
-          const studentDataMap = new Map<string, { data: any, uploadedAt: string }>()
-          
+          studentData =
+            typeof row.data === "string" ? JSON.parse(row.data) : row.data
+          studentData = await applyOverridesToStudentData(studentData as StudentData)
+        }
+      } else {
+        // All sections for a period — latest upload per section, then merge.
+        const result = await sql`
+          SELECT DISTINCT ON (COALESCE(section_number, 'default'))
+            data, uploaded_at, COALESCE(section_number, 'default') AS section_number
+          FROM student_data
+          WHERE period = ${period}
+          ORDER BY COALESCE(section_number, 'default'), uploaded_at DESC
+        `
+
+        if (result.rows.length > 0) {
+          const studentDataMap = new Map<string, { data: any; uploadedAt: string }>()
           for (const row of result.rows) {
-            let rowData: any
-            if (typeof row.data === "string") {
-              rowData = JSON.parse(row.data)
-            } else {
-              rowData = row.data
-            }
-            
-            // For each student in this section's data, keep the most recent upload
-            Object.keys(rowData).forEach(studentId => {
+            const rowData =
+              typeof row.data === "string" ? JSON.parse(row.data) : row.data
+            Object.keys(rowData || {}).forEach((studentId) => {
               const existing = studentDataMap.get(studentId)
               if (!existing || new Date(row.uploaded_at) > new Date(existing.uploadedAt)) {
                 studentDataMap.set(studentId, {
                   data: rowData[studentId],
-                  uploadedAt: row.uploaded_at
+                  uploadedAt: row.uploaded_at,
                 })
               }
             })
           }
-          
-          // Convert map back to object
-          studentData = {}
+          const merged: StudentData = {}
           studentDataMap.forEach((value, studentId) => {
-            studentData[studentId] = value.data
+            merged[studentId] = value.data
           })
+          studentData = await applyOverridesToStudentData(merged)
         }
-        
-        // Apply overrides to student data to match what students see
-        studentData = await applyOverridesToStudentData(studentData)
-      }
-    } else {
-      // No period specified - load all students from all periods
-      // Get latest upload for each period/section combination and merge
-      let result
-      try {
-        const columnCheck = await sql`
-          SELECT column_name 
-          FROM information_schema.columns 
-          WHERE table_name = 'student_data' AND column_name = 'section_number'
-        `
-        
-        if (columnCheck.rows.length > 0) {
-          if (sectionNumber) {
-            // Specific section across all periods
-            result = await sql`
-              SELECT data, uploaded_at, section_number, period
-              FROM student_data 
-              WHERE COALESCE(section_number, 'default') = ${sectionNumber}
-              ORDER BY uploaded_at DESC
-            `
-          } else {
-            // All sections across all periods
-            result = await sql`
-              SELECT data, uploaded_at, section_number, period
-              FROM student_data 
-              ORDER BY uploaded_at DESC
-            `
-          }
-        } else {
-          // Column doesn't exist
-          result = await sql`
-            SELECT data, uploaded_at, 'default' as section_number, period
-            FROM student_data 
-            ORDER BY uploaded_at DESC
-          `
-        }
-      } catch (error) {
-        console.error("Error querying all student data:", error)
-        result = await sql`
-          SELECT data, uploaded_at, 'default' as section_number, period
-          FROM student_data 
-          ORDER BY uploaded_at DESC
-        `
-      }
-
-      if (result.rows.length > 0) {
-        // Merge data from all periods, keeping most recent for each student
-        const studentDataMap = new Map<string, { data: any, uploadedAt: string }>()
-        
-        for (const row of result.rows) {
-          let rowData: any
-          if (typeof row.data === "string") {
-            rowData = JSON.parse(row.data)
-          } else {
-            rowData = row.data
-          }
-          
-          // For each student, keep the most recent upload
-          Object.keys(rowData).forEach(studentId => {
-            const existing = studentDataMap.get(studentId)
-            if (!existing || new Date(row.uploaded_at) > new Date(existing.uploadedAt)) {
-              studentDataMap.set(studentId, {
-                data: rowData[studentId],
-                uploadedAt: row.uploaded_at
-              })
-            }
-          })
-        }
-        
-        // Convert map back to object
-        studentData = {}
-        studentDataMap.forEach((value, studentId) => {
-          studentData[studentId] = value.data
-        })
-        
-        // Apply overrides to student data
-        studentData = await applyOverridesToStudentData(studentData)
-      }
-    }
-
-    // Group uploads by period and section, keeping only the latest upload for each combination
-    const latestUploads = new Map<string, any>()
-    const uniqueStudentIds = new Set<string>()
-    
-    uploadRecords.rows.forEach(row => {
-      const key = `${row.period}-${row.section_number || 'default'}`
-      const data = typeof row.data === "string" ? JSON.parse(row.data) : row.data || {}
-      
-      // Only keep if this is the first time we see this period/section combo
-      // or if this upload is newer than what we have
-      if (!latestUploads.has(key) || new Date(row.uploaded_at) > new Date(latestUploads.get(key).uploaded_at)) {
-        latestUploads.set(key, {
-          id: row.id,
-          period: row.period,
-          section_number: row.section_number,
-          uploaded_at: row.uploaded_at,
-          student_count: Object.keys(data).length
-        })
-      }
-    })
-    
-    // Calculate unique student count across ALL latest uploads
-    for (const upload of latestUploads.values()) {
-      // Find the row data for this upload
-      const rowData = uploadRecords.rows.find(row => 
-        row.period === upload.period && 
-        (row.section_number || 'default') === upload.section_number
-      )
-      if (rowData) {
-        const data = typeof rowData.data === "string" ? JSON.parse(rowData.data) : rowData.data || {}
-        Object.keys(data).forEach(studentId => {
-          uniqueStudentIds.add(studentId)
-        })
       }
     }
 
     return NextResponse.json({
       success: true,
-      uploadRecords: Array.from(latestUploads.values()),
+      uploadRecords,
       studentData,
-      uniqueStudentCount: uniqueStudentIds.size
+      uniqueStudentCount,
     })
   } catch (error) {
     console.error("Error fetching student data:", error)
     return NextResponse.json(
-      { 
+      {
         error: "Failed to fetch student data",
-        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined
+        details:
+          process.env.NODE_ENV === "development"
+            ? (error as Error).message
+            : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

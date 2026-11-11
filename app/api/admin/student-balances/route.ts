@@ -3,74 +3,51 @@ import { sql } from "@vercel/postgres"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { summarizeDailyCoins } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
+import { loadStudentSlicesByIds } from "@/lib/student-data-queries"
 
-type StudentData = {
-  [studentId: string]: {
-    name: string
-    email: string
-    coins: number
-    totalDays: number
-    periodDays: number
-    percentComplete: number
-    dailyLog: any[]
-    exemptDayCredits?: number
-    coinOnlyExemptCredits?: number
-    doubleCoinsEarned?: number
-    holidayDaysCompleted?: number
-    holidayCoinsEarned?: number
-  }
+type StudentRecord = {
+  name: string
+  email: string
+  coins: number
+  totalDays: number
+  periodDays: number
+  percentComplete: number
+  dailyLog: any[]
+  exemptDayCredits?: number
+  coinOnlyExemptCredits?: number
+  doubleCoinsEarned?: number
+  holidayDaysCompleted?: number
+  holidayCoinsEarned?: number
 }
 
-async function applyOverridesToStudentData(studentData: StudentData, studentId?: string): Promise<StudentData> {
-  try {
-    // Get all overrides including date field to match by date instead of day_number
-    // We fetch all and filter in memory to avoid SQL syntax issues with conditional WHERE
-    const overridesResult = await sql`
-      SELECT student_id, day_number, date, override_type, reason
-      FROM student_day_overrides
-    `
-    
-    // Filter by studentId if provided
-    const filteredOverrides = studentId 
-      ? overridesResult.rows.filter(override => override.student_id.toLowerCase() === studentId.toLowerCase())
-      : overridesResult.rows
+function applyOverridesToStudent(
+  studentId: string,
+  student: StudentRecord,
+  overridesMap: ReturnType<typeof buildOverridesMap>,
+): StudentRecord {
+  const updated = { ...student, dailyLog: student.dailyLog ? [...student.dailyLog] : [] }
+  const studentOverrides = overridesMap.get(studentId.toLowerCase())
 
-    const overridesMap = buildOverridesMap(filteredOverrides)
+  if (updated.dailyLog) {
+    if (studentOverrides) {
+      updated.dailyLog = updated.dailyLog.map((day) => {
+        const override = studentOverrides.get(normalizeOverrideDate(day.date))
+        if (override) return applyOverrideToDay(day, override)
+        return day
+      })
+    }
 
-    // Apply overrides to each student's daily log
-    const updatedStudentData = { ...studentData }
-    
-    Object.keys(updatedStudentData).forEach(sId => {
-      const student = updatedStudentData[sId]
-      const studentOverrides = overridesMap.get(sId.toLowerCase())
-      
-      if (student.dailyLog) {
-        if (studentOverrides) {
-          student.dailyLog = student.dailyLog.map(day => {
-            const override = studentOverrides.get(normalizeOverrideDate(day.date))
-            if (override) return applyOverrideToDay(day, override)
-            return day
-          })
-        }
-
-        // Recalculate totals based on daily log (includes holiday 5-coin days + double coins)
-        const summary = summarizeDailyCoins(student.dailyLog)
-
-        student.percentComplete = summary.percentComplete
-        student.coins = summary.coins
-        student.exemptDayCredits = summary.exemptDayCredits
-        student.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
-        student.holidayDaysCompleted = summary.holidayDaysCompleted
-        student.holidayCoinsEarned = summary.holidayCoinsEarned
-        student.doubleCoinsEarned = summary.doubleCoinsEarned
-      }
-    })
-
-    return updatedStudentData
-  } catch (error) {
-    console.error("Error applying overrides:", error)
-    return studentData
+    const summary = summarizeDailyCoins(updated.dailyLog)
+    updated.percentComplete = summary.percentComplete
+    updated.coins = summary.coins
+    updated.exemptDayCredits = summary.exemptDayCredits
+    updated.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
+    updated.holidayDaysCompleted = summary.holidayDaysCompleted
+    updated.holidayCoinsEarned = summary.holidayCoinsEarned
+    updated.doubleCoinsEarned = summary.doubleCoinsEarned
   }
+
+  return updated
 }
 
 export async function POST(request: NextRequest) {
@@ -85,77 +62,75 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "studentIds array is required" }, { status: 400 })
     }
 
-    // Check if database is available
     if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
       return NextResponse.json({ error: "Database not configured" }, { status: 503 })
     }
 
-    // Normalize student IDs to lowercase
-    const normalizedIds = studentIds.map(id => id.toLowerCase())
+    const normalizedIds = studentIds.map((id: string) => id.toLowerCase())
     const studentIdsSet = new Set(normalizedIds)
 
-    // Get all periods for these students
-    const result = await sql`
-      SELECT data, period, section_number, uploaded_at 
-      FROM student_data 
-      ORDER BY uploaded_at DESC
-    `
+    // Only pull matching student objects from latest period/section uploads
+    const slices = await loadStudentSlicesByIds(normalizedIds)
 
-    // Group periods by student ID
-    const studentPeriods = new Map<string, Array<{ period: string, section: string, data: any, uploadedAt: string }>>()
-    const processedPeriods = new Set<string>()
+    const studentPeriods = new Map<
+      string,
+      Array<{ period: string; section: string; data: StudentRecord; uploadedAt: string }>
+    >()
 
-    for (const row of result.rows) {
-      let rowStudentData: StudentData
-      if (typeof row.data === "string") {
-        rowStudentData = JSON.parse(row.data)
-      } else {
-        rowStudentData = row.data as StudentData
-      }
+    for (const slice of slices) {
+      if (!slice.student || typeof slice.student !== "object") continue
+      if (!studentPeriods.has(slice.studentId)) studentPeriods.set(slice.studentId, [])
+      studentPeriods.get(slice.studentId)!.push({
+        period: slice.period,
+        section: slice.section,
+        data: slice.student as StudentRecord,
+        uploadedAt: slice.uploadedAt,
+      })
+    }
 
-      const periodKey = `${row.period}_${row.section_number || 'default'}`
-      
-      if (!processedPeriods.has(periodKey)) {
-        Object.keys(rowStudentData).forEach(studentId => {
-          const normalizedId = studentId.toLowerCase()
-          if (studentIdsSet.has(normalizedId)) {
-            if (!studentPeriods.has(normalizedId)) {
-              studentPeriods.set(normalizedId, [])
-            }
-            
-            studentPeriods.get(normalizedId)!.push({
-              period: row.period,
-              section: row.section_number || 'default',
-              data: rowStudentData[studentId],
-              uploadedAt: row.uploaded_at
-            })
-          }
-        })
-        
-        processedPeriods.add(periodKey)
+    // One overrides query for all requested students (not per-period N+1)
+    let overridesMap = buildOverridesMap([] as any[])
+    try {
+      const overridesResult = await sql`
+        SELECT student_id, day_number, date, override_type, reason
+        FROM student_day_overrides
+        WHERE LOWER(student_id) = ANY(${normalizedIds as any}::text[])
+      `
+      overridesMap = buildOverridesMap(overridesResult.rows as any[])
+    } catch (error) {
+      console.error("Error fetching overrides for balances:", error)
+      try {
+        const allOverrides = await sql`
+          SELECT student_id, day_number, date, override_type, reason
+          FROM student_day_overrides
+        `
+        overridesMap = buildOverridesMap(
+          allOverrides.rows.filter((row) =>
+            studentIdsSet.has(String(row.student_id).toLowerCase()),
+          ) as any[],
+        )
+      } catch (fallbackError) {
+        console.error("Error in overrides fallback:", fallbackError)
       }
     }
 
-    // Get all coin adjustments for these students
     let coinAdjustments: any[] = []
     try {
-      // Build query with proper array handling for Vercel Postgres
       const adjustmentsResult = await sql`
-        SELECT 
+        SELECT
           student_id,
           period,
           section_number,
           adjustment_amount
         FROM coin_adjustments
-        WHERE LOWER(student_id) = ANY(${normalizedIds}::text[]) AND is_active = true
+        WHERE LOWER(student_id) = ANY(${normalizedIds as any}::text[]) AND is_active = true
       `
       coinAdjustments = adjustmentsResult.rows
     } catch (error) {
       console.error("Error fetching coin adjustments:", error)
-      // Fallback: fetch all adjustments and filter in memory
       try {
         const allAdjustmentsResult = await sql`
-          SELECT 
+          SELECT
             student_id,
             period,
             section_number,
@@ -163,80 +138,76 @@ export async function POST(request: NextRequest) {
           FROM coin_adjustments
           WHERE is_active = true
         `
-        coinAdjustments = allAdjustmentsResult.rows.filter(adj => 
-          studentIdsSet.has(adj.student_id.toLowerCase())
+        coinAdjustments = allAdjustmentsResult.rows.filter((adj) =>
+          studentIdsSet.has(adj.student_id.toLowerCase()),
         )
       } catch (fallbackError) {
         console.error("Error in fallback query:", fallbackError)
       }
     }
 
-    // Organize adjustments by student and period
-    const adjustmentsByStudent = new Map<string, { byPeriod: Map<string, number>, global: number }>()
-    
-    coinAdjustments.forEach(adj => {
+    const adjustmentsByStudent = new Map<
+      string,
+      { byPeriod: Map<string, number>; global: number }
+    >()
+
+    coinAdjustments.forEach((adj) => {
       const normalizedId = adj.student_id.toLowerCase()
       if (!adjustmentsByStudent.has(normalizedId)) {
         adjustmentsByStudent.set(normalizedId, { byPeriod: new Map(), global: 0 })
       }
-      
+
       const studentAdjustments = adjustmentsByStudent.get(normalizedId)!
-      
-      if (adj.period === '__GLOBAL__' || adj.period === null || adj.period === undefined) {
+
+      if (adj.period === "__GLOBAL__" || adj.period === null || adj.period === undefined) {
         studentAdjustments.global += adj.adjustment_amount
       } else {
-        const periodKey = `${adj.period}_${adj.section_number || 'default'}`
+        const periodKey = `${adj.period}_${adj.section_number || "default"}`
         const current = studentAdjustments.byPeriod.get(periodKey) || 0
         studentAdjustments.byPeriod.set(periodKey, current + adj.adjustment_amount)
       }
     })
 
-    // Calculate total balance for each student
     const balances: Record<string, number> = {}
 
     for (const studentId of normalizedIds) {
       const periods = studentPeriods.get(studentId) || []
-      const studentAdjustments = adjustmentsByStudent.get(studentId) || { byPeriod: new Map(), global: 0 }
-
-      // Calculate coins for each period with overrides and adjustments
-      let totalCoinsFromPeriods = 0
-      
-      for (const periodData of periods) {
-        // Apply overrides to this period's data
-        const tempStudentData: StudentData = { [studentId]: periodData.data }
-        const overriddenData = await applyOverridesToStudentData(tempStudentData, studentId)
-        const studentWithOverrides = overriddenData[studentId]
-        
-        if (studentWithOverrides) {
-          // Get period-specific adjustment
-          const periodKey = `${periodData.period}_${periodData.section}`
-          const periodAdjustment = studentAdjustments.byPeriod.get(periodKey) || 0
-          
-          // Calculate total coins for this period: coins + period adjustment
-          const periodTotalCoins = (studentWithOverrides.coins || 0) + periodAdjustment
-          totalCoinsFromPeriods += periodTotalCoins
-        }
+      const studentAdjustments = adjustmentsByStudent.get(studentId) || {
+        byPeriod: new Map(),
+        global: 0,
       }
 
-      // Calculate total: sum of (period coins + period adjustments) + global adjustments
-      // Clamp to 0 minimum - students can't have negative coins
+      let totalCoinsFromPeriods = 0
+
+      for (const periodData of periods) {
+        const studentWithOverrides = applyOverridesToStudent(
+          studentId,
+          periodData.data,
+          overridesMap,
+        )
+        const periodKey = `${periodData.period}_${periodData.section}`
+        const periodAdjustment = studentAdjustments.byPeriod.get(periodKey) || 0
+        totalCoinsFromPeriods += (studentWithOverrides.coins || 0) + periodAdjustment
+      }
+
       balances[studentId] = Math.max(0, totalCoinsFromPeriods + studentAdjustments.global)
     }
 
     return NextResponse.json({
       success: true,
-      balances
+      balances,
     })
   } catch (error) {
     console.error("Error calculating student balances:", error)
     return NextResponse.json(
-      { 
+      {
         error: "Failed to calculate student balances",
-        details: process.env.NODE_ENV === "development" ? (error as Error).message : undefined
+        details:
+          process.env.NODE_ENV === "development"
+            ? (error as Error).message
+            : undefined,
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
-
-

@@ -106,10 +106,14 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
 ]
 
+/** Skip repeated DDL on warm serverless instances (egress + latency). */
+let badgesSchemaReady = false
+
 /**
  * Ensure the student_badges table exists
  */
 export async function ensureBadgesSchema() {
+  if (badgesSchemaReady) return
   await sql`
     CREATE TABLE IF NOT EXISTS student_badges (
       id SERIAL PRIMARY KEY,
@@ -184,6 +188,7 @@ export async function ensureBadgesSchema() {
     ON student_badges (student_id)
     WHERE badge_type = 'grand_master'
   `
+  badgesSchemaReady = true
 }
 
 /**
