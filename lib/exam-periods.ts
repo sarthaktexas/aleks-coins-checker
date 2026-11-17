@@ -10,6 +10,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-01-20`, `${CURRENT_YEAR}-02-03`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   spring2025_exam2: {
     name: `Spring ${CURRENT_YEAR} - Exam 2 Period`,
@@ -18,6 +20,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-02-17`, `${CURRENT_YEAR}-03-03`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   spring2025_exam3: {
     name: `Spring ${CURRENT_YEAR} - Exam 3 Period`,
@@ -26,6 +30,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-03-17`, `${CURRENT_YEAR}-03-31`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   spring2025_final: {
     name: `Spring ${CURRENT_YEAR} - Final Exam Period`,
@@ -34,6 +40,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-04-21`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   summer2025_exam1: {
     name: `Summer ${CURRENT_YEAR} - Exam 1 Period`,
@@ -42,6 +50,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-06-07`, `${CURRENT_YEAR}-06-08`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   summer2025_exam2: {
     name: `Summer ${CURRENT_YEAR} - Exam 2 Period`,
@@ -50,6 +60,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-07-04`, `${CURRENT_YEAR}-07-05`, `${CURRENT_YEAR}-07-06`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   summer2025_exam3: {
     name: `Summer ${CURRENT_YEAR} - Exam 3 Period`,
@@ -58,6 +70,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-07-26`, `${CURRENT_YEAR}-07-27`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   summer2025_final: {
     name: `Summer ${CURRENT_YEAR} - Final Exam Period`,
@@ -66,6 +80,8 @@ export const EXAM_PERIODS = {
     excludedDates: [],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   fall2025_exam1: {
     name: `Fall ${CURRENT_YEAR} - Exam 1 Period`,
@@ -74,6 +90,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-09-02`, `${CURRENT_YEAR}-09-16`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   fall2025_exam2: {
     name: `Fall ${CURRENT_YEAR} - Exam 2 Period`,
@@ -82,6 +100,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-10-14`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   fall2025_exam3: {
     name: `Fall ${CURRENT_YEAR} - Exam 3 Period`,
@@ -90,6 +110,8 @@ export const EXAM_PERIODS = {
     excludedDates: [`${CURRENT_YEAR}-11-11`],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
   fall2025_final: {
     name: `Fall ${CURRENT_YEAR} - Final Exam Period`,
@@ -104,6 +126,8 @@ export const EXAM_PERIODS = {
     ],
     coinOnlyExemptDates: [],
     doubleCoinsDays: [],
+    holidayDays: [],
+    holidayLabels: {},
   },
 } as const
 

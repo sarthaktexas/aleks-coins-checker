@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
+import { sendResendEmail } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -28,14 +29,6 @@ async function sendOptionalEmail(opts: {
   description: string
   userAgent?: string
 }) {
-  const apiKey = process.env.RESEND_API_KEY
-  const toEmail = process.env.BUG_REPORT_EMAIL || "sarthaktexas@gmail.com"
-
-  if (!apiKey) {
-    return { emailed: false as const, reason: "email_not_configured" as const }
-  }
-
-  const fromEmail = process.env.BUG_REPORT_FROM_EMAIL || "onboarding@resend.dev"
   const subject = `[ALEKS Portal] Bug report #${opts.id}`
   const text = [
     `Bug report #${opts.id}`,
@@ -53,28 +46,11 @@ async function sendOptionalEmail(opts: {
     "View in admin: /admin/bug-reports",
   ].join("\n")
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [toEmail],
-      subject,
-      text,
-      ...(opts.contactEmail ? { reply_to: opts.contactEmail } : {}),
-    }),
+  return sendResendEmail({
+    subject,
+    text,
+    replyTo: opts.contactEmail,
   })
-
-  if (!response.ok) {
-    const details = await response.text()
-    console.error("Resend email failed:", details)
-    return { emailed: false as const, reason: "email_send_failed" as const }
-  }
-
-  return { emailed: true as const }
 }
 
 export async function POST(request: NextRequest) {

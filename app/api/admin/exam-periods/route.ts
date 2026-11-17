@@ -23,6 +23,14 @@ async function ensureExamPeriodsSchema() {
     ALTER TABLE exam_periods
     ADD COLUMN IF NOT EXISTS double_coins_dates JSONB DEFAULT '[]'::jsonb
   `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS holiday_dates JSONB DEFAULT '[]'::jsonb
+  `
+  await sql`
+    ALTER TABLE exam_periods
+    ADD COLUMN IF NOT EXISTS holiday_labels JSONB DEFAULT '{}'::jsonb
+  `
 }
 
 // GET - Fetch all exam periods
@@ -48,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all exam periods
     const result = await sql`
-      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates
+      SELECT period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates, holiday_labels
       FROM exam_periods
       ORDER BY start_date ASC
     `
@@ -72,6 +80,8 @@ export async function GET(request: NextRequest) {
         excludedDates: row.excluded_dates || [],
         coinOnlyExemptDates: row.coin_only_exempt_dates || [],
         doubleCoinsDays: row.double_coins_dates || [],
+        holidayDays: row.holiday_dates || [],
+        holidayLabels: row.holiday_labels || {},
       }
     })
 
@@ -92,7 +102,17 @@ export async function POST(request: NextRequest) {
     if (professorGate !== true) return professorGate
 
     const body = await request.json()
-    const { periodKey, name, startDate, endDate, excludedDates, coinOnlyExemptDates, doubleCoinsDays } = body
+    const {
+      periodKey,
+      name,
+      startDate,
+      endDate,
+      excludedDates,
+      coinOnlyExemptDates,
+      doubleCoinsDays,
+      holidayDays,
+      holidayLabels,
+    } = body
 
     // Validate required fields
     if (!periodKey || !name || !startDate || !endDate) {
@@ -102,15 +122,27 @@ export async function POST(request: NextRequest) {
     const standardExempt = Array.isArray(excludedDates) ? excludedDates : []
     const coinOnlyExempt = Array.isArray(coinOnlyExemptDates) ? coinOnlyExemptDates : []
     const doubleCoins = Array.isArray(doubleCoinsDays) ? doubleCoinsDays : []
-    
+    const holidays = Array.isArray(holidayDays) ? holidayDays : []
+    const labels =
+      holidayLabels && typeof holidayLabels === "object" && !Array.isArray(holidayLabels)
+        ? Object.fromEntries(
+            Object.entries(holidayLabels).filter(([date]) => holidays.includes(date)),
+          )
+        : {}
+
     // Check for overlaps between special day types
-    const overlap1 = standardExempt.filter((d: string) => coinOnlyExempt.includes(d))
-    const overlap2 = standardExempt.filter((d: string) => doubleCoins.includes(d))
-    const overlap3 = coinOnlyExempt.filter((d: string) => doubleCoins.includes(d))
-    if (overlap1.length > 0 || overlap2.length > 0 || overlap3.length > 0) {
-      const allOverlaps = [...new Set([...overlap1, ...overlap2, ...overlap3])]
+    const lists = [standardExempt, coinOnlyExempt, doubleCoins, holidays]
+    const allOverlaps = new Set<string>()
+    for (let i = 0; i < lists.length; i++) {
+      for (let j = i + 1; j < lists.length; j++) {
+        for (const date of lists[i]) {
+          if (lists[j].includes(date)) allOverlaps.add(date)
+        }
+      }
+    }
+    if (allOverlaps.size > 0) {
       return NextResponse.json(
-        { error: `A date cannot have multiple special day types: ${allOverlaps.join(", ")}` },
+        { error: `A date cannot have multiple special day types: ${[...allOverlaps].join(", ")}` },
         { status: 400 },
       )
     }
@@ -130,8 +162,8 @@ export async function POST(request: NextRequest) {
 
     // Insert or update the exam period
     const result = await sql`
-      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, updated_at)
-      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(standardExempt)}, ${JSON.stringify(coinOnlyExempt)}, ${JSON.stringify(doubleCoins)}, NOW())
+      INSERT INTO exam_periods (period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates, holiday_labels, updated_at)
+      VALUES (${periodKey}, ${name}, ${startDate}, ${endDate}, ${JSON.stringify(standardExempt)}, ${JSON.stringify(coinOnlyExempt)}, ${JSON.stringify(doubleCoins)}, ${JSON.stringify(holidays)}, ${JSON.stringify(labels)}, NOW())
       ON CONFLICT (period_key) 
       DO UPDATE SET 
         name = EXCLUDED.name,
@@ -140,8 +172,10 @@ export async function POST(request: NextRequest) {
         excluded_dates = EXCLUDED.excluded_dates,
         coin_only_exempt_dates = EXCLUDED.coin_only_exempt_dates,
         double_coins_dates = EXCLUDED.double_coins_dates,
+        holiday_dates = EXCLUDED.holiday_dates,
+        holiday_labels = EXCLUDED.holiday_labels,
         updated_at = NOW()
-      RETURNING period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates
+      RETURNING period_key, name, start_date, end_date, excluded_dates, coin_only_exempt_dates, double_coins_dates, holiday_dates, holiday_labels
     `
 
     console.log(`Exam period ${periodKey} saved successfully`)

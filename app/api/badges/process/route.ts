@@ -3,9 +3,12 @@ import { sql } from "@vercel/postgres"
 import { ensureBadgesSchema, fetchDayOverridesForStudent, processBadgesForStudent } from "@/lib/badges"
 import { isSession, requireAdmin } from "@/lib/admin-auth"
 import { bustStudentDataCache } from "@/lib/student-cache"
+import { sendBadgeErrorEmail } from "@/lib/email"
 import type { DayOverrideRow } from "@/lib/day-overrides"
 
 export const dynamic = "force-dynamic"
+/** Allow long-running bulk badge processing on Vercel. */
+export const maxDuration = 300
 
 /**
  * Process badges for all students or a specific student
@@ -16,8 +19,15 @@ export async function POST(request: NextRequest) {
     const session = await requireAdmin(request)
     if (!isSession(session)) return session
 
-    const body = await request.json()
-    const { studentId, period, sectionNumber } = body
+    // Empty body / missing JSON should still mean "process everyone"
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch {
+      body = {}
+    }
+    const { studentId, period, sectionNumber } = body || {}
+    const processedBy = session.displayName || session.username || "system"
 
     // Ensure the badges schema exists
     await ensureBadgesSchema()
@@ -56,25 +66,44 @@ export async function POST(request: NextRequest) {
         }
 
         const dayOverrides = await fetchDayOverridesForStudent(studentId)
-        const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
+        let holidayLabels: Record<string, string> = {}
+        try {
+          const labelsResult = await sql`
+            SELECT holiday_labels FROM exam_periods WHERE period_key = ${period} LIMIT 1
+          `
+          const raw = labelsResult.rows[0]?.holiday_labels
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+            holidayLabels = raw as Record<string, string>
+          }
+        } catch (labelError) {
+          console.error("Could not load holiday labels for student badge processing:", labelError)
+        }
+        const { badgesEarned, coinsAwarded: coins, error: badgeError } = await processBadgesForStudent(
           studentId,
           student.name,
-          student.dailyLog,
+          student.dailyLog || [],
           period,
           sectionNumber,
-          session.username,
-          { awardCoins: false, dayOverrides }
+          processedBy,
+          { awardCoins: false, dayOverrides, holidayLabels }
         )
 
         processedCount = 1
         badgesAwarded = badgesEarned.length
         coinsAwarded = coins
+        if (badgeError) {
+          errors.push(`Error processing student ${studentId}: ${badgeError}`)
+        }
 
         // Bust the cache so the student sees the update immediately
         bustStudentDataCache()
       } catch (error) {
         console.error("Error processing student:", error)
-        errors.push(`Error processing student ${studentId}: ${error}`)
+        errors.push(
+          `Error processing student ${studentId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
       }
     } else {
       // Process all students across all periods
@@ -114,7 +143,25 @@ export async function POST(request: NextRequest) {
           overridesByStudent.get(key)!.push(override)
         }
 
-        for (const [key, row] of latestData.entries()) {
+        // Load holiday break labels per period so holiday badge designs can be awarded
+        const holidayLabelsByPeriod = new Map<string, Record<string, string>>()
+        try {
+          const labelsResult = await sql`
+            SELECT period_key, holiday_labels
+            FROM exam_periods
+          `
+          for (const row of labelsResult.rows) {
+            const labels =
+              row.holiday_labels && typeof row.holiday_labels === "object" && !Array.isArray(row.holiday_labels)
+                ? (row.holiday_labels as Record<string, string>)
+                : {}
+            holidayLabelsByPeriod.set(String(row.period_key), labels)
+          }
+        } catch (labelError) {
+          console.error("Could not load holiday labels for badge processing:", labelError)
+        }
+
+        for (const [, row] of latestData.entries()) {
           let studentData: any
           if (typeof row.data === "string") {
             studentData = JSON.parse(row.data)
@@ -122,26 +169,38 @@ export async function POST(request: NextRequest) {
             studentData = row.data
           }
 
+          if (!studentData || typeof studentData !== "object") continue
+
+          const periodLabels = holidayLabelsByPeriod.get(String(row.period)) || {}
+
           // Process each student in this period
           for (const [id, student] of Object.entries(studentData)) {
             try {
               const dayOverrides = overridesByStudent.get(id.toLowerCase()) || []
-              const { badgesEarned, coinsAwarded: coins } = await processBadgesForStudent(
-                id,
-                (student as any).name,
-                (student as any).dailyLog,
-                row.period,
-                row.section_number,
-                session.username,
-                { awardCoins: false, dayOverrides }
-              )
+              const { badgesEarned, coinsAwarded: coins, error: badgeError } =
+                await processBadgesForStudent(
+                  id,
+                  (student as any).name || id,
+                  (student as any).dailyLog || [],
+                  row.period,
+                  row.section_number,
+                  processedBy,
+                  {
+                    awardCoins: false,
+                    dayOverrides,
+                    holidayLabels: periodLabels,
+                  }
+                )
 
               processedCount++
               badgesAwarded += badgesEarned.length
               coinsAwarded += coins
+              if (badgeError) {
+                errors.push(`Error processing student ${id}: ${badgeError}`)
+              }
             } catch (error) {
               console.error(`Error processing student ${id}:`, error)
-              errors.push(`Error processing student ${id}: ${error}`)
+              errors.push(`Error processing student ${id}: ${(error as Error).message || error}`)
             }
           }
         }
@@ -150,11 +209,26 @@ export async function POST(request: NextRequest) {
         bustStudentDataCache()
       } catch (error) {
         console.error("Error processing all students:", error)
+        const details = (error as Error).message
+        await sendBadgeErrorEmail({
+          source: "admin-process-all",
+          error: details || "Error processing students",
+        })
         return NextResponse.json(
-          { error: "Error processing students", details: (error as Error).message },
+          { error: "Error processing students", details },
           { status: 500 }
         )
       }
+    }
+
+    if (errors.length > 0) {
+      await sendBadgeErrorEmail({
+        source: studentId ? "admin-process-student" : "admin-process-all",
+        period,
+        sectionNumber,
+        error: `Badge processing finished with ${errors.length} error(s)`,
+        details: errors,
+      })
     }
 
     return NextResponse.json({
@@ -166,8 +240,13 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error processing badges:", error)
+    const details = (error as Error).message
+    await sendBadgeErrorEmail({
+      source: "admin-process",
+      error: details || "Internal server error",
+    })
     return NextResponse.json(
-      { error: "Internal server error", details: (error as Error).message },
+      { error: "Internal server error", details },
       { status: 500 }
     )
   }

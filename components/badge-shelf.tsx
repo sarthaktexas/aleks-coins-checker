@@ -1,10 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { Flame, Star } from "lucide-react"
+import { Flame, Star, Wand2 } from "lucide-react"
 import { BadgeShield, type ShieldKind } from "@/components/badge-shield"
+import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
+import {
+  HOLIDAY_BADGE_TYPES,
+  holidayBadgeShortName,
+  normalizeHolidayBadgeType,
+  type HolidayBadgeType,
+} from "@/lib/holiday-breaks"
 
-type BadgeType = "streak_10_day" | "streak_25_day"
+type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | HolidayBadgeType | "grand_master"
 
 type BadgeData = {
   id?: number
@@ -18,13 +25,21 @@ type BadgeShelfProps = {
   badges: BadgeData[]
   currentStreak?: number
   maxStreak?: number
+  holidayDaysCompleted?: number
+  /** Coins earned across the current semester (all periods). */
+  semesterCoins?: number
 }
 
-type ShelfSlot =
+type FixedShelfSlot =
   | {
-      kind: "streak_10_day" | "streak_25_day"
+      kind: "streak_10_day" | "streak_25_day" | "grand_master"
       name: string
       requirement: number
+      reward: string
+    }
+  | {
+      kind: "holiday_slot"
+      name: string
       reward: string
     }
   | {
@@ -32,7 +47,7 @@ type ShelfSlot =
       id: string
     }
 
-const SLOTS: ShelfSlot[] = [
+const SLOTS: FixedShelfSlot[] = [
   {
     kind: "streak_10_day",
     name: "10-Day Streak",
@@ -43,28 +58,29 @@ const SLOTS: ShelfSlot[] = [
     kind: "streak_25_day",
     name: "25-Day Streak",
     requirement: 25,
-    reward: "2× coins forever",
+    reward: "2× from unlock day",
+  },
+  {
+    kind: "holiday_slot",
+    name: "Holiday",
+    reward: "5 coins per day",
+  },
+  {
+    kind: "grand_master",
+    name: "Grand Master",
+    requirement: GRAND_MASTER_COIN_THRESHOLD,
+    reward: `${GRAND_MASTER_COIN_THRESHOLD}+ semester coins`,
   },
   {
     kind: "mystery",
     id: "mystery-1",
   },
-  {
-    kind: "mystery",
-    id: "mystery-2",
-  },
-  {
-    kind: "mystery",
-    id: "mystery-3",
-  },
 ]
 
-const SHIELD_CLASS =
-  "relative h-[4.75rem] w-14 drop-shadow-md sm:h-28 sm:w-24"
+const SHIELD_CLASS = "relative h-[4.75rem] w-14 drop-shadow-md sm:h-28 sm:w-24"
 
 /** Resting + hover fan transforms for 1–3 stacked shields (index 0 = back). */
 function stackPose(count: number, index: number): { rest: string; fan: string; z: number } {
-  // translateX(-50%) keeps each shield centered on the slot (left-1/2).
   const center = "translateX(-50%)"
 
   if (count <= 1) {
@@ -89,7 +105,6 @@ function stackPose(count: number, index: number): { rest: string; fan: string; z
         }
   }
 
-  // count === 3 — tight deck at rest, clear hand-of-cards fan on hover
   if (index === 0) {
     return {
       rest: `${center} translate(-12px,-6px) rotate(-11deg)`,
@@ -111,7 +126,7 @@ function stackPose(count: number, index: number): { rest: string; fan: string; z
   }
 }
 
-function StackedShields({
+function StackedSameShields({
   kind,
   unlocked,
   count,
@@ -132,11 +147,7 @@ function StackedShields({
       onMouseLeave={() => setFanned(false)}
       onFocus={() => fannable && setFanned(true)}
       onBlur={() => setFanned(false)}
-      aria-label={
-        fannable
-          ? `${stackCount} ${kind === "streak_10_day" ? "10-day" : "25-day"} streak badges`
-          : undefined
-      }
+      aria-label={fannable ? `${stackCount} stacked badges` : undefined}
     >
       {Array.from({ length: stackCount }, (_, index) => {
         const pose = stackPose(stackCount, index)
@@ -162,14 +173,85 @@ function StackedShields({
   )
 }
 
-export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeShelfProps) {
+/** Students only see holiday designs they've already unlocked. */
+function StackedHolidayShields({ kinds }: { kinds: HolidayBadgeType[] }) {
+  const [fanned, setFanned] = useState(false)
+  const stackCount = Math.max(1, Math.min(kinds.length, 4))
+  const fannable = kinds.length > 1
+  const shown = kinds.slice(0, 4)
+
+  if (shown.length === 0) {
+    return (
+      <BadgeShield kind="holiday_winter" unlocked={false} instanceKey="holiday-locked" className={SHIELD_CLASS} />
+    )
+  }
+
+  return (
+    <div
+      className={`relative flex h-[4.75rem] w-14 items-end justify-center sm:h-28 sm:w-24 ${fannable ? "cursor-pointer" : ""}`}
+      tabIndex={fannable ? 0 : undefined}
+      onMouseEnter={() => fannable && setFanned(true)}
+      onMouseLeave={() => setFanned(false)}
+      onFocus={() => fannable && setFanned(true)}
+      onBlur={() => setFanned(false)}
+      aria-label={
+        fannable
+          ? `${shown.length} holiday badges: ${shown.map(holidayBadgeShortName).join(", ")}`
+          : holidayBadgeShortName(shown[0])
+      }
+    >
+      {shown.map((kind, index) => {
+        const pose = stackPose(stackCount, index)
+        return (
+          <div
+            key={kind}
+            className="absolute bottom-0 left-1/2 origin-bottom transition-transform duration-300 ease-out will-change-transform"
+            style={{
+              zIndex: pose.z,
+              transform: fanned ? pose.fan : pose.rest,
+            }}
+          >
+            <BadgeShield kind={kind} unlocked instanceKey={`holiday-${kind}`} className={SHIELD_CLASS} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function earnedHolidayKinds(badges: BadgeData[]): HolidayBadgeType[] {
+  const found = new Set<HolidayBadgeType>()
+  for (const badge of badges) {
+    const normalized = normalizeHolidayBadgeType(badge.badge_type)
+    if (normalized) found.add(normalized)
+  }
+  // Stable visual order matching admin catalog
+  return HOLIDAY_BADGE_TYPES.filter((kind) => found.has(kind))
+}
+
+export function BadgeShelf({
+  badges,
+  currentStreak = 0,
+  maxStreak = 0,
+  holidayDaysCompleted = 0,
+  semesterCoins = 0,
+}: BadgeShelfProps) {
   const earned = new Set(badges.map((b) => b.badge_type))
+  // Progress uses the same semester total as the header; treat threshold met as unlocked
+  // even if badge processing has not written the row yet.
+  const grandMasterUnlocked =
+    earned.has("grand_master") || semesterCoins >= GRAND_MASTER_COIN_THRESHOLD
+  if (grandMasterUnlocked) earned.add("grand_master")
+  const holidayKinds = earnedHolidayKinds(badges)
+  const hasAnyHoliday = holidayKinds.length > 0
   const tenDayPeriods = new Set(
     badges.filter((b) => b.badge_type === "streak_10_day").map((b) => b.period || b.id || "earned"),
   ).size
-  const unlockedCount = SLOTS.filter(
-    (slot) => slot.kind !== "mystery" && earned.has(slot.kind),
-  ).length
+  const unlockedCount = SLOTS.filter((slot) => {
+    if (slot.kind === "mystery") return false
+    if (slot.kind === "holiday_slot") return hasAnyHoliday
+    return earned.has(slot.kind)
+  }).length
 
   return (
     <section className="rounded-md border border-utsa-border bg-white">
@@ -193,30 +275,44 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
         <div className="overflow-visible rounded-md bg-[#f6f1e8] px-1 pt-6 sm:px-2 sm:pt-8">
           <div className="grid grid-cols-5 items-end gap-0.5 overflow-visible sm:gap-1">
             {SLOTS.map((slot) => {
-              const unlocked = slot.kind !== "mystery" && earned.has(slot.kind)
-              const shieldKind: ShieldKind = slot.kind
-              const stackCount =
-                slot.kind === "streak_10_day" ? Math.min(Math.max(tenDayPeriods, unlocked ? 1 : 0), 3) : unlocked ? 1 : 0
-
-              return (
-                <div
-                  key={slot.kind === "mystery" ? slot.id : slot.kind}
-                  className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3"
-                >
-                  {slot.kind === "mystery" ? (
+              if (slot.kind === "mystery") {
+                return (
+                  <div key={slot.id} className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3">
                     <BadgeShield
-                      kind={shieldKind}
+                      kind="mystery"
                       unlocked={false}
                       mysteryId={slot.id}
                       className={SHIELD_CLASS}
                     />
-                  ) : (
-                    <StackedShields
-                      kind={slot.kind}
-                      unlocked={unlocked}
-                      count={stackCount}
-                    />
-                  )}
+                  </div>
+                )
+              }
+
+              if (slot.kind === "holiday_slot") {
+                return (
+                  <div
+                    key="holiday_slot"
+                    className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3"
+                  >
+                    <StackedHolidayShields kinds={holidayKinds} />
+                  </div>
+                )
+              }
+
+              const unlocked = earned.has(slot.kind)
+              const stackCount =
+                slot.kind === "streak_10_day"
+                  ? Math.min(Math.max(tenDayPeriods, unlocked ? 1 : 0), 3)
+                  : unlocked
+                    ? 1
+                    : 0
+
+              return (
+                <div
+                  key={slot.kind}
+                  className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3"
+                >
+                  <StackedSameShields kind={slot.kind} unlocked={unlocked} count={stackCount} />
                 </div>
               )
             })}
@@ -231,16 +327,62 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                 return <div key={`${slot.id}-meta`} aria-hidden="true" />
               }
 
+              if (slot.kind === "holiday_slot") {
+                const unlocked = hasAnyHoliday
+                const names = holidayKinds.map(holidayBadgeShortName)
+                return (
+                  <div key="holiday_slot-meta" className="px-0.5 text-center sm:px-1">
+                    <p
+                      className={`text-[11px] font-semibold leading-tight sm:text-sm ${unlocked ? "text-utsa-midnight" : "text-utsa-muted"}`}
+                    >
+                      {unlocked && names.length === 1 ? names[0] : "Holiday"}
+                    </p>
+                    <p className="text-[10px] text-utsa-muted">
+                      {unlocked ? (names.length > 1 ? `${names.length} unlocked` : "Unlocked") : "Locked"}
+                    </p>
+                    <p className="hidden text-[10px] text-utsa-muted sm:block">
+                      {unlocked
+                        ? names.length > 1
+                          ? names.join(" · ")
+                          : `${slot.reward}${holidayDaysCompleted > 0 ? ` · ${holidayDaysCompleted} day${holidayDaysCompleted === 1 ? "" : "s"}` : ""}`
+                        : "Earn by working a holiday"}
+                    </p>
+                    <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
+                      <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
+                        <span>
+                          {unlocked ? `${holidayKinds.length}/${HOLIDAY_BADGE_TYPES.length}` : `0/1`}
+                        </span>
+                        <span>{unlocked ? Math.round((holidayKinds.length / HOLIDAY_BADGE_TYPES.length) * 100) : 0}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
+                        <div
+                          className={`h-full rounded-full ${unlocked ? "bg-emerald-500" : "bg-emerald-600"}`}
+                          style={{
+                            width: `${unlocked ? Math.round((holidayKinds.length / HOLIDAY_BADGE_TYPES.length) * 100) : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
               const unlocked = earned.has(slot.kind)
               const repeated = slot.kind === "streak_10_day" && tenDayPeriods >= 2
+              const grandProgress =
+                slot.kind === "grand_master" ? Math.min(semesterCoins, slot.requirement) : 0
               const progress = repeated
                 ? Math.round((Math.min(tenDayPeriods, 3) / 3) * 100)
                 : unlocked
                   ? 100
-                  : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
+                  : slot.kind === "grand_master"
+                    ? Math.round((grandProgress / slot.requirement) * 100)
+                    : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
               const progressLabel = repeated
                 ? `${Math.min(tenDayPeriods, 3)}/3`
-                : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
+                : slot.kind === "grand_master"
+                  ? `${Math.min(semesterCoins, slot.requirement)}/${slot.requirement}`
+                  : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
               const unlockText = !unlocked
                 ? "Locked"
                 : repeated
@@ -256,7 +398,11 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                   </p>
                   <p className="text-[10px] text-utsa-muted">{unlockText}</p>
                   <p className="hidden text-[10px] text-utsa-muted sm:block">
-                    {slot.kind === "streak_10_day" ? `${slot.reward} · ${tenDayPeriods}/3` : slot.reward}
+                    {slot.kind === "streak_10_day"
+                      ? `${slot.reward} · ${tenDayPeriods}/3`
+                      : slot.kind === "grand_master"
+                        ? `${slot.reward} · ${semesterCoins} now`
+                        : slot.reward}
                   </p>
                   <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
                     <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
@@ -265,7 +411,15 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
                       <div
-                        className={`h-full rounded-full ${unlocked ? "bg-emerald-500" : slot.kind === "streak_10_day" ? "bg-utsa-orange" : "bg-amber-500"}`}
+                        className={`h-full rounded-full ${
+                          unlocked
+                            ? "bg-emerald-500"
+                            : slot.kind === "streak_10_day"
+                              ? "bg-utsa-orange"
+                              : slot.kind === "grand_master"
+                                ? "bg-violet-600"
+                                : "bg-amber-500"
+                        }`}
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -280,8 +434,33 @@ export function BadgeShelf({ badges, currentStreak = 0, maxStreak = 0 }: BadgeSh
           <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
             <Star className="h-4 w-4 text-amber-600" />
             <p className="text-xs text-amber-900">
-              <span className="font-semibold">2× multiplier is on.</span> Every future daily coin is
-              doubled, even if the streak breaks.
+              <span className="font-semibold">2× multiplier is on.</span> Daily coins from the unlock
+              day forward are doubled, even if the streak breaks.
+            </p>
+          </div>
+        )}
+
+        {hasAnyHoliday && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <span className="text-sm" aria-hidden>
+              🎄
+            </span>
+            <p className="text-xs text-emerald-900">
+              <span className="font-semibold">
+                Holiday badge{holidayKinds.length === 1 ? "" : "s"} unlocked.
+              </span>{" "}
+              {holidayKinds.map(holidayBadgeShortName).join(", ")}. Each holiday day is worth 5
+              coins.
+            </p>
+          </div>
+        )}
+
+        {earned.has("grand_master") && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2">
+            <Wand2 className="h-4 w-4 text-violet-700" />
+            <p className="text-xs text-violet-900">
+              <span className="font-semibold">Grand Master unlocked.</span> You earned{" "}
+              {GRAND_MASTER_COIN_THRESHOLD}+ coins across a semester.
             </p>
           </div>
         )}

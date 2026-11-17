@@ -5,6 +5,10 @@ import { bustStudentDataCache } from "@/lib/student-cache"
 import { type AdminSession, isSession, requireAdmin } from "@/lib/admin-auth"
 import { normalizeOverrideDate } from "@/lib/day-overrides"
 import { reprocessBadgesForStudent } from "@/lib/badges"
+import {
+  loadStudentNamesByIds,
+  loadStudentPeriodSectionIndex,
+} from "@/lib/student-data-queries"
 
 export const dynamic = "force-dynamic"
 
@@ -101,36 +105,13 @@ async function enrichOverridesWithClassContext(
     console.warn("Could not load request meta for override enrichment:", e)
   }
 
-  // period → section → Set<studentId> from uploads (most recent first)
-  const studentsByPeriodSection = new Map<string, Map<string, Set<string>>>()
-  // studentId → most recent section seen (fallback)
-  const latestSectionByStudent = new Map<string, string>()
+  // Keys-only index from latest uploads — avoids shipping dailyLog JSONB blobs
+  let studentsByPeriodSection = new Map<string, Map<string, Set<string>>>()
+  let latestSectionByStudent = new Map<string, string>()
   try {
-    const uploads = await sql`
-      SELECT period, COALESCE(section_number, 'default') AS section_number, data
-      FROM student_data
-      ORDER BY uploaded_at DESC
-    `
-    for (const row of uploads.rows) {
-      try {
-        const parsed = typeof row.data === "string" ? JSON.parse(row.data) : row.data
-        if (!parsed || typeof parsed !== "object") continue
-        const period = String(row.period || "")
-        const section = String(row.section_number || "default")
-        if (!period) continue
-        if (!studentsByPeriodSection.has(period)) studentsByPeriodSection.set(period, new Map())
-        const bySection = studentsByPeriodSection.get(period)!
-        if (!bySection.has(section)) bySection.set(section, new Set())
-        const set = bySection.get(section)!
-        for (const id of Object.keys(parsed)) {
-          const sid = id.toLowerCase().trim()
-          set.add(sid)
-          if (!latestSectionByStudent.has(sid)) latestSectionByStudent.set(sid, section)
-        }
-      } catch {
-        // skip bad blob
-      }
-    }
+    const index = await loadStudentPeriodSectionIndex()
+    studentsByPeriodSection = index.studentsByPeriodSection
+    latestSectionByStudent = index.latestSectionByStudent
   } catch (e) {
     console.warn("Could not load student_data for override enrichment:", e)
   }
@@ -440,33 +421,17 @@ export async function GET(request: NextRequest) {
       const studentIds = [...new Set(result.rows.map((row) => row.student_id))]
       const studentNameMap = new Map<string, string>()
 
-      // Name lookup is best-effort — never fail the whole overrides list if a
-      // student_data blob is corrupt or the table is huge.
+      // Name lookup is best-effort — only fetch matching name scalars, not class blobs.
       if (studentIds.length > 0) {
         try {
-          const studentDataResult = await sql`
-            SELECT data
-            FROM student_data
-            ORDER BY uploaded_at DESC
-            LIMIT 50
-          `
-
-          for (const row of studentDataResult.rows) {
-            try {
-              const studentData = row.data
-              const parsedData =
-                typeof studentData === "string" ? JSON.parse(studentData) : studentData
-              if (!parsedData || typeof parsedData !== "object") continue
-
-              for (const id of studentIds) {
-                if (!studentNameMap.has(id) && parsedData[id]?.name) {
-                  studentNameMap.set(id, parsedData[id].name)
-                }
+          const names = await loadStudentNamesByIds(studentIds.map(String))
+          for (const [id, name] of names) {
+            studentNameMap.set(id, name)
+            // Also store original casing variants from the override rows
+            for (const rawId of studentIds) {
+              if (String(rawId).toLowerCase() === id) {
+                studentNameMap.set(String(rawId), name)
               }
-
-              if (studentNameMap.size === studentIds.length) break
-            } catch (parseError) {
-              console.warn("Skipping unreadable student_data row while resolving override names:", parseError)
             }
           }
         } catch (nameError) {

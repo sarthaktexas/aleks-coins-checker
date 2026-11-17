@@ -1,8 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { sql } from "@vercel/postgres"
-import { countExemptCredits } from "@/lib/day-credits"
-import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
-import { ensureBadgesSchema } from "@/lib/badges"
+import { summarizeDailyCoins } from "@/lib/day-credits"
+import {
+  applyOverrideToDay,
+  buildOverridesMap,
+  normalizeOverrideDate,
+  type DayOverrideRow,
+} from "@/lib/day-overrides"
+import { ensureBadgesSchema, getStreakMultiplierStartDates } from "@/lib/badges"
+import { periodDisplayCoins } from "@/lib/period-coins"
 
 export const dynamic = "force-dynamic"
 
@@ -29,6 +35,9 @@ type StudentData = {
     dailyLog: DailyLog[]
     exemptDayCredits?: number
     coinOnlyExemptCredits?: number
+    doubleCoinsEarned?: number
+    holidayDaysCompleted?: number
+    holidayCoinsEarned?: number
   }
 }
 
@@ -58,18 +67,20 @@ async function applyOverridesToStudentData(studentData: StudentData, studentId?:
       }
     }
 
-    const overridesMap = buildOverridesMap(overridesResult.rows)
+    const overridesMap = buildOverridesMap(overridesResult.rows as DayOverrideRow[])
 
-    const updatedStudentData = { ...studentData }
-    
-    Object.keys(updatedStudentData).forEach(studentId => {
+    // Deep clone so we never mutate the parsed upload blob in place
+    const updatedStudentData: StudentData = JSON.parse(JSON.stringify(studentData))
+
+    Object.keys(updatedStudentData).forEach((studentId) => {
       const student = updatedStudentData[studentId]
-      const studentOverrides = overridesMap.get(studentId.toLowerCase())
-      
-      if (student.dailyLog) {
-        // Apply overrides to daily log by matching date (not day_number) if they exist
+      if (!student?.dailyLog) return
+
+      try {
+        const studentOverrides = overridesMap.get(studentId.toLowerCase().trim())
+
         if (studentOverrides) {
-          student.dailyLog = student.dailyLog.map(day => {
+          student.dailyLog = student.dailyLog.map((day) => {
             const override = studentOverrides.get(normalizeOverrideDate(day.date))
             if (override) return applyOverrideToDay(day, override)
             return day
@@ -77,18 +88,17 @@ async function applyOverridesToStudentData(studentData: StudentData, studentId?:
         }
 
         // Always recalculate totals based on daily log (with or without overrides)
-        const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
-        const completedWorkingDays = workingDayLogs.length
-        const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-        const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
+        const summary = summarizeDailyCoins(student.dailyLog)
 
-        // Standard exempt credits count toward extra credit %; coins-only exempt do not
-        const percentComplete = completedWorkingDays > 0 ? Math.round(((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10) / 10 : 0
-
-        student.percentComplete = percentComplete
-        student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits
-        student.exemptDayCredits = exemptDayCredits
-        student.coinOnlyExemptCredits = coinOnlyExemptCredits
+        student.percentComplete = summary.percentComplete
+        student.coins = summary.coins
+        student.exemptDayCredits = summary.exemptDayCredits
+        student.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
+        student.holidayDaysCompleted = summary.holidayDaysCompleted
+        student.holidayCoinsEarned = summary.holidayCoinsEarned
+        student.doubleCoinsEarned = summary.doubleCoinsEarned
+      } catch (studentError) {
+        console.error(`Error applying overrides for ${studentId}:`, studentError)
       }
     })
 
@@ -193,42 +203,36 @@ export async function GET(request: NextRequest) {
 
     // Create a map of adjustments by student ID
     const adjustmentsByStudent = new Map<string, number>()
-    coinAdjustments.forEach(adj => {
-      const studentId = adj.student_id.toLowerCase()
-      const current = adjustmentsByStudent.get(studentId) || 0
-      adjustmentsByStudent.set(studentId, current + adj.adjustment_amount)
+    coinAdjustments.forEach((adj) => {
+      const id = String(adj.student_id || "")
+        .toLowerCase()
+        .trim()
+      const current = adjustmentsByStudent.get(id) || 0
+      adjustmentsByStudent.set(id, current + (Number(adj.adjustment_amount) || 0))
     })
 
-    // Get all students who have the 2x multiplier badge
-    let studentsWithMultiplier = new Set<string>()
+    // 2x starts on the unlock day forward (not retroactive)
+    let multiplierStartByStudent = new Map<string, string>()
     try {
-      const multiplierResult = await sql`
-        SELECT DISTINCT student_id
-        FROM student_badges
-        WHERE badge_type = 'streak_25_day'
-      `
-      studentsWithMultiplier = new Set(multiplierResult.rows.map(r => r.student_id.toLowerCase()))
+      multiplierStartByStudent = await getStreakMultiplierStartDates()
     } catch (error) {
       console.error("Error fetching multiplier badges:", error)
     }
 
     // Calculate total coins for each student (excluding redemptions)
-    // and calculate average minutes per day for tie-breaking
-    const studentsWithCoins = Object.keys(studentData).map(sId => {
+    // Match student page: override-aware log + prospective 2x + period adjustments
+    const studentsWithCoins = Object.keys(studentData).map((sId) => {
       const student = studentData[sId]
-      const adjustment = adjustmentsByStudent.get(sId.toLowerCase()) || 0
-      const hasMultiplier = studentsWithMultiplier.has(sId.toLowerCase())
-      
-      // Apply 2x multiplier to base coins if student has the badge
-      const baseCoins = student.coins
-      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
-      const totalCoins = multipliedCoins + adjustment
-      const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog)
-      
+      const normalized = sId.toLowerCase().trim()
+      const adjustment = adjustmentsByStudent.get(normalized) || 0
+      const multiplierFromDate = multiplierStartByStudent.get(normalized) || null
+      const totalCoins = periodDisplayCoins(student.dailyLog || [], multiplierFromDate, adjustment)
+      const avgMinutesPerDay = calculateAvgMinutesPerDay(student.dailyLog || [])
+
       return {
-        studentId: sId.toLowerCase(),
+        studentId: normalized,
         totalCoins,
-        avgMinutesPerDay
+        avgMinutesPerDay,
       }
     })
 

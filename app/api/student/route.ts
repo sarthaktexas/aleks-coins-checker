@@ -2,9 +2,19 @@ import { type NextRequest, NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 import { sql } from "@vercel/postgres"
 import { STUDENT_DATA_CACHE_TAG } from "@/lib/student-cache"
-import { countExemptCredits } from "@/lib/day-credits"
+import { summarizeDailyCoins, totalCoinsFromDailyLog } from "@/lib/day-credits"
 import { applyOverrideToDay, buildOverridesMap, normalizeOverrideDate } from "@/lib/day-overrides"
-import { getStudentBadges, hasStreakMultiplier, ensureBadgesSchema, calculateStreaks } from "@/lib/badges"
+import {
+  getStudentBadges,
+  getStreakMultiplierStartDate,
+  awardBadge,
+  ensureBadgesSchema,
+  calculateStreaks,
+  combinePeriodStreaks,
+  GRAND_MASTER_COIN_THRESHOLD,
+} from "@/lib/badges"
+import { parsePeriodKey } from "@/lib/exam-periods"
+import { periodDisplayCoins } from "@/lib/period-coins"
 
 type DailyLog = {
   day: number
@@ -16,6 +26,7 @@ type DailyLog = {
   isExcluded?: boolean
   isCoinOnlyExempt?: boolean
   isDoubleCoins?: boolean
+  isHoliday?: boolean
   wouldHaveQualified?: boolean
   isOverridden?: boolean
   overrideType?: string
@@ -33,6 +44,8 @@ type StudentData = {
     exemptDayCredits?: number
     coinOnlyExemptCredits?: number
     doubleCoinsEarned?: number
+    holidayDaysCompleted?: number
+    holidayCoinsEarned?: number
   }
 }
 
@@ -332,48 +345,17 @@ function applyOverridesInMemory(
       })
     }
 
-    const workingDayLogs = student.dailyLog.filter((d) => !d.isExcluded)
-    const completedWorkingDays = workingDayLogs.length
-    const qualifiedWorkingDays = workingDayLogs.filter((d) => d.qualified).length
-    const { exemptDayCredits, coinOnlyExemptCredits } = countExemptCredits(student.dailyLog)
-    
-    // Count double coins from both period config (isDoubleCoins) and overrides
-    const doubleCoinsFromPeriod = workingDayLogs.filter(
-      (d) => d.qualified && d.isDoubleCoins && !d.isOverridden
-    ).length
-    const doubleCoinsFromOverrides = workingDayLogs.filter(
-      (d) => d.qualified && d.isOverridden && d.overrideType === "double_coins"
-    ).length
-    const totalDoubleCoins = doubleCoinsFromPeriod + doubleCoinsFromOverrides
-    
-    const percentComplete =
-      completedWorkingDays > 0
-        ? Math.round(
-            ((qualifiedWorkingDays + exemptDayCredits) / completedWorkingDays) * 100 * 10
-          ) / 10
-        : 0
-
-    student.percentComplete = percentComplete
-    student.coins = qualifiedWorkingDays + exemptDayCredits + coinOnlyExemptCredits + totalDoubleCoins
-    student.exemptDayCredits = exemptDayCredits
-    student.coinOnlyExemptCredits = coinOnlyExemptCredits
-    student.doubleCoinsEarned = totalDoubleCoins
+    const summary = summarizeDailyCoins(student.dailyLog)
+    student.percentComplete = summary.percentComplete
+    student.coins = summary.coins
+    student.exemptDayCredits = summary.exemptDayCredits
+    student.coinOnlyExemptCredits = summary.coinOnlyExemptCredits
+    student.doubleCoinsEarned = summary.doubleCoinsEarned
+    student.holidayDaysCompleted = summary.holidayDaysCompleted
+    student.holidayCoinsEarned = summary.holidayCoinsEarned
   })
 
   return updatedStudentData
-}
-
-/**
- * Apply badge multiplier to coins (2x multiplier for 25-day streak badge)
- */
-async function applyBadgeMultiplier(studentId: string, baseCoins: number): Promise<number> {
-  try {
-    const hasMultiplier = await hasStreakMultiplier(studentId)
-    return hasMultiplier ? baseCoins * 2 : baseCoins
-  } catch (error) {
-    console.error("Error applying badge multiplier:", error)
-    return baseCoins
-  }
 }
 
 async function fetchStudentOverrides(studentId: string) {
@@ -583,8 +565,9 @@ export async function POST(request: NextRequest) {
       console.error("Error fetching period metadata:", e)
     }
 
-    // Check if student has 2x multiplier badge (25-day streak)
-    const hasMultiplier = await hasStreakMultiplier(normalizedId)
+    // 2x starts on the day the 25-day badge was earned (not retroactive to earlier days)
+    const multiplierFromDate = await getStreakMultiplierStartDate(normalizedId)
+    const hasMultiplier = !!multiplierFromDate
 
     // Format periods data with overrides applied once (no extra DB round-trips)
     const periodsData = await Promise.all(allPeriods.map(async (periodData) => {
@@ -599,9 +582,16 @@ export async function POST(request: NextRequest) {
         periodMetadata?.name ??
         periodData.period.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
 
-      // Apply 2x multiplier to base coins if student has the 25-day badge
       const baseCoins = studentWithOverrides.coins
-      const multipliedCoins = hasMultiplier ? baseCoins * 2 : baseCoins
+      const multipliedCoins = totalCoinsFromDailyLog(
+        studentWithOverrides.dailyLog || [],
+        multiplierFromDate,
+      )
+      const totalCoins = periodDisplayCoins(
+        studentWithOverrides.dailyLog || [],
+        multiplierFromDate,
+        adjustment,
+      )
 
       return {
         period: periodData.period,
@@ -614,7 +604,7 @@ export async function POST(request: NextRequest) {
         coins: multipliedCoins,
         baseCoins,
         coinAdjustment: adjustment,
-        totalCoins: multipliedCoins + adjustment,
+        totalCoins,
         totalDays: studentWithOverrides.totalDays,
         periodDays: studentWithOverrides.periodDays,
         percentComplete: studentWithOverrides.percentComplete,
@@ -622,8 +612,11 @@ export async function POST(request: NextRequest) {
         exemptDayCredits: studentWithOverrides.exemptDayCredits,
         coinOnlyExemptCredits: studentWithOverrides.coinOnlyExemptCredits,
         doubleCoinsEarned: studentWithOverrides.doubleCoinsEarned,
+        holidayDaysCompleted: studentWithOverrides.holidayDaysCompleted,
+        holidayCoinsEarned: studentWithOverrides.holidayCoinsEarned,
         uploadedAt: periodData.uploadedAt,
         hasMultiplier,
+        multiplierFromDate,
       }
     }))
 
@@ -675,17 +668,56 @@ export async function POST(request: NextRequest) {
 
     // Get student badges
     let badges: any[] = []
-    let streakData = { currentStreak: 0, maxStreak: 0 }
+    // Shelf streak text must use override-aware period logs (same as calendar/coins).
+    // Best streak across all periods; current streak from the latest period.
+    let streakData = combinePeriodStreaks(
+      periodsData.map((p) => p.dailyLog || []),
+      0,
+    )
     try {
       badges = await getStudentBadges(normalizedId)
-      streakData = calculateStreaks(student.dailyLog)
+
+      // Self-heal Grand Master from already-loaded period totals (2x + adjustments).
+      // Avoids a second semester scan on every lookup; sync processing uses getStudentSemesterCoins.
+      const alreadyGrandMaster = badges.some((b) => b.badge_type === "grand_master")
+      if (!alreadyGrandMaster && periodInfo?.period) {
+        const currentSemester = parsePeriodKey(periodInfo.period)?.semesterKey
+        const semesterCoins = periodsData
+          .filter(
+            (p) =>
+              !currentSemester || parsePeriodKey(p.period)?.semesterKey === currentSemester,
+          )
+          .reduce((sum, p) => sum + (p.totalCoins || 0), 0)
+        if (semesterCoins >= GRAND_MASTER_COIN_THRESHOLD) {
+          const badge = await awardBadge(
+            normalizedId,
+            "grand_master",
+            semesterCoins,
+            periodInfo.period,
+            studentSectionNumber,
+            {
+              semesterCoins,
+              threshold: GRAND_MASTER_COIN_THRESHOLD,
+              awardedVia: "student-lookup",
+            },
+          )
+          if (badge) {
+            badges = [...badges, badge]
+          }
+        }
+      }
     } catch (badgeError) {
       console.error("Error fetching student badges:", badgeError)
     }
     
-    // Apply 2x multiplier to current period coins if student has the badge
+    // Apply 2x only to days on/after the unlock date in the current period
     const currentPeriodBaseCoins = student.coins
-    const currentPeriodCoins = hasMultiplier ? currentPeriodBaseCoins * 2 : currentPeriodBaseCoins
+    const currentPeriodCoins = totalCoinsFromDailyLog(student.dailyLog || [], multiplierFromDate)
+    const currentPeriodTotal = periodDisplayCoins(
+      student.dailyLog || [],
+      multiplierFromDate,
+      currentPeriodAdjustment,
+    )
 
     // Return the student's data including all periods
     return NextResponse.json({
@@ -696,7 +728,7 @@ export async function POST(request: NextRequest) {
         coins: currentPeriodCoins,
         baseCoins: currentPeriodBaseCoins,
         coinAdjustment: currentPeriodAdjustment,
-        totalCoins: currentPeriodCoins + currentPeriodAdjustment,
+        totalCoins: currentPeriodTotal,
         totalDays: student.totalDays,
         periodDays: student.periodDays,
         percentComplete: student.percentComplete,
@@ -706,8 +738,11 @@ export async function POST(request: NextRequest) {
         exemptDayCredits: student.exemptDayCredits,
         coinOnlyExemptCredits: student.coinOnlyExemptCredits,
         doubleCoinsEarned: student.doubleCoinsEarned,
+        holidayDaysCompleted: student.holidayDaysCompleted,
+        holidayCoinsEarned: student.holidayCoinsEarned,
         uploadedAt: periodInfo?.uploaded_at || allPeriods[0]?.uploadedAt || null,
         hasMultiplier,
+        multiplierFromDate,
       },
       periods: periodsData,
       coinAdjustments: coinAdjustments,

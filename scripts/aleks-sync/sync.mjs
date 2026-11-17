@@ -457,10 +457,38 @@ async function main() {
             sectionNumber: cls.sectionNumber,
           })
           console.log(`Imported: ${imported.studentCount} students`)
-          if (imported.badgesAwarded > 0) {
-            console.log(
-              `Badges: awarded ${imported.badgesAwarded} badge(s), ${imported.coinsAwarded || 0} bonus coins`,
-            )
+          const badgePayload = {
+            ok: !imported.badgeError,
+            section: cls.sectionNumber,
+            period: examPeriod,
+            badgesAwarded: imported.badgesAwarded || 0,
+            coinsAwarded: imported.coinsAwarded || 0,
+            studentsProcessed: imported.studentsProcessed,
+            ...(imported.badgeError
+              ? {
+                  error: imported.badgeError,
+                  errors: Array.isArray(imported.badgeErrors)
+                    ? imported.badgeErrors.slice(0, 20)
+                    : undefined,
+                }
+              : {}),
+          }
+          // Echo into GitHub Actions logs so Sync History can parse badge results.
+          // (##BADGE_RESULT## on the import API only lands in Vercel logs.)
+          console.log(`##BADGE_RESULT## ${JSON.stringify(badgePayload)}`)
+          console.log(
+            `Badges: awarded ${imported.badgesAwarded || 0} badge(s), ${imported.coinsAwarded || 0} bonus coins` +
+              (imported.studentsProcessed != null
+                ? ` (${imported.studentsProcessed} students processed)`
+                : ""),
+          )
+          if (imported.badgeError) {
+            console.error(`Badge processing error for section ${cls.sectionNumber}: ${imported.badgeError}`)
+            if (Array.isArray(imported.badgeErrors) && imported.badgeErrors.length > 0) {
+              for (const line of imported.badgeErrors.slice(0, 20)) {
+                console.error(`  - ${line}`)
+              }
+            }
           }
           results.push({
             aleksName: cls.aleksName,
@@ -469,6 +497,7 @@ async function main() {
             studentCount: imported.studentCount,
             badgesAwarded: imported.badgesAwarded || 0,
             coinsAwarded: imported.coinsAwarded || 0,
+            badgeError: imported.badgeError || null,
             fileBytes: bytes.length,
           })
         }

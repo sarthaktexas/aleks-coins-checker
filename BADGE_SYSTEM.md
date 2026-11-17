@@ -2,10 +2,12 @@
 
 ## Overview
 
-The badge system rewards students for maintaining consistent streaks of completing their daily ALEKS requirements. It includes two badges with different rewards:
+The badge system rewards students for maintaining consistent streaks of completing their daily ALEKS requirements. It includes four badges with different rewards:
 
-1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time)
+1. **10-Day Streak Badge** - Awards 10 bonus coins (one-time per exam period, up to 3)
 2. **25-Day Streak Badge** - Grants a permanent 2x multiplier on ALL future daily coins
+3. **Holiday Badges** - Separate designs per break (Thanksgiving turkey, Winter tree, July 4 fireworks, Spring flower); each holiday day pays 5 coins total (not 6)
+4. **Grand Master Badge** - Unlocks at 100+ coins across an entire semester (wizard with staff)
 
 ## Features
 
@@ -19,37 +21,55 @@ The badge system rewards students for maintaining consistent streaks of completi
 
 #### 25-Day Streak Badge ⭐
 - **Requirement**: Complete ALEKS 25 days in a row
-- **Reward**: Permanent 2x multiplier on all daily coins
+- **Reward**: Permanent 2x multiplier on daily coins from the unlock day forward
 - **Type**: Permanent benefit
-- **Important**: The multiplier remains active even if the streak breaks
+- **Important**: The multiplier remains active even if the streak breaks. Days before the unlock date stay at 1x — it is not retroactive.
 - **Display**: Shows on badge shelf, leaderboard, and coin display
+
+#### Holiday Badges 🦃🎄🎆🌸
+- **Requirement**: Qualify on a holiday special day tagged with that break type
+- **Designs**: Thanksgiving (turkey), Winter Break (tree), July 4th (fireworks), Spring Break (flower)
+- **Reward**: 5 coins total for each holiday day completed (not 1 + 5 = 6)
+- **Type**: One permanent unlock per design; coins are paid per holiday day via daily coin math
+- **Important**: Holiday days are optional — skipping never hurts progress or streaks
+- **Visibility**: Admins see every design; students only see designs they have unlocked
+- **Display**: Earned holiday shields stack on the student shelf; holiday coin chip on the student page
+
+#### Grand Master Badge 🧙
+- **Requirement**: Earn 100+ coins across all exam periods in a single semester
+- **Coin total**: Same as the student-facing semester total — daily coins after day overrides, with 2x only on days on/after the 25-day unlock date, plus period-specific coin adjustments (not redemptions)
+- **Reward**: Wizard-with-staff badge (no extra coins)
+- **Type**: Permanent unlock (once ever)
+- **Display**: Shows on badge shelf with semester coin progress; unlocks when the threshold is met even if badge processing has not run yet
 
 ### Streak Calculation
 
 Streaks are calculated based on consecutive qualifying days in the daily log:
 - **Qualifying Day**: A day where the student met the ALEKS requirements (31+ minutes and 1+ topic), **or** a day overridden as `qualified` / `double_coins`
-- **Excluded Days**: Don't count toward or against streaks (holidays, exempt days)
+- **Excluded Days**: Don't count toward or against streaks (holidays, exempt days), unless a qualifying override was applied
 - **Missed Days**: Break the streak and reset the counter (including days overridden as `not_qualified`)
-- **Day Overrides**: Always included in 10-day and 25-day badge streak math (same as coins/calendar)
+- **Day Overrides**: Always included in 10-day and 25-day badge streak math **and** in the badge shelf streak text (same as coins/calendar)
 
 The system tracks:
-- **Current Streak**: Consecutive qualifying days from the most recent day backward
-- **Max Streak**: The longest streak achieved in the current period
+- **Current Streak**: Consecutive qualifying days from the most recent completed day backward (trailing empty/future days are ignored)
+- **Max Streak**: The longest streak achieved across the student's exam periods (override-aware)
 
 ### Coin Multiplier
 
 The 25-day badge grants a permanent 2x multiplier that:
-- Applies to ALL base daily coins (qualified days + exempt credits)
-- Is calculated BEFORE adjustments (coin adjustments are added after)
+- Applies only to daily coins earned on/after the day the streak hit 25
+- Earlier days in the semester stay at 1x
+- Covers qualified days, exempt credits, double-coin days, and holiday coins from that date forward
+- Is calculated BEFORE adjustments (coin adjustments are added after, never doubled)
 - Persists across all future periods
 - Cannot be removed or lost
-- Is checked globally (once earned in any period, it applies everywhere)
+- Is checked globally (once earned in any period, it applies to later days everywhere)
 
 **Example Calculation**:
 ```
-Base coins: 15 (qualified days)
-With 25-day badge: 15 × 2 = 30 coins
-Plus adjustments: 30 + 5 = 35 total coins
+Days before unlock: 80 base coins → stay 80
+Days on/after unlock: 10 base coins → 20 with 2x
+Plus adjustments: 80 + 20 + 10 = 110 total coins
 ```
 
 ## Database Schema

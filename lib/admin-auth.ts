@@ -133,7 +133,11 @@ export function isSession(value: AdminSession | NextResponse): value is AdminSes
   return !(value instanceof NextResponse)
 }
 
+/** Skip repeated CREATE TABLE on warm serverless instances. */
+let adminUsersTableReady = false
+
 export async function ensureAdminUsersTable() {
+  if (adminUsersTableReady) return
   await sql`
     CREATE TABLE IF NOT EXISTS admin_users (
       id SERIAL PRIMARY KEY,
@@ -147,7 +151,11 @@ export async function ensureAdminUsersTable() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `
+  adminUsersTableReady = true
 }
+
+/** Skip repeated COUNT/bootstrap once we know users exist on this instance. */
+let adminUsersBootstrapped = false
 
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase()
@@ -171,10 +179,14 @@ function rowToUser(row: {
 
 /** Create the first professor from ADMIN_PASSWORD if the table is empty. */
 export async function bootstrapAdminUsersIfNeeded() {
+  if (adminUsersBootstrapped) return
   await ensureAdminUsersTable()
 
   const count = await sql`SELECT COUNT(*)::int AS count FROM admin_users`
-  if ((count.rows[0]?.count as number) > 0) return
+  if ((count.rows[0]?.count as number) > 0) {
+    adminUsersBootstrapped = true
+    return
+  }
 
   const bootstrapPin =
     process.env.ADMIN_BOOTSTRAP_PIN || process.env.ADMIN_PASSWORD
@@ -194,6 +206,7 @@ export async function bootstrapAdminUsersIfNeeded() {
     INSERT INTO admin_users (username, display_name, pin_hash, pin_salt, role, active)
     VALUES (${bootstrapUsername}, ${bootstrapName}, ${hash}, ${salt}, 'professor', TRUE)
   `
+  adminUsersBootstrapped = true
 }
 
 export async function findActiveUserByUsername(username: string): Promise<
