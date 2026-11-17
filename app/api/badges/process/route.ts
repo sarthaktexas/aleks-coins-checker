@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
           student.dailyLog,
           period,
           sectionNumber,
-          session.email,
+          session.username,
           { awardCoins: false, dayOverrides }
         )
 
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
                 (student as any).dailyLog,
                 row.period,
                 row.section_number,
-                session.email,
+                session.username,
                 { awardCoins: false, dayOverrides }
               )
 

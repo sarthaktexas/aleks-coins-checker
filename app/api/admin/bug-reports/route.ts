@@ -100,17 +100,35 @@ export async function PUT(request: NextRequest) {
 
     await ensureBugReportsTable()
 
-    await sql`
-      UPDATE bug_reports
-      SET
-        status = ${status},
-        admin_notes = ${adminNotes ?? null},
-        resolved_at = CASE
-          WHEN ${status} = 'open' THEN NULL
-          ELSE COALESCE(resolved_at, NOW())
-        END
-      WHERE id = ${reportId}
-    `
+    // Avoid CASE WHEN ${param} = ... — Postgres often can't infer the
+    // parameter type and the whole UPDATE fails (so resolves never stick).
+    const id = Number(reportId)
+    if (!Number.isFinite(id)) {
+      return NextResponse.json({ error: "Invalid report ID" }, { status: 400 })
+    }
+
+    const notes = adminNotes ?? null
+    const result =
+      status === "open"
+        ? await sql`
+            UPDATE bug_reports
+            SET status = ${status}, admin_notes = ${notes}, resolved_at = NULL
+            WHERE id = ${id}
+            RETURNING id
+          `
+        : await sql`
+            UPDATE bug_reports
+            SET
+              status = ${status},
+              admin_notes = ${notes},
+              resolved_at = COALESCE(resolved_at, NOW())
+            WHERE id = ${id}
+            RETURNING id
+          `
+
+    if (!result.rows.length) {
+      return NextResponse.json({ error: "Report not found" }, { status: 404 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

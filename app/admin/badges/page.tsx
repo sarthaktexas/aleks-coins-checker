@@ -1,16 +1,70 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Trophy, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
 import { BadgeShield } from "@/components/badge-shield"
 
+type BadgeStats = {
+  totalBadges: number
+  streak10: number
+  streak25: number
+  uniqueStudents: number
+  byPeriod: Array<{
+    period: string
+    streak10: number
+    streak25: number
+    total: number
+  }>
+}
+
+const emptyStats: BadgeStats = {
+  totalBadges: 0,
+  streak10: 0,
+  streak25: 0,
+  uniqueStudents: 0,
+  byPeriod: [],
+}
+
 export default function BadgesAdmin() {
   const [processing, setProcessing] = useState(false)
   const [result, setResult] = useState<any>(null)
-  const [error, setError] = useState<string>("")
+  const [error, setError] = useState("")
+  const [stats, setStats] = useState<BadgeStats>(emptyStats)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState("")
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    setStatsError("")
+    try {
+      const response = await fetch("/api/admin/badge-stats", {
+        credentials: "same-origin",
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setStatsError(data.error || "Failed to load badge statistics")
+        return
+      }
+      setStats({
+        totalBadges: data.totalBadges ?? 0,
+        streak10: data.streak10 ?? 0,
+        streak25: data.streak25 ?? 0,
+        uniqueStudents: data.uniqueStudents ?? 0,
+        byPeriod: data.byPeriod ?? [],
+      })
+    } catch {
+      setStatsError("Network error while loading badge statistics.")
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadStats()
+  }, [loadStats])
 
   const processAllBadges = async () => {
     if (!confirm("Process badges for all students across all periods? This may take a while.")) {
@@ -24,6 +78,7 @@ export default function BadgesAdmin() {
     try {
       const response = await fetch("/api/badges/process", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
         },
@@ -38,6 +93,7 @@ export default function BadgesAdmin() {
       }
 
       setResult(data)
+      await loadStats()
     } catch (err) {
       console.error("Error processing badges:", err)
       setError("Failed to process badges. Please try again.")
@@ -108,6 +164,86 @@ export default function BadgesAdmin() {
         </CardContent>
       </Card>
 
+      {/* Badge Statistics */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Badge Statistics</CardTitle>
+            <CardDescription>
+              Awarded badges across all students
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadStats()}
+            disabled={statsLoading}
+            className="border-utsa-border shrink-0"
+          >
+            {statsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {statsError ? (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">{statsError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Total badges", value: stats.totalBadges },
+              { label: "10-day awards", value: stats.streak10 },
+              { label: "25-day (2×)", value: stats.streak25 },
+              { label: "Students", value: stats.uniqueStudents },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-md border border-utsa-border bg-utsa-surface px-3 py-3 text-center"
+              >
+                <p className="text-2xl font-semibold text-utsa-midnight">
+                  {statsLoading ? "…" : item.value}
+                </p>
+                <p className="text-xs text-utsa-muted mt-1">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {!statsLoading && stats.byPeriod.length > 0 ? (
+            <div className="overflow-x-auto rounded-md border border-utsa-border">
+              <table className="w-full text-sm">
+                <thead className="bg-utsa-surface text-left text-xs uppercase tracking-wide text-utsa-muted">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Period</th>
+                    <th className="px-3 py-2 font-semibold text-right">10-day</th>
+                    <th className="px-3 py-2 font-semibold text-right">25-day</th>
+                    <th className="px-3 py-2 font-semibold text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.byPeriod.map((row) => (
+                    <tr key={row.period} className="border-t border-utsa-border">
+                      <td className="px-3 py-2 text-utsa-midnight">{row.period}</td>
+                      <td className="px-3 py-2 text-right text-utsa-midnight">{row.streak10}</td>
+                      <td className="px-3 py-2 text-right text-utsa-midnight">{row.streak25}</td>
+                      <td className="px-3 py-2 text-right font-medium text-utsa-midnight">{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {!statsLoading && !statsError && stats.totalBadges === 0 ? (
+            <p className="text-sm text-utsa-muted text-center py-2">
+              No badges awarded yet. Run processing below to award retroactive badges.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
       {/* Process Badges */}
       <Card>
         <CardHeader>
@@ -135,6 +271,7 @@ export default function BadgesAdmin() {
           </div>
 
           <Button
+            type="button"
             onClick={processAllBadges}
             disabled={processing}
             size="lg"
@@ -183,23 +320,6 @@ export default function BadgesAdmin() {
               </AlertDescription>
             </Alert>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Badge Statistics */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Badge Statistics</CardTitle>
-          <CardDescription>
-            View badge statistics across all students
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-utsa-surface rounded-md p-4 text-center">
-            <p className="text-sm text-utsa-muted">
-              Run badge processing to see statistics
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>

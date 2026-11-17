@@ -36,6 +36,7 @@ export default function AdminBugReportsPage() {
   const [adminNotes, setAdminNotes] = useState("")
   const [newStatus, setNewStatus] = useState("resolved")
   const [isUpdating, setIsUpdating] = useState(false)
+  const [success, setSuccess] = useState("")
 
   useEffect(() => {
     if (user.role !== "professor") return
@@ -75,6 +76,7 @@ export default function AdminBugReportsPage() {
   const updateReport = async (reportId: number) => {
     setIsUpdating(true)
     setError("")
+    setSuccess("")
 
     try {
       const response = await fetch("/api/admin/bug-reports", {
@@ -82,7 +84,7 @@ export default function AdminBugReportsPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          reportId,
+          reportId: Number(reportId),
           status: newStatus,
           adminNotes,
         }),
@@ -98,9 +100,26 @@ export default function AdminBugReportsPage() {
         return
       }
 
+      // Keep list in sync immediately so a stuck "open" filter doesn't look like a no-op
+      setReports((prev) =>
+        prev.map((r) =>
+          Number(r.id) === Number(reportId)
+            ? {
+                ...r,
+                status: newStatus,
+                admin_notes: adminNotes || null,
+                resolved_at:
+                  newStatus === "open" ? null : r.resolved_at || new Date().toISOString(),
+              }
+            : r,
+        ),
+      )
       setEditingId(null)
       setAdminNotes("")
-      await loadReports()
+      setSuccess(`Report #${reportId} marked as ${newStatus}.`)
+      if (statusFilter !== "all" && statusFilter !== newStatus) {
+        setStatusFilter(newStatus)
+      }
     } catch {
       setError("Network error while updating.")
     } finally {
@@ -150,6 +169,12 @@ export default function AdminBugReportsPage() {
       {error ? (
         <Alert className="border-red-200 bg-red-50">
           <AlertDescription className="text-red-800">{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {success ? (
+        <Alert className="border-green-200 bg-green-50">
+          <AlertDescription className="text-green-800">{success}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -218,14 +243,15 @@ export default function AdminBugReportsPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button
+                        type="button"
                         size="sm"
                         onClick={() => updateReport(report.id)}
                         disabled={isUpdating}
-                        className=""
                       >
                         {isUpdating ? "Saving…" : "Save"}
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         variant="outline"
                         onClick={() => setEditingId(null)}
