@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Trophy, CheckCircle, AlertTriangle, Loader2 } from "lucide-react"
 import { BadgeShield } from "@/components/badge-shield"
+import { SURVEY_COMPLETE_COINS } from "@/lib/badge-constants"
+import Link from "next/link"
 
 type BadgeStats = {
   totalBadges: number
@@ -192,6 +194,32 @@ export default function BadgesAdmin() {
                     <p className="text-sm text-violet-800">Wizard badge with staff</p>
                     <p className="text-xs text-violet-700 mt-1">
                       Unlocks once when any semester total crosses 100 coins.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Survey Complete Badge */}
+            <div className="border border-sky-200 bg-sky-50 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <BadgeShield kind="survey_complete" unlocked className="h-16 w-14 shrink-0" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-sky-950">Survey Complete Badge</h3>
+                  <p className="text-sm text-sky-900 mt-1">
+                    Score 100 on the course survey (uploaded by an admin)
+                  </p>
+                  <div className="mt-2 pt-2 border-t border-sky-200">
+                    <p className="text-sm font-medium text-sky-950">Reward:</p>
+                    <p className="text-sm text-sky-900">
+                      +{SURVEY_COMPLETE_COINS} coins (configurable at upload) + badge
+                    </p>
+                    <p className="text-xs text-sky-800 mt-1">
+                      Award from the{" "}
+                      <Link href="/admin/survey-rewards" className="underline font-medium">
+                        Survey Rewards
+                      </Link>{" "}
+                      page. Once per student.
                     </p>
                   </div>
                 </div>

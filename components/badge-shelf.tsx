@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Flame, Star, Wand2 } from "lucide-react"
 import { BadgeShield, type ShieldKind } from "@/components/badge-shield"
-import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
+import { GRAND_MASTER_COIN_THRESHOLD, SURVEY_COMPLETE_COINS } from "@/lib/badge-constants"
 import {
   HOLIDAY_BADGE_TYPES,
   holidayBadgeShortName,
@@ -11,7 +11,13 @@ import {
   type HolidayBadgeType,
 } from "@/lib/holiday-breaks"
 
-type BadgeType = "streak_10_day" | "streak_25_day" | "holiday" | HolidayBadgeType | "grand_master"
+type BadgeType =
+  | "streak_10_day"
+  | "streak_25_day"
+  | "holiday"
+  | HolidayBadgeType
+  | "grand_master"
+  | "survey_complete"
 
 type BadgeData = {
   id?: number
@@ -32,7 +38,7 @@ type BadgeShelfProps = {
 
 type FixedShelfSlot =
   | {
-      kind: "streak_10_day" | "streak_25_day" | "grand_master"
+      kind: "streak_10_day" | "streak_25_day" | "grand_master" | "survey_complete"
       name: string
       requirement: number
       reward: string
@@ -41,10 +47,6 @@ type FixedShelfSlot =
       kind: "holiday_slot"
       name: string
       reward: string
-    }
-  | {
-      kind: "mystery"
-      id: string
     }
 
 const SLOTS: FixedShelfSlot[] = [
@@ -72,8 +74,10 @@ const SLOTS: FixedShelfSlot[] = [
     reward: `${GRAND_MASTER_COIN_THRESHOLD}+ semester coins`,
   },
   {
-    kind: "mystery",
-    id: "mystery-1",
+    kind: "survey_complete",
+    name: "Survey",
+    requirement: 100,
+    reward: `+${SURVEY_COMPLETE_COINS} coins`,
   },
 ]
 
@@ -248,7 +252,6 @@ export function BadgeShelf({
     badges.filter((b) => b.badge_type === "streak_10_day").map((b) => b.period || b.id || "earned"),
   ).size
   const unlockedCount = SLOTS.filter((slot) => {
-    if (slot.kind === "mystery") return false
     if (slot.kind === "holiday_slot") return hasAnyHoliday
     return earned.has(slot.kind)
   }).length
@@ -275,19 +278,6 @@ export function BadgeShelf({
         <div className="overflow-visible rounded-md bg-[#f6f1e8] px-1 pt-6 sm:px-2 sm:pt-8">
           <div className="grid grid-cols-5 items-end gap-0.5 overflow-visible sm:gap-1">
             {SLOTS.map((slot) => {
-              if (slot.kind === "mystery") {
-                return (
-                  <div key={slot.id} className="relative z-10 -mb-2.5 flex justify-center overflow-visible sm:-mb-3">
-                    <BadgeShield
-                      kind="mystery"
-                      unlocked={false}
-                      mysteryId={slot.id}
-                      className={SHIELD_CLASS}
-                    />
-                  </div>
-                )
-              }
-
               if (slot.kind === "holiday_slot") {
                 return (
                   <div
@@ -323,10 +313,6 @@ export function BadgeShelf({
 
           <div className="grid grid-cols-5 gap-0.5 pb-3 pt-2 sm:gap-1">
             {SLOTS.map((slot) => {
-              if (slot.kind === "mystery") {
-                return <div key={`${slot.id}-meta`} aria-hidden="true" />
-              }
-
               if (slot.kind === "holiday_slot") {
                 const unlocked = hasAnyHoliday
                 const names = holidayKinds.map(holidayBadgeShortName)
@@ -377,12 +363,18 @@ export function BadgeShelf({
                   ? 100
                   : slot.kind === "grand_master"
                     ? Math.round((grandProgress / slot.requirement) * 100)
-                    : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
+                    : slot.kind === "survey_complete"
+                      ? 0
+                      : Math.min(100, Math.round((maxStreak / slot.requirement) * 100))
               const progressLabel = repeated
                 ? `${Math.min(tenDayPeriods, 3)}/3`
                 : slot.kind === "grand_master"
                   ? `${Math.min(semesterCoins, slot.requirement)}/${slot.requirement}`
-                  : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
+                  : slot.kind === "survey_complete"
+                    ? unlocked
+                      ? "100/100"
+                      : "0/100"
+                    : `${unlocked ? slot.requirement : Math.min(maxStreak, slot.requirement)}/${slot.requirement}`
               const unlockText = !unlocked
                 ? "Locked"
                 : repeated
@@ -402,7 +394,11 @@ export function BadgeShelf({
                       ? `${slot.reward} · ${tenDayPeriods}/3`
                       : slot.kind === "grand_master"
                         ? `${slot.reward} · ${semesterCoins} now`
-                        : slot.reward}
+                        : slot.kind === "survey_complete"
+                          ? unlocked
+                            ? "Course survey done"
+                            : "Score 100 on survey"
+                          : slot.reward}
                   </p>
                   <div className="mx-auto mt-1.5 max-w-[5.5rem] sm:max-w-[7rem]">
                     <div className="mb-1 flex justify-between text-[9px] text-utsa-muted sm:text-[10px]">
@@ -418,7 +414,9 @@ export function BadgeShelf({
                               ? "bg-utsa-orange"
                               : slot.kind === "grand_master"
                                 ? "bg-violet-600"
-                                : "bg-amber-500"
+                                : slot.kind === "survey_complete"
+                                  ? "bg-sky-600"
+                                  : "bg-amber-500"
                         }`}
                         style={{ width: `${progress}%` }}
                       />
@@ -461,6 +459,18 @@ export function BadgeShelf({
             <p className="text-xs text-violet-900">
               <span className="font-semibold">Grand Master unlocked.</span> You earned{" "}
               {GRAND_MASTER_COIN_THRESHOLD}+ coins across a semester.
+            </p>
+          </div>
+        )}
+
+        {earned.has("survey_complete") && (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2">
+            <span className="text-sm" aria-hidden>
+              📋
+            </span>
+            <p className="text-xs text-sky-950">
+              <span className="font-semibold">Survey Complete unlocked.</span> Thanks for finishing
+              the course survey — bonus coins are on your balance.
             </p>
           </div>
         )}

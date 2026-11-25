@@ -1,7 +1,10 @@
 import { sql } from "@vercel/postgres"
 import { parsePeriodKey } from "@/lib/exam-periods"
 import { toDateOnly, totalCoinsFromDailyLog } from "@/lib/day-credits"
-import { GRAND_MASTER_COIN_THRESHOLD } from "@/lib/badge-constants"
+import {
+  GRAND_MASTER_COIN_THRESHOLD,
+  SURVEY_COMPLETE_COINS,
+} from "@/lib/badge-constants"
 import {
   applyOverridesToDailyLog,
   buildOverridesMap,
@@ -31,8 +34,9 @@ export type BadgeType =
   | "holiday"
   | HolidayBadgeType
   | "grand_master"
+  | "survey_complete"
 
-export { GRAND_MASTER_COIN_THRESHOLD }
+export { GRAND_MASTER_COIN_THRESHOLD, SURVEY_COMPLETE_COINS }
 
 export type Badge = {
   id: number
@@ -110,6 +114,14 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     icon: "🧙",
     requirement: GRAND_MASTER_COIN_THRESHOLD,
     reward: "Wizard badge",
+  },
+  {
+    type: "survey_complete",
+    name: "Survey Complete",
+    description: "Score 100 on the course survey",
+    icon: "📋",
+    requirement: 100,
+    reward: `+${SURVEY_COMPLETE_COINS} coins`,
   },
 ]
 
@@ -194,6 +206,13 @@ export async function ensureBadgesSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_grand_master_once
     ON student_badges (student_id)
     WHERE badge_type = 'grand_master'
+  `
+
+  // Survey completion unlocks once, ever.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_badges_survey_once
+    ON student_badges (student_id)
+    WHERE badge_type = 'survey_complete'
   `
   badgesSchemaReady = true
 }
@@ -473,6 +492,24 @@ export async function hasGrandMasterBadge(studentId: string): Promise<boolean> {
     return result.rows.length > 0
   } catch (error) {
     console.error("Error checking grand master badge:", error)
+    return false
+  }
+}
+
+/**
+ * Check if a student already has the Survey Complete badge (once, ever)
+ */
+export async function hasSurveyBadge(studentId: string): Promise<boolean> {
+  try {
+    const result = await sql`
+      SELECT id FROM student_badges
+      WHERE student_id = ${studentId.toLowerCase()}
+        AND badge_type = 'survey_complete'
+      LIMIT 1
+    `
+    return result.rows.length > 0
+  } catch (error) {
+    console.error("Error checking survey badge:", error)
     return false
   }
 }
