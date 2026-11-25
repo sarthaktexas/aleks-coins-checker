@@ -8,6 +8,7 @@ export type ShieldKind =
   | HolidayBadgeType
   | "holiday"
   | "grand_master"
+  | "survey_complete"
   | "mystery"
 
 type BadgeShieldProps = {
@@ -39,6 +40,7 @@ function shieldBaseId(kind: Exclude<ShieldKind, "mystery">) {
   if (normalized === "holiday_winter") return "winter"
   if (normalized === "holiday_july4") return "july4"
   if (normalized === "holiday_spring") return "spring"
+  if (normalized === "survey_complete") return "survey"
   return "grandmaster"
 }
 
@@ -50,6 +52,7 @@ function defaultBanner(kind: Exclude<ShieldKind, "mystery">) {
   if (normalized === "holiday_winter") return "WB"
   if (normalized === "holiday_july4") return "4th"
   if (normalized === "holiday_spring") return "SB"
+  if (normalized === "survey_complete") return "SV"
   return "GM"
 }
 
@@ -114,6 +117,12 @@ export function BadgeShield({
               <stop offset="40%" stopColor={unlocked ? "#db2777" : "#9aa3ae"} />
               <stop offset="100%" stopColor={unlocked ? "#9d174d" : "#6b7280"} />
             </>
+          ) : normalized === "survey_complete" ? (
+            <>
+              <stop offset="0%" stopColor={unlocked ? "#bae6fd" : "#c8cdd4"} />
+              <stop offset="40%" stopColor={unlocked ? "#0284c7" : "#9aa3ae"} />
+              <stop offset="100%" stopColor={unlocked ? "#0c4a6e" : "#6b7280"} />
+            </>
           ) : (
             <>
               <stop offset="0%" stopColor={unlocked ? "#ddd6fe" : "#c8cdd4"} />
@@ -140,7 +149,9 @@ export function BadgeShield({
                           ? "#bfdbfe"
                           : normalized === "holiday_spring"
                             ? "#fbcfe8"
-                            : "#c4b5fd"
+                            : normalized === "survey_complete"
+                              ? "#7dd3fc"
+                              : "#c4b5fd"
                 : "#d1d5db"
             }
           />
@@ -183,6 +194,8 @@ export function BadgeShield({
           <FireworksEmblem unlocked={unlocked} />
         ) : normalized === "holiday_spring" ? (
           <FlowerEmblem unlocked={unlocked} />
+        ) : normalized === "survey_complete" ? (
+          <SurveyEmblem unlocked={unlocked} />
         ) : (
           <WizardEmblem unlocked={unlocked} />
         )}
@@ -355,6 +368,26 @@ function WizardEmblem({ unlocked }: { unlocked: boolean }) {
       <path d="M48 70 Q60 78 72 70 L76 92 H44 Z" fill={robe} />
       <rect x="78" y="42" width="3" height="50" rx="1" fill={staff} />
       <circle cx="79.5" cy="40" r="5" fill={tip} />
+    </g>
+  )
+}
+
+function SurveyEmblem({ unlocked }: { unlocked: boolean }) {
+  const board = unlocked ? "#e0f2fe" : "#f3f4f6"
+  const clip = unlocked ? "#0369a1" : "#9ca3af"
+  const check = unlocked ? "#15803d" : "#d1d5db"
+  return (
+    <g opacity={unlocked ? 0.98 : 0.75}>
+      <rect x="42" y="42" width="36" height="44" rx="4" fill={board} />
+      <rect x="50" y="36" width="20" height="10" rx="3" fill={clip} />
+      <path
+        d="M52 62 L58 68 L70 52"
+        fill="none"
+        stroke={check}
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </g>
   )
 }

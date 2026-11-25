@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/admin/requests", label: "Requests" },
   { href: "/admin/bug-reports", label: "Bugs", professorOnly: true },
   { href: "/admin/coin-adjustments", label: "Coins" },
+  { href: "/admin/survey-rewards", label: "Survey" },
   { href: "/admin/badges", label: "Badges", professorOnly: true },
   { href: "/admin/email-students", label: "Email" },
   { href: "/admin/leaderboard", label: "Leaderboard", professorOnly: true },
